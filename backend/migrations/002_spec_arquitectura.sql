@@ -63,17 +63,35 @@ CREATE TABLE IF NOT EXISTS camiones (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_camiones_empresa_placa ON camiones (id_empresa, placa);
 
--- Migrar datos demo de vehiculos -> camiones (tara <- capacidad, foto -> foto_real_url)
-INSERT INTO camiones (id_empresa, placa, color, foto_real_url, tara_habitual, activo)
-SELECT id_empresa, placa, color, foto_url, capacidad, activo FROM vehiculos;
-
-DROP TABLE IF EXISTS vehiculos CASCADE;
+-- Migrar datos demo de vehiculos -> camiones (solo si existe el esquema previo).
+-- En instalaciones nuevas 'camiones' ya existe en schema.sql y 'vehiculos' no;
+-- to_regclass permite que esta migración sea inofensiva en ambos casos.
+DO $$
+BEGIN
+    IF to_regclass('public.vehiculos') IS NOT NULL THEN
+        INSERT INTO camiones (id_empresa, placa, color, foto_real_url, tara_habitual, activo)
+        SELECT id_empresa, placa, color, foto_url, capacidad, activo FROM vehiculos;
+        DROP TABLE IF EXISTS vehiculos CASCADE;
+    END IF;
+END $$;
 
 -- ============================================================
 -- 4. REMOLQUES -> nombres del spec
 -- ============================================================
-ALTER TABLE remolques RENAME COLUMN tipo TO tipo_remolque;
-ALTER TABLE remolques RENAME COLUMN peso_tara TO tara_habitual;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='remolques' AND column_name='tipo') THEN
+        ALTER TABLE remolques RENAME COLUMN tipo TO tipo_remolque;
+    END IF;
+END $$;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='remolques' AND column_name='peso_tara') THEN
+        ALTER TABLE remolques RENAME COLUMN peso_tara TO tara_habitual;
+    END IF;
+END $$;
 ALTER TABLE remolques DROP COLUMN IF EXISTS marca;
 ALTER TABLE remolques DROP COLUMN IF EXISTS modelo;
 ALTER TABLE remolques DROP COLUMN IF EXISTS capacidad;
@@ -81,14 +99,32 @@ ALTER TABLE remolques DROP COLUMN IF EXISTS capacidad;
 -- ============================================================
 -- 5. TRANSPORTES
 -- ============================================================
-ALTER TABLE transportes RENAME COLUMN nombre TO razon_social;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='transportes' AND column_name='nombre') THEN
+        ALTER TABLE transportes RENAME COLUMN nombre TO razon_social;
+    END IF;
+END $$;
 ALTER TABLE transportes ADD COLUMN IF NOT EXISTS identificacion_fiscal VARCHAR(20);
 
 -- ============================================================
 -- 6. CONDUCTORES
 -- ============================================================
-ALTER TABLE conductores RENAME COLUMN cedula TO cedula_dni;
-ALTER TABLE conductores RENAME COLUMN licencia TO licencia_conducir;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='conductores' AND column_name='cedula') THEN
+        ALTER TABLE conductores RENAME COLUMN cedula TO cedula_dni;
+    END IF;
+END $$;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='conductores' AND column_name='licencia') THEN
+        ALTER TABLE conductores RENAME COLUMN licencia TO licencia_conducir;
+    END IF;
+END $$;
 
 -- ============================================================
 -- 7. PRODUCTOS
@@ -96,7 +132,13 @@ ALTER TABLE conductores RENAME COLUMN licencia TO licencia_conducir;
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS nombre VARCHAR(150);
 UPDATE productos SET nombre = descripcion WHERE nombre IS NULL;
 ALTER TABLE productos ALTER COLUMN nombre SET NOT NULL;
-ALTER TABLE productos RENAME COLUMN densidad TO densidad_estandar;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='productos' AND column_name='densidad') THEN
+        ALTER TABLE productos RENAME COLUMN densidad TO densidad_estandar;
+    END IF;
+END $$;
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS unidad_medida VARCHAR(20) NOT NULL DEFAULT 'TON';
 
 -- ============================================================
@@ -108,14 +150,31 @@ ALTER TABLE almacenes ADD COLUMN IF NOT EXISTS stock_actual_ton NUMERIC(12,2) NO
 -- ============================================================
 -- 9. TERCEROS
 -- ============================================================
-ALTER TABLE terceros RENAME COLUMN nombre TO razon_social;
-ALTER TABLE terceros RENAME COLUMN rif TO identificacion_fiscal;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='terceros' AND column_name='nombre') THEN
+        ALTER TABLE terceros RENAME COLUMN nombre TO razon_social;
+    END IF;
+END $$;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='terceros' AND column_name='rif') THEN
+        ALTER TABLE terceros RENAME COLUMN rif TO identificacion_fiscal;
+    END IF;
+END $$;
 ALTER TABLE terceros ADD COLUMN IF NOT EXISTS direccion TEXT;
 
 -- ============================================================
 -- 10. PESAJE -> BOLETOS_PESAJE (solo renombrado; core en Paso 3)
 -- ============================================================
-ALTER TABLE pesajes RENAME TO boletos_pesaje;
+DO $$
+BEGIN
+    IF to_regclass('public.pesajes') IS NOT NULL THEN
+        ALTER TABLE pesajes RENAME TO boletos_pesaje;
+    END IF;
+END $$;
 ALTER TABLE boletos_pesaje ADD COLUMN IF NOT EXISTS numero_boleto VARCHAR(20);
 ALTER TABLE boletos_pesaje ADD COLUMN IF NOT EXISTS foto_entrada_url TEXT;
 ALTER TABLE boletos_pesaje ADD COLUMN IF NOT EXISTS foto_salida_url TEXT;

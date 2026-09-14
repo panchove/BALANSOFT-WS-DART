@@ -25,7 +25,15 @@ CREATE TABLE IF NOT EXISTS remolques (
 CREATE INDEX IF NOT EXISTS idx_remolques_empresa ON remolques (id_empresa, placa);
 
 -- 2. Fotos de catálogos
-ALTER TABLE vehiculos ADD COLUMN IF NOT EXISTS foto_url VARCHAR(500);
+-- 'vehiculos' existía solo en esquemas previos (en el esquema final es 'camiones').
+-- En instalaciones nuevas la columna ya viene en el schema.sql, así que se
+-- protege con to_regclass para no fallar si la tabla no existe.
+DO $$
+BEGIN
+    IF to_regclass('public.vehiculos') IS NOT NULL THEN
+        ALTER TABLE vehiculos ADD COLUMN IF NOT EXISTS foto_url VARCHAR(500);
+    END IF;
+END $$;
 ALTER TABLE conductores ADD COLUMN IF NOT EXISTS foto_url VARCHAR(500);
 
 -- 3. Códigos de catálogos (T001, A1, BALANZA1, etc.)
@@ -35,7 +43,14 @@ ALTER TABLE balanzas ADD COLUMN IF NOT EXISTS codigo VARCHAR(20);
 ALTER TABLE terceros ADD COLUMN IF NOT EXISTS codigo VARCHAR(20);
 
 -- 4. Pesaje: remolque vinculado y costo de flete
-ALTER TABLE pesajes ADD COLUMN IF NOT EXISTS id_remolque UUID REFERENCES remolques(id_remolque);
-ALTER TABLE pesajes ADD COLUMN IF NOT EXISTS costo_flete NUMERIC(12,2);
+-- (En el esquema final la tabla es 'boletos_pesaje'; 'pesajes' solo existe en
+-- esquemas previos. Ambos ALTER se protegen para no fallar en instalaciones nuevas.)
+DO $$
+BEGIN
+    IF to_regclass('public.pesajes') IS NOT NULL THEN
+        ALTER TABLE pesajes ADD COLUMN IF NOT EXISTS id_remolque UUID REFERENCES remolques(id_remolque);
+        ALTER TABLE pesajes ADD COLUMN IF NOT EXISTS costo_flete NUMERIC(12,2);
+    END IF;
+END $$;
 
 COMMIT;

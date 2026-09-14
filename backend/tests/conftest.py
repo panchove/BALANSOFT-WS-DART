@@ -8,6 +8,7 @@ tablas para aislar las pruebas entre sí.
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -19,7 +20,11 @@ from sqlalchemy.pool import NullPool
 
 from app.models import Base, Empresa
 
-TEST_DATABASE_URL = "postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws_test"
+# Overridable por TEST_DATABASE_URL para adaptarse al PostgreSQL del servidor.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws_test",
+)
 
 
 @pytest.fixture(scope="session")

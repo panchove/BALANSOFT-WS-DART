@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     license_api_url: str = "http://localhost:8080/api/v1"
     license_admin_url: str = "http://localhost:5000"
     license_public_key: str | None = None
+    # Alternativa a license_public_key: ruta a un archivo PEM (evita problemas
+    # de parsing multilínea en .env y en EnvironmentFile de systemd). Es la vía
+    # recomendada en servidores (mismo patrón que BALANSOFT-SG: keys/*.pem).
+    license_public_key_path: str | None = None
     license_product_code: str = "BWS"
 
     # API

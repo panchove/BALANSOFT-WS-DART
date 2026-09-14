@@ -1,0 +1,40 @@
+# ============================================================
+# BALANSOFT-WS - Unidad systemd de PRODUCCIÓN (servidor real)
+#
+# Ruta del repo:   /var/www/BALANSOFT-WS-DART
+# Usuario:         serverman
+# Puerto:          8002  (8000=landing, 8001=SG, 9000/9001=LM)
+#
+# Instalación (requiere root):
+#   sudo install -m 0644 deploy/balansoft-ws.service.prod /etc/systemd/system/balansoft-ws.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now balansoft-ws
+#   curl http://127.0.0.1:8002/api/v1/health
+#
+# Notas:
+#  * EnvironmentFile lee backend/.env (una variable por línea).
+#    LICENSE_PUBLIC_KEY va en una sola línea usando \n literales.
+# ============================================================
+[Unit]
+Description=Balansoft-WS - Sistema de Pesaje Automatico (API FastAPI)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/BALANSOFT-WS-DART/backend
+EnvironmentFile=/var/www/BALANSOFT-WS-DART/backend/.env
+ExecStart=/var/www/BALANSOFT-WS-DART/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8002 --workers 4
+Restart=on-failure
+RestartSec=3
+User=serverman
+Group=serverman
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

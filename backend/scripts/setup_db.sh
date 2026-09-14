@@ -80,6 +80,8 @@ case "${MODO}" in
 
   seed)
     echo "→ Insertando datos demo (empresa + admin + catálogos base)..."
+    # scripts/seed_data.py importa app.* desde la raíz del backend
+    export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
     uv run python scripts/seed_data.py
     echo "✅ Seed aplicado."
     ;;

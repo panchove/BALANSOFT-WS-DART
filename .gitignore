@@ -9,6 +9,8 @@ backend/.ruff_cache/
 backend/.mypy_cache/
 backend/media/
 backend/backups/
+backend/logs/
+backend/keys/
 *.pyc
 *.pyo
 

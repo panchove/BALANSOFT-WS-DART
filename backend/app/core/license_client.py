@@ -16,6 +16,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -81,8 +82,19 @@ class LicenseClient:
 
     def __init__(self) -> None:
         self.base_url = settings.license_api_url.rstrip("/")
-        self.public_key = settings.license_public_key or ""
+        self.public_key = settings.license_public_key or self._public_key_from_file()
         self.timeout = httpx.Timeout(10.0)
+
+    def _public_key_from_file(self) -> str:
+        """Lee la clave pública del LM desde LICENSE_PUBLIC_KEY_PATH (recomendado)."""
+        path = settings.license_public_key_path
+        if not path:
+            return ""
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError as e:
+            log.warning("No se pudo leer LICENSE_PUBLIC_KEY_PATH=%s: %s", path, e)
+            return ""
 
     def _get_token(self, license_key: str) -> str:
         try:
