@@ -54,7 +54,7 @@ Topología real del servidor (puertos ocupados):
 
 | Servicio | Endpoint | Nota |
 |----------|----------|------|
-| BALANSOFT-WS API | `127.0.0.1:8002` | Este guion la instala/actualiza |
+| BALANSOFT-WS API | `0.0.0.0:8002` | Este guion la instala/actualiza; estaciones desktop Flutter por LAN |
 | BALANSOFT-LM API (validación) | `127.0.0.1:9001/api/v1` | Ya desplegado (existe en el servidor) |
 | BALANSOFT-LM Portal (admin) | `127.0.0.1:9000` | Ya desplegado |
 | Landing / otros | `:8000`, `:8001` | Ya desplegado (`balansoft.service`, `balansoft-sg.service`) |
@@ -214,7 +214,10 @@ En producción **no** se ejecuta o se hace solo en un entorno de pruebas.
 ### 4.10 Instalar el servicio systemd
 
 Para el servidor real se usa la unidad **`deploy/balansoft-ws.service.prod`**
-(ya precargada con las rutas reales, puerto `8002` y usuario `serverman`):
+(ya precargada con las rutas reales, puerto `8002`, bind `0.0.0.0` y usuario
+`serverman`). El bind `0.0.0.0` es intencional: las estaciones desktop Flutter se
+conectan por LAN indicando la IP del servidor (mismo patrón que BALANSOFT-SG);
+por eso **restringir** `:8002` en el firewall solo al subnet de estaciones.
 
 ```bash
 cd /var/www/BALANSOFT-WS-DART/backend
@@ -391,7 +394,7 @@ bash scripts/verify.sh
 - [ ] `CORS_ORIGINS` restringida a los orígenes reales del frontend (nunca `*` en producción).
 - [ ] `APP_ENV=production` y `DEBUG_MODE=false`; `RATE_LIMIT_*` activados.
 - [ ] `LICENSE_PUBLIC_KEY_PATH` apunta al PEM real del LM (anti-fake-server); clave privada del LM nunca en el repo.
-- [ ] Puertos: exponer solo `:8002` (o `:443` vía nginx/TLS); mantener `:9000`, `:9001`, `:8000`, `:8001` y `:5432` internos.
+- [ ] Puertos: uvicorn escucha en `0.0.0.0:8002`; abrir en el firewall solo el acceso de las estaciones desktop a `:8002` (y si hay dominio, `:443` vía nginx/TLS como en BALANSOFT-SG); mantener `:9000`, `:9001`, `:8000`, `:8001` y `:5432` internos.
 - [ ] Backups periódicos verificados (probarse con `pg_restore --list`).
 
 ---

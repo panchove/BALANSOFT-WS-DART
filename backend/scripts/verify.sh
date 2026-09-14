@@ -123,7 +123,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "[6] systemd"
 if command -v systemctl >/dev/null 2>&1; then
-  if systemctl list-unit-files 2>/dev/null | grep -q "balansoft-ws"; then
+  if systemctl cat balansoft-ws >/dev/null 2>&1; then
     STATE="$(systemctl is-active balansoft-ws 2>/dev/null || echo inactive)"
     if [[ "${STATE}" == "active" ]]; then
       ok "Servicio balansoft-ws activo"

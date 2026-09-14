@@ -4,6 +4,9 @@
 # Ruta del repo:   /var/www/BALANSOFT-WS-DART
 # Usuario:         serverman
 # Puerto:          8002  (8000=landing, 8001=SG, 9000/9001=LM)
+# Escucha:         0.0.0.0 (las estaciones desktop Flutter se conectan por LAN
+#                 indicando la IP del servidor; restringir :8002 en el firewall
+#                 al subnet de estaciones. Mismo patrón que BALANSOFT-SG).
 #
 # Instalación (requiere root):
 #   sudo install -m 0644 deploy/balansoft-ws.service.prod /etc/systemd/system/balansoft-ws.service
@@ -26,7 +29,7 @@ Wants=postgresql.service
 Type=simple
 WorkingDirectory=/var/www/BALANSOFT-WS-DART/backend
 EnvironmentFile=/var/www/BALANSOFT-WS-DART/backend/.env
-ExecStart=/var/www/BALANSOFT-WS-DART/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8002 --workers 4
+ExecStart=/var/www/BALANSOFT-WS-DART/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8002 --workers 4
 Restart=on-failure
 RestartSec=3
 User=serverman
