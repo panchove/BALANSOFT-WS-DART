@@ -1,0 +1,23 @@
+# Python / backend
+backend/.venv/
+backend/.env
+backend/.env.*.local
+backend/__pycache__/
+**/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.mypy_cache/
+backend/media/
+backend/backups/
+*.pyc
+*.pyo
+
+# Flutter / frontend (los demás build/deploy los cubre frontend/.gitignore)
+frontend/build/
+frontend/.dart_tool/
+
+# Misc
+.ruff_cache/
+=4.0
+*.log
+.DS_Store

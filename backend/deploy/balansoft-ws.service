@@ -1,0 +1,42 @@
+# ============================================================
+# BALANSOFT-WS - Unidad systemd para producción (FastAPI/uvicorn)
+#
+# Instalación (ajustar rutas y usuario):
+#   sudo install -m 0644 deploy/balansoft-ws.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now balansoft-ws
+#
+# Notas:
+#  * EnvironmentFile exige formato plano (UNA línea por variable).
+#    La clave LICENSE_PUBLIC_KEY debe ir en una sola línea:
+#      LICENSE_PUBLIC_KEY='-----BEGIN PUBLIC KEY-----...-----END PUBLIC KEY-----'
+#    (systemd no acepta valores multilínea).
+#  * Prepara la BD antes: scripts/setup_db.sh instalar (+ seed opcional).
+# ============================================================
+[Unit]
+Description=Balansoft-WS - Sistema de Pesaje Automatico (API FastAPI)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/balansoft-ws/backend
+EnvironmentFile=/opt/balansoft-ws/backend/.env
+# 4 workers: usar unworker por núcleo como guía (2-4 es razonable).
+ExecStart=/opt/balansoft-ws/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+Restart=on-failure
+RestartSec=3
+# El proceso para bajo el usuario del deploy (no root).
+User=balansoft
+Group=balansoft
+
+# Limitaciones y saneamiento básico
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Ruta de logs configurada en .env (LOG_FILE). Asegurar que el usuario puede escribir.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
