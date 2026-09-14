@@ -100,6 +100,7 @@ class TestAuditoriaPesaje:
         assert regs[0].id_empresa == empresa.id_empresa
         assert regs[0].id_usuario == usuario.id_usuario
         assert regs[0].ip == "127.0.0.1"
+        assert regs[0].detalle is not None
         assert regs[0].detalle["numero_boleto"] == boleto.numero_boleto
 
     async def test_cerrar_boleto_inserta_fila_close(self, db, empresa, usuario):
@@ -123,6 +124,7 @@ class TestAuditoriaPesaje:
         assert len(regs) == 1
         assert regs[0].entidad_id == str(boleto.boleto)
         assert regs[0].ip == "127.0.0.1"
+        assert regs[0].detalle is not None
         assert regs[0].detalle["numero_boleto"]
 
     async def test_modificar_boleto_registra_campos_modificados(self, db, empresa, usuario):
@@ -145,6 +147,7 @@ class TestAuditoriaPesaje:
         regs = await _registros(db, accion="UPDATE")
         assert len(regs) == 1
         assert regs[0].id_usuario == usuario.id_usuario
+        assert regs[0].detalle is not None
         assert set(regs[0].detalle["campos_modificados"]) == {"documento", "observaciones"}
 
     async def test_anular_boleto_inserta_fila_andular_con_motivo(self, db, empresa, usuario):
@@ -167,6 +170,7 @@ class TestAuditoriaPesaje:
         regs = await _registros(db, accion="ANULAR")
         assert len(regs) == 1
         assert regs[0].entidad_id == str(boleto.boleto)
+        assert regs[0].detalle is not None
         assert regs[0].detalle["motivo"] == "Error de pesaje en entrada"
         assert regs[0].ip == "10.0.0.3"
         assert (

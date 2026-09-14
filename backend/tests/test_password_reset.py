@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -41,7 +42,7 @@ async def app(db, empresa) -> FastAPI:
 
 
 @pytest_asyncio.fixture
-async def client(app) -> httpx.AsyncClient:
+async def client(app) -> AsyncGenerator[httpx.AsyncClient, None]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

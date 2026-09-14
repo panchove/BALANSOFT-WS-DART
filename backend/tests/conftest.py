@@ -18,12 +18,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.core.config import settings
 from app.models import Base, Empresa
 
+
+def _url_para_bbdd(url: str, nombre: str) -> str:
+    """Sustituye el nombre de la BD de la URL por otro (p. ej. balansoft_ws_test)."""
+    head, _, _ = url.rpartition("/")
+    return f"{head}/{nombre}"
+
+
 # Overridable por TEST_DATABASE_URL para adaptarse al PostgreSQL del servidor.
+# Por defecto se deriva de la DATABASE_URL de la app (.env) para que los tests
+# usen siempre el mismo host/puerto/credenciales que la base de negocio.
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws_test",
+    _url_para_bbdd(settings.database_url, "balansoft_ws_test"),
 )
 
 
