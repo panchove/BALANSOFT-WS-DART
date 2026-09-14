@@ -13,7 +13,9 @@
 #
 # Notas:
 #  * EnvironmentFile lee backend/.env (una variable por línea).
-#    LICENSE_PUBLIC_KEY va en una sola línea usando \n literales.
+#  * La clave pública del LM se referencia con LICENSE_PUBLIC_KEY_PATH=keys/lm_public_key.pem
+#    (archivo PEM, relativo al WorkingDirectory; la carpeta keys/ está en .gitignore).
+#    Si usas LICENSE_PUBLIC_KEY como alternativa, debe ir en una sola línea.
 # ============================================================
 [Unit]
 Description=Balansoft-WS - Sistema de Pesaje Automatico (API FastAPI)

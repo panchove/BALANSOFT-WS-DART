@@ -17,7 +17,7 @@ WARN=0
 FAIL=0
 
 API_HOST="${API_HOST:-127.0.0.1}"
-API_PORT="${API_PORT:-8000}"
+API_PORT="${API_PORT:-8002}"
 
 ok()   { PASS=$((PASS+1)); echo "  ✅ $1"; }
 warn() { WARN=$((WARN+1)); echo "  ⚠️  $1"; }

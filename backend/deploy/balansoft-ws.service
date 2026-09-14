@@ -1,6 +1,9 @@
 # ============================================================
 # BALANSOFT-WS - Unidad systemd para producción (FastAPI/uvicorn)
 #
+# Plantilla GENÉRICA (rutas/usuarios por defecto). Para el servidor real
+# usa directamente: deploy/balansoft-ws.service.prod (rutas reales, :8002).
+#
 # Instalación (ajustar rutas y usuario):
 #   sudo install -m 0644 deploy/balansoft-ws.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
@@ -8,9 +11,8 @@
 #
 # Notas:
 #  * EnvironmentFile exige formato plano (UNA línea por variable).
-#    La clave LICENSE_PUBLIC_KEY debe ir en una sola línea:
-#      LICENSE_PUBLIC_KEY='-----BEGIN PUBLIC KEY-----...-----END PUBLIC KEY-----'
-#    (systemd no acepta valores multilínea).
+#  * La clave pública del LM se referencia con LICENSE_PUBLIC_KEY_PATH
+#    (archivo PEM, recomendado) o LICENSE_PUBLIC_KEY en una sola línea.
 #  * Prepara la BD antes: scripts/setup_db.sh instalar (+ seed opcional).
 # ============================================================
 [Unit]

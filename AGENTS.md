@@ -78,7 +78,7 @@ Notas:
 
 ## 5. Configuración local (`.env`)
 
-- Variables vigentes (ver `backend/.env.example`): `DATABASE_URL`, `DATABASE_URL_SYNC`, `API_HOST`, `API_PORT=8000`, `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ORIGINS`, `LICENSE_API_URL`, `LICENSE_ADMIN_URL`, `LICENSE_PUBLIC_KEY` (Ed25519, una línea), `LICENSE_PRODUCT_CODE`, `APP_ENV`, `DEBUG_MODE`, límites de licencia (`DEMO_MAX_RECORDS`, etc.), `LOG_*`, `SYNC_*`, `RATE_LIMIT_*` (enabled/login/register/password/window/trust_proxy), `METRICS_ENABLED`, `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`.
+- Variables vigentes (ver `backend/.env.example`): `DATABASE_URL`, `DATABASE_URL_SYNC`, `API_HOST`, `API_PORT` (canónico: `8002` en servidor real; `8000` en dev), `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ORIGINS`, `LICENSE_API_URL` (`127.0.0.1:9001/api/v1`), `LICENSE_ADMIN_URL` (`127.0.0.1:9000`), `LICENSE_PUBLIC_KEY_PATH` (recomendado, `keys/lm_public_key.pem`, Ed25519) o `LICENSE_PUBLIC_KEY` (alternativa, una línea), `LICENSE_PRODUCT_CODE` (canónico: `WS`), `APP_ENV`, `DEBUG_MODE`, límites de licencia (`DEMO_MAX_RECORDS`, etc.), `LOG_*`, `SYNC_*`, `RATE_LIMIT_*` (enabled/login/register/password/window/trust_proxy), `METRICS_ENABLED`, `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`.
 - No existe `SERVER_PORT=7000` ni perfil simulado de hardware en la implementación actual.
 - Contiene credenciales de desarrollo reales (`.env` local). Rotar en producción; `SECRET_KEY` debe ser aleatoria (≥32 bytes).
 

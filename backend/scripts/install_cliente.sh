@@ -26,8 +26,8 @@ BACKEND="$(pwd)"
 INSTALL_PREFIX="${INSTALL_PREFIX:-/opt/balansoft-ws}"
 APP_USER="${APP_USER:-balansoft}"
 SEED="${SEED:-false}"
-API_PORT="${API_PORT:-8000}"
-API_HOST="${API_HOST:-0.0.0.0}"
+API_PORT="${API_PORT:-8002}"
+API_HOST="${API_HOST:-127.0.0.1}"
 
 echo "== BALANSOFT-WS install =="
 echo "Backend:    ${BACKEND}"
@@ -67,7 +67,7 @@ else
     sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${NEW_KEY}|" .env
     echo "  SECRET_KEY generado y guardado en .env"
   fi
-  echo "  ⚠️  Revisa .env — especialmente CORS_ORIGINS, LICENSE_PUBLIC_KEY y DATABASE_URL_SYNC"
+  echo "  ⚠️  Revisa .env — especialmente CORS_ORIGINS, LICENSE_PUBLIC_KEY_PATH y DATABASE_URL_SYNC"
 fi
 
 # Verificar que SECRET_KEY no sigue débil
@@ -142,7 +142,7 @@ echo ""
 
 echo "== Instalación completada =="
 echo "Siguientes pasos:"
-echo "  1. Revisa .env (CORS_ORIGINS restringido para producción, LICENSE_PUBLIC_KEY)."
+echo "  1. Revisa .env (CORS_ORIGINS restringido para producción, LICENSE_PUBLIC_KEY_PATH)."
 echo "  2. sudo systemctl start balansoft-ws"
 echo "  3. http://${API_HOST}:${API_PORT}/docs"
 echo "  4. Genera backups periódicos: ${SCRIPTS}/backup.sh (o cron)"
