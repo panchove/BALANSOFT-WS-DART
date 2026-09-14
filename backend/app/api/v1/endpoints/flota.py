@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_empresa, require_catalog_manager, get_current_user
+from app.api.dependencies import get_current_empresa, get_current_user, require_catalog_manager
 from app.core.database import get_db
 from app.models import Camion, Empresa, ModeloCamion, Usuario
 from app.schemas import (

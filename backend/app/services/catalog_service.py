@@ -10,9 +10,6 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-log = logging.getLogger(__name__)
-
-# Mapeo: nombre de entidad -> (modelo, columna de filtro por empresa)
 from app.models import (
     Almacen,
     Balanza,
@@ -27,6 +24,9 @@ from app.models import (
 )
 from app.services.audit_service import registrar
 
+log = logging.getLogger(__name__)
+
+# Mapeo: nombre de entidad -> (modelo, columna de filtro por empresa)
 CATALOGS: dict[str, dict[str, Any]] = {
     "camiones": {"model": Camion, "empresa_col": "id_empresa", "id_col": "id"},
     "remolques": {"model": Remolque, "empresa_col": "id_empresa", "id_col": "id_remolque"},
