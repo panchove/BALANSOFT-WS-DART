@@ -82,12 +82,25 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
   final Map<String, TextEditingController> _ctrls = {};
   final Map<String, String> _dropdownVals = {};
   final Map<String, bool> _boolVals = {};
+  final Map<String, FocusNode> _focusNodes = {};
   bool _guardando = false;
+
+  static bool _esCampoTexto(CrearCampoSpec campo) {
+    return switch (campo.tipo) {
+      CrearCampoTipo.texto ||
+      CrearCampoTipo.multilinea ||
+      CrearCampoTipo.numero ||
+      CrearCampoTipo.email =>
+        true,
+      _ => false,
+    };
+  }
 
   @override
   void initState() {
     super.initState();
     for (final campo in widget.campos) {
+      if (_esCampoTexto(campo)) _focusNodes[campo.key] = FocusNode();
       if (campo.tipo == CrearCampoTipo.booleano) {
         _boolVals[campo.key] = campo.initial == 'true';
         continue;
@@ -110,7 +123,21 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
     for (final c in _ctrls.values) {
       c.dispose();
     }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  /// Avanza al siguiente campo de texto (o guarda si es el último).
+  void _avanzar(CrearCampoSpec actual) {
+    final textos = widget.campos.where(_esCampoTexto).toList();
+    final i = textos.indexOf(actual);
+    if (i >= 0 && i < textos.length - 1) {
+      _focusNodes[textos[i + 1].key]?.requestFocus();
+    } else {
+      _guardar();
+    }
   }
 
   Map<String, dynamic>? _buildBody() {
@@ -168,6 +195,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final body = _buildBody();
     if (body == null) return;
@@ -282,10 +310,16 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
             ? null
             : 'Email inválido',
     ];
+    final textos = widget.campos.where(_esCampoTexto).toList();
+    final esUltimo = textos.isNotEmpty && textos.last.key == campo.key;
     return TextFormField(
       controller: _ctrls[campo.key],
+      focusNode: _focusNodes[campo.key],
       keyboardType: teclado,
       maxLines: campo.tipo == CrearCampoTipo.multilinea ? 3 : 1,
+      textInputAction:
+          esUltimo ? TextInputAction.done : TextInputAction.next,
+      onFieldSubmitted: (_) => _avanzar(campo),
       inputFormatters: campo.tipo == CrearCampoTipo.numero
           ? [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.\-]')),

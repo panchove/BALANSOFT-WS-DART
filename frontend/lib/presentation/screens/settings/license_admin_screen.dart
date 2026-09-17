@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/security/device_info.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../providers/bloc/license/license_bloc.dart';
@@ -50,7 +51,10 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
   Future<void> _renovar() async {
     setState(() => _renovando = true);
     try {
-      await di.sl<ApiClient>().validateLicense({'hardware_id': 'app'});
+      final hwInfo = await DeviceInfo.getHardwareInfo();
+      await di.sl<ApiClient>().validateLicense({
+        'hardware_id': hwInfo.hardwareId,
+      });
       if (mounted) await _cargarSnapshot();
     } catch (e) {
       if (mounted) {

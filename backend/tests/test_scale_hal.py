@@ -23,6 +23,7 @@ from app.api.dependencies import get_current_empresa, get_current_user
 from app.api.v1.endpoints import API_ROUTERS
 from app.core.database import get_db
 from app.core.scale_hal import SerialScaleHAL, TcpScaleHAL, get_scale_hal
+from app.core.scale_session import get_scale_session_manager
 from app.models import Balanza, Empresa, Usuario
 
 
@@ -37,21 +38,35 @@ class FakeBalanza:
 
 @dataclass
 class _ServidorTCP:
-    """Servidor TCP mínimo que responde a ``get_state`` como el simulador."""
+    """Servidor TCP persistente que emula al simulador BSDD.
+
+    Empuja el estado al conectar y responde a cada ``get_state``, **sin cerrar**
+    la conexión (como un equipo emparejado real). Cuenta las conexiones
+    aceptadas para verificar que la sesión las reutiliza.
+    """
 
     peso: float
+    status: str = "stable"
+    conexiones: int = field(default=0, init=False)
     _server: asyncio.Server | None = field(default=None, init=False, repr=False)
+    _writers: list[asyncio.StreamWriter] = field(default_factory=list, init=False)
     port: int = field(default=0, init=False)
 
     async def _handler(self, reader, writer):  # noqa: D102
+        self.conexiones += 1
+        self._writers.append(writer)
+        estado = (
+            json.dumps({"weight_kg": self.peso, "status": self.status}).encode() + b"\n"
+        )
         try:
-            await reader.readline()
-            writer.write(
-                json.dumps({"weight_kg": self.peso, "status": "stable"})
-                .encode()
-                + b"\n"
-            )
+            writer.write(estado)
             await writer.drain()
+            while True:
+                linea = await reader.readline()
+                if not linea:
+                    break
+                writer.write(estado)
+                await writer.drain()
         finally:
             writer.close()
 
@@ -60,9 +75,19 @@ class _ServidorTCP:
         self.port = self._server.sockets[0].getsockname()[1]
 
     async def stop(self) -> None:  # noqa: D102
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
+        server, self._server = self._server, None
+        if server is not None:
+            server.close()
+        # Cerrar primero las conexiones de los clientes: desde Python 3.12
+        # ``wait_closed`` espera a que terminen todas las conexiones activas.
+        for writer in self._writers:
+            writer.close()
+        self._writers.clear()
+        if server is not None:
+            try:
+                await asyncio.wait_for(server.wait_closed(), timeout=2.0)
+            except (TimeoutError, OSError):
+                pass
 
 
 @pytest.mark.asyncio
@@ -81,6 +106,149 @@ async def test_tcp_read_weight_parsea_json_del_simulador():
 async def test_tcp_read_weight_sin_servidor_devuelve_none():
     hal = TcpScaleHAL("127.0.0.1", 1, timeout=0.5)
     assert await hal.read_weight() is None
+
+
+@dataclass
+class _ServidorTCPConRuido:
+    """Servidor que emite línea vacía y basura antes del JSON válido.
+
+    Reproduce el caso real del simulador BSDD (que llegó a emitir ``json\\n\\n``)
+    y de líneas no-JSON en el buffer. El HAL debe descartarlas y quedarse con
+    el primer ``weight_kg`` válido.
+    """
+
+    peso: float
+    solo_basura: bool = False
+    _server: asyncio.Server | None = field(default=None, init=False, repr=False)
+    port: int = field(default=0, init=False)
+
+    async def _handler(self, reader, writer):  # noqa: D102
+        try:
+            await reader.readline()
+            writer.write(b"\n")
+            writer.write(b"no-es-json\n")
+            if not self.solo_basura:
+                writer.write(
+                    json.dumps({"weight_kg": self.peso, "status": "stable"}).encode()
+                    + b"\n"
+                )
+            await writer.drain()
+        finally:
+            writer.close()
+
+    async def start(self) -> None:  # noqa: D102
+        self._server = await asyncio.start_server(self._handler, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+
+    async def stop(self) -> None:  # noqa: D102
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_tcp_read_weight_ignora_lineas_vacias_y_basura():
+    server = _ServidorTCPConRuido(peso=987.6)
+    await server.start()
+    try:
+        hal = TcpScaleHAL("127.0.0.1", server.port, timeout=2)
+        assert await hal.read_weight() == 987.6
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_tcp_read_weight_solo_basura_devuelve_none():
+    server = _ServidorTCPConRuido(peso=0.0, solo_basura=True)
+    await server.start()
+    try:
+        hal = TcpScaleHAL("127.0.0.1", server.port, timeout=0.5)
+        assert await hal.read_weight() is None
+    finally:
+        await server.stop()
+
+
+@dataclass
+class _ServidorTCPRafaga:
+    """Emite una ráfaga de líneas por petición (peso manipulándose).
+
+    La última línea es el peso asentado; el HAL debe drenar y quedarse con ella
+    en vez de devolver la primera (estado viejo).
+    """
+
+    pesos: list[float]
+    _server: asyncio.Server | None = field(default=None, init=False, repr=False)
+    _writers: list[asyncio.StreamWriter] = field(default_factory=list, init=False)
+    port: int = field(default=0, init=False)
+
+    async def _handler(self, reader, writer):  # noqa: D102
+        self._writers.append(writer)
+        try:
+            while True:
+                linea = await reader.readline()
+                if not linea:
+                    break
+                for i, peso in enumerate(self.pesos):
+                    estado = "stable" if i == len(self.pesos) - 1 else "reading"
+                    writer.write(
+                        json.dumps({"weight_kg": peso, "status": estado}).encode()
+                        + b"\n"
+                    )
+                await writer.drain()
+        finally:
+            writer.close()
+
+    async def start(self) -> None:  # noqa: D102
+        self._server = await asyncio.start_server(self._handler, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+
+    async def stop(self) -> None:  # noqa: D102
+        server, self._server = self._server, None
+        if server is not None:
+            server.close()
+        for writer in self._writers:
+            writer.close()
+        self._writers.clear()
+        if server is not None:
+            try:
+                await asyncio.wait_for(server.wait_closed(), timeout=2.0)
+            except (TimeoutError, OSError):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_tcp_leer_muestra_drena_y_devuelve_la_mas_reciente():
+    server = _ServidorTCPRafaga(pesos=[100.0, 200.0, 300.0, 350.0])
+    await server.start()
+    hal = TcpScaleHAL("127.0.0.1", server.port, timeout=2, intervalo=0.5)
+    try:
+        assert await hal.conectar() is True
+        peso, status = await hal.leer_muestra()
+        assert peso == 350.0
+        assert status == "stable"
+    finally:
+        await hal.cerrar()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_sesion_no_estable_mientras_el_peso_cambia():
+    server = _ServidorTCP(peso=500, status="reading")
+    await server.start()
+    balanza = SimpleNamespace(
+        id_balanza="00000000-0000-0000-0000-0000000000aa",
+        ip_address="127.0.0.1",
+        puerto_tcp=server.port,
+        puerto_com=None,
+    )
+    manager = get_scale_session_manager()
+    try:
+        sesion = await manager.obtener(balanza)
+        assert sesion.peso_kg == 500
+        assert sesion.estable is False
+    finally:
+        await manager.cerrar_todas()
+        await server.stop()
 
 
 def test_factory_prioriza_tcp():
@@ -186,6 +354,21 @@ async def test_endpoint_peso_en_vivo(db, app, client, empresa):
     assert payload["peso_kg"] == 25000
     assert payload["hardware"] == "tcp"
     assert payload["balanza"] == "Balanza Test"
+    assert payload["conectado"] is True
+    assert payload["estable"] is True
+
+
+@pytest.mark.asyncio
+async def test_endpoint_peso_en_vivo_reutiliza_conexion(
+    db, app, client, empresa, server_tcp
+):
+    """El emparejamiento persiste: varios polls comparten una sola conexión."""
+    balanza = await _balanza_empresa(db, empresa)
+    for _ in range(3):
+        resp = await client.get(f"/api/v1/weighing/scale/{balanza.id_balanza}/live")
+        assert resp.status_code == 200
+        assert resp.json()["peso_kg"] == 25000
+    assert server_tcp.conexiones == 1
 
 
 @pytest.mark.asyncio

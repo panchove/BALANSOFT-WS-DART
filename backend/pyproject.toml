@@ -23,6 +23,7 @@ dependencies = [
     "reportlab>=4.0",
     "cachetools>=5.3",
     "prometheus-client>=0.20",
+    "pyserial>=3.5",
 ]
 
 [dependency-groups]

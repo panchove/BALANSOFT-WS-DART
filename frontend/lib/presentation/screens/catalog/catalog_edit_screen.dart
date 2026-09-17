@@ -13,10 +13,15 @@ class CatalogEditScreen extends StatefulWidget {
   final CatalogResource recurso;
   final Map<String, dynamic>? inicial;
 
+  /// Si es `true`, se renderiza como diálogo modal (ancho máximo acotado)
+  /// en lugar de una ruta a pantalla completa.
+  final bool modal;
+
   const CatalogEditScreen({
     super.key,
     required this.recurso,
     this.inicial,
+    this.modal = false,
   });
 
   @override
@@ -29,10 +34,23 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
   late final Map<String, TextEditingController> _ctrls = {};
   final Map<String, String> _dropdownVals = {};
   final Map<String, List<PhotoCaptured>> _fotos = {};
+  final Map<String, FocusNode> _focusNodes = {};
   Map<String, List<Map<String, dynamic>>> _referencias = const {};
   bool _guardando = false;
 
   bool get _esNuevo => widget.inicial == null;
+
+  static bool _esCampoTexto(CatalogField campo) {
+    return switch (campo.tipo) {
+      CatalogFieldType.texto ||
+      CatalogFieldType.multilinea ||
+      CatalogFieldType.numero ||
+      CatalogFieldType.entero ||
+      CatalogFieldType.email =>
+        true,
+      _ => false,
+    };
+  }
 
   @override
   void initState() {
@@ -41,6 +59,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
     for (final campo in widget.recurso.campos) {
       _ctrls[campo.key] =
           TextEditingController(text: _toText(campo, inicial[campo.key]));
+      if (_esCampoTexto(campo)) _focusNodes[campo.key] = FocusNode();
       if (campo.tipo == CatalogFieldType.dropdown) {
         final v = inicial[campo.key];
         if (v != null && '$v'.isNotEmpty) {
@@ -60,7 +79,26 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
     for (final c in _ctrls.values) {
       c.dispose();
     }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  /// Avanza al siguiente campo de texto (o guarda si es el último).
+  void _avanzar(CatalogField actual) {
+    final textos = widget.recurso.campos.where(_esCampoTexto).toList();
+    final i = textos.indexOf(actual);
+    if (i >= 0 && i < textos.length - 1) {
+      _focusNodes[textos[i + 1].key]?.requestFocus();
+    } else {
+      _guardar();
+    }
+  }
+
+  bool _esUltimoCampoTexto(CatalogField campo) {
+    final textos = widget.recurso.campos.where(_esCampoTexto).toList();
+    return textos.isNotEmpty && textos.last.key == campo.key;
   }
 
   String _toText(CatalogField campo, dynamic valor) {
@@ -160,6 +198,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final body = _buildBody();
     if (body == null) return;
@@ -202,35 +241,80 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-            '${_esNuevo ? 'Nuevo' : 'Editar'} ${widget.recurso.singular}'),
+    final titulo =
+        '${_esNuevo ? 'Nuevo' : 'Editar'} ${widget.recurso.singular}';
+    final contenido = Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final campo in widget.recurso.campos) ...[
+            _buildCampo(campo),
+            const SizedBox(height: 14),
+          ],
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: _guardando ? null : _guardar,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+            ),
+            child: _guardando
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(_esNuevo ? 'Guardar' : 'Actualizar'),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
+    );
+
+    if (!widget.modal) {
+      return Scaffold(
+        appBar: AppBar(title: Text(titulo)),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: contenido,
+        ),
+      );
+    }
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final campo in widget.recurso.campos) ...[
-                _buildCampo(campo),
-                const SizedBox(height: 14),
-              ],
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: _guardando ? null : _guardar,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      titulo,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(false),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: contenido,
                 ),
-                child: _guardando
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_esNuevo ? 'Guardar' : 'Actualizar'),
               ),
             ],
           ),
@@ -252,8 +336,8 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
       return _buildDropdown(campo);
     }
     final teclado = switch (campo.tipo) {
-      CatalogFieldType.numero => const TextInputType.numberWithOptions(
-          decimal: true),
+      CatalogFieldType.numero =>
+        const TextInputType.numberWithOptions(decimal: true),
       CatalogFieldType.entero => TextInputType.number,
       CatalogFieldType.email => TextInputType.emailAddress,
       _ => null,
@@ -267,14 +351,18 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
     ];
     return TextFormField(
       controller: _ctrls[campo.key],
+      focusNode: _focusNodes[campo.key],
       keyboardType: teclado,
       maxLines: campo.tipo == CatalogFieldType.multilinea ? 3 : 1,
+      textInputAction: _esUltimoCampoTexto(campo)
+          ? TextInputAction.done
+          : TextInputAction.next,
+      onFieldSubmitted: (_) => _avanzar(campo),
       inputFormatters: campo.tipo == CatalogFieldType.entero
           ? [FilteringTextInputFormatter.digitsOnly]
           : null,
       decoration: InputDecoration(
-        labelText:
-            campo.label + (campo.requerido ? ' *' : ''),
+        labelText: campo.label + (campo.requerido ? ' *' : ''),
         prefixIcon: Icon(campo.icono),
         hintText: campo.hint,
       ),
@@ -294,13 +382,21 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
     List<DropdownMenuItem<String>> items;
     if (campo.opciones != null) {
       items = [
-        for (final op in campo.opciones!)
-          DropdownMenuItem(value: op, child: Text(op)),
+        for (var i = 0; i < campo.opciones!.length; i++)
+          DropdownMenuItem(
+            value: campo.opciones![i],
+            child: Text(
+              (campo.opcionLabels != null && i < campo.opcionLabels!.length)
+                  ? campo.opcionLabels![i]
+                  : campo.opciones![i],
+            ),
+          ),
       ];
     } else {
       final refs = _referencias[campo.catalogoPath] ?? const [];
       items = [
-        if (_dropdownVals[campo.key] == null || _dropdownVals[campo.key]!.isEmpty)
+        if (_dropdownVals[campo.key] == null ||
+            _dropdownVals[campo.key]!.isEmpty)
           const DropdownMenuItem(
             value: '',
             child: Text('— Seleccionar —'),
@@ -403,7 +499,9 @@ class _CampoFotoState extends State<_CampoFoto> {
   Widget build(BuildContext context) {
     final fotos = widget.fotos;
     final tieneLocal = fotos.isNotEmpty;
-    final urlRemota = (!tieneLocal && widget.urlInicial != null && widget.urlInicial!.isNotEmpty)
+    final urlRemota = (!tieneLocal &&
+            widget.urlInicial != null &&
+            widget.urlInicial!.isNotEmpty)
         ? widget.urlInicial!
         : null;
 
@@ -412,7 +510,8 @@ class _CampoFotoState extends State<_CampoFoto> {
       children: [
         Row(
           children: [
-            const Icon(Icons.image_outlined, size: 18, color: SwsColors.gray500),
+            const Icon(Icons.image_outlined,
+                size: 18, color: SwsColors.gray500),
             const SizedBox(width: 6),
             Text(
               widget.label,
@@ -456,7 +555,8 @@ class _CampoFotoState extends State<_CampoFoto> {
                 label: Text(tieneLocal ? 'Foto tomada' : 'Tomar foto'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: SwsColors.primary,
-                  side: BorderSide(color: SwsColors.primary.withValues(alpha: 0.4)),
+                  side: BorderSide(
+                      color: SwsColors.primary.withValues(alpha: 0.4)),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
               ),
@@ -469,7 +569,8 @@ class _CampoFotoState extends State<_CampoFoto> {
                 label: Text(tieneLocal ? 'Lista' : 'Cargar'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: SwsColors.primary,
-                  side: BorderSide(color: SwsColors.primary.withValues(alpha: 0.4)),
+                  side: BorderSide(
+                      color: SwsColors.primary.withValues(alpha: 0.4)),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
               ),

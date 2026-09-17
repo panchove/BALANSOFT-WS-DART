@@ -35,7 +35,7 @@ class LoginRequest(BaseModel):
 
 
 class ValidateLicenseRequest(BaseModel):
-    licencia_key: str
+    licencia_key: str | None = None
     hardware_id: str | None = None
 
 
@@ -249,6 +249,7 @@ class BalanzaOut(CatalogItemOut):
     capacidad_max: Decimal | None = None
     division: Decimal | None = None
     activo: bool = True
+    is_simulada: bool = False
     puerto_com: str | None = None
     ip_address: str | None = None
     puerto_tcp: int | None = None
@@ -263,10 +264,23 @@ class BalanzaCreate(BaseModel):
     capacidad_max: Decimal | None = None
     division: Decimal | None = None
     activo: bool = True
+    is_simulada: bool = False
     puerto_com: str | None = None
     ip_address: str | None = None
     puerto_tcp: int | None = Field(None, gt=0, le=65535)
     protocolo: str | None = Field(None, pattern="^(tcp|serial)$")
+
+
+class BalanzaDescubiertaOut(BaseModel):
+    """Báscula detectada por el escaneo automático de dispositivos."""
+
+    descripcion: str
+    protocolo: str
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    puerto_com: str | None = None
+    peso_kg: float | None = None
+    is_simulada: bool = False
 
 
 class BalanzaPruebaOut(BaseModel):
@@ -434,6 +448,7 @@ class WeighingOut(BaseModel):
     anulado_por: str | None = None
     estado_boleto: str
     sincronizado: bool = False
+    advertencia_tolerancia: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -497,3 +512,109 @@ class SyncStatusResponse(BaseModel):
     ultima_sync: datetime | None = None
     max_offline_dias: int
     usando_licencia_demo: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Identidad local (vínculo singleton con la cuenta del servidor)
+# ---------------------------------------------------------------------------
+
+
+class IdentidadOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id_cuenta: uuid.UUID
+    rif_nit: str
+    nombre_fiscal: str
+    nombre_comercial: str | None = None
+    licencia_key: str | None = None
+    licencia_tier: str | None = None
+    licencia_status: str | None = None
+    licencia_expira: datetime | None = None
+    hardware_id: str | None = None
+    rol_dispositivo: str = "LOCAL"
+    ultima_validacion: datetime | None = None
+    modo_offline: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class IdentidadUpdate(BaseModel):
+    id_cuenta: uuid.UUID
+    rif_nit: str = Field(..., min_length=3, max_length=20)
+    nombre_fiscal: str = Field(..., min_length=3, max_length=255)
+    nombre_comercial: str | None = Field(None, max_length=255)
+    licencia_key: str | None = None
+    licencia_tier: str | None = None
+    licencia_status: str | None = None
+    licencia_expira: datetime | None = None
+    hardware_id: str | None = None
+    rol_dispositivo: str = "LOCAL"
+    modo_offline: bool = False
+
+    @field_validator("licencia_expira")
+    @classmethod
+    def _licencia_naive_utc(cls, v):
+        if v is not None and v.tzinfo is not None:
+            return v.astimezone(UTC).replace(tzinfo=None)
+        return v
+
+
+# ---------------------------------------------------------------------------
+# Usuarios locales (roles operativos + vínculo con credencial global)
+# ---------------------------------------------------------------------------
+
+_ROLES_LOCALES = "^(ADMIN|OPERADOR|AUDITOR|TRABAJADOR)$"
+
+
+class UsuarioCreate(BaseModel):
+    nombre: str = Field(..., min_length=3, max_length=150)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    rol: str = Field("OPERADOR", pattern=_ROLES_LOCALES)
+
+
+class UsuarioUpdate(BaseModel):
+    nombre: str | None = Field(None, min_length=3, max_length=150)
+    rol: str | None = Field(None, pattern=_ROLES_LOCALES)
+    activo: bool | None = None
+    password: str | None = Field(None, min_length=6, max_length=128)
+
+
+class UsuarioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id_usuario: uuid.UUID
+    id_empresa: uuid.UUID
+    id_credencial: uuid.UUID | None = None
+    nombre: str
+    email: EmailStr
+    rol: str
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Perfil de la empresa (datos de contacto + logo para tickets/reportes)
+# ---------------------------------------------------------------------------
+
+
+class EmpresaPerfilOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id_empresa: uuid.UUID
+    nombre_fiscal: str
+    nombre_comercial: str | None = None
+    rif_nit: str
+    direccion: str | None = None
+    telefono: str | None = None
+    email: str | None = None
+    logo_url: str | None = None
+    updated_at: datetime
+
+
+class EmpresaPerfilUpdate(BaseModel):
+    nombre_fiscal: str | None = Field(None, min_length=3, max_length=255)
+    nombre_comercial: str | None = Field(None, max_length=255)
+    rif_nit: str | None = Field(None, min_length=3, max_length=20)
+    direccion: str | None = Field(None, max_length=500)
+    telefono: str | None = Field(None, max_length=50)
+    email: EmailStr | None = None
+    logo_url: str | None = Field(None, max_length=500)

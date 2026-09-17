@@ -19,6 +19,7 @@ from app.api.v1.endpoints import API_ROUTERS
 from app.api.v1.endpoints import auth as auth_module
 from app.api.v1.endpoints import inventario as inventario_module
 from app.api.v1.endpoints import pesajes as pesajes_module
+from app.core import scale_session as scale_session_module
 from app.core.database import get_db
 from app.core.license_client import LicenseInfo
 from app.models import Usuario
@@ -283,7 +284,9 @@ class TestDispositivosEndpoints:
             client, ip_address="192.168.0.50", puerto_tcp=5555, protocolo="tcp"
         )
         monkeypatch.setattr(
-            inventario_module, "get_scale_hal", lambda balanza: FakeHAL(12345.5, True)
+            scale_session_module,
+            "get_scale_hal",
+            lambda balanza: FakeHAL(12345.5, True),
         )
         r = await client.post(f"/api/v1/balanzas/{body['id_balanza']}/probar")
         assert r.status_code == 200, r.text
@@ -299,13 +302,68 @@ class TestDispositivosEndpoints:
             client, ip_address="192.168.0.99", puerto_tcp=5555, protocolo="tcp"
         )
         monkeypatch.setattr(
-            inventario_module, "get_scale_hal", lambda balanza: FakeHAL(None, False)
+            scale_session_module,
+            "get_scale_hal",
+            lambda balanza: FakeHAL(None, False),
         )
         r = await client.post(f"/api/v1/balanzas/{body['id_balanza']}/probar")
         assert r.status_code == 200
         data = r.json()
         assert data["conectado"] is False
         assert data["detalle"]
+
+    async def test_crear_balanza_simulada(self, client):
+        sim = await self._crear_balanza(
+            client,
+            descripcion="Simulada",
+            is_simulada=True,
+            ip_address="127.0.0.1",
+            puerto_tcp=5555,
+            protocolo="tcp",
+        )
+        assert sim["is_simulada"] is True
+        fisica = await self._crear_balanza(client, descripcion="Física")
+        assert fisica["is_simulada"] is False
+
+    async def test_descubrir_omite_registradas(self, client, monkeypatch):
+        class FakeTcp:  # noqa: D106
+            def __init__(self, host: str, port: int):
+                self.host = host
+                self.port = port
+
+            async def read_weight(self) -> float:
+                return 100.0
+
+        monkeypatch.setattr(inventario_module, "TcpScaleHAL", FakeTcp)
+        await self._crear_balanza(
+            client, ip_address="127.0.0.1", puerto_tcp=5555, protocolo="tcp"
+        )
+        r = await client.get("/api/v1/balanzas/descubrir")
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+        assert not any(
+            d["protocolo"] == "tcp" and d["ip_address"] == "127.0.0.1"
+            for d in r.json()
+        )
+
+    async def test_descubrir_tcp_disponible(self, client, monkeypatch):
+        class FakeTcp:  # noqa: D106
+            def __init__(self, host: str, port: int):
+                self.host = host
+                self.port = port
+
+            async def read_weight(self) -> float:
+                return 321.5
+
+        monkeypatch.setattr(inventario_module, "TcpScaleHAL", FakeTcp)
+        r = await client.get("/api/v1/balanzas/descubrir")
+        assert r.status_code == 200, r.text
+        assert any(
+            d["ip_address"] == "127.0.0.1"
+            and d["puerto_tcp"] == 5555
+            and d["peso_kg"] == 321.5
+            for d in r.json()
+        )
 
     async def test_catalogo_sync_incluye_hardware(self, client):
         await self._crear_balanza(

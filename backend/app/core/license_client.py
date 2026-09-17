@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +34,25 @@ SIGNED_FIELDS = ["valid", "status", "expires_at", "tier", "plan_type",
 
 def _now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+MAC_PATTERN = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+
+def _sanitize_mac(value: str | None) -> str | None:
+    """Normaliza una MAC a 00:1A:2B:3C:4D:5E; None si no tiene ese formato
+    (evita rechazos 422 del LM por `mac_address` con max_length=17)."""
+    if not value:
+        return None
+    mac = value.strip().upper()
+    return mac if MAC_PATTERN.match(mac) else None
+
+
+def _sanitize_text(value: str | None, max_length: int) -> str | None:
+    if not value:
+        return None
+    value = value.strip()
+    return value if len(value) <= max_length else value[:max_length]
 
 
 class LicenseError(Exception):
@@ -124,10 +144,10 @@ class LicenseClient:
         payload = {
             "license_key": license_key,
             "hardware_id": hardware_id,
-            "mac_address": mac_address,
-            "device_brand": device_brand,
-            "device_model": device_model,
-            "os_version": os_version,
+            "mac_address": _sanitize_mac(mac_address),
+            "device_brand": _sanitize_text(device_brand, 64),
+            "device_model": _sanitize_text(device_model, 64),
+            "os_version": _sanitize_text(os_version, 64),
             "product_code": product_code or settings.license_product_code,
         }
         try:
@@ -193,10 +213,10 @@ class LicenseClient:
         payload = {
             "license_key": license_key,
             "hardware_id": hardware_id,
-            "mac_address": mac_address,
-            "device_brand": device_brand,
-            "device_model": device_model,
-            "os_version": os_version,
+            "mac_address": _sanitize_mac(mac_address),
+            "device_brand": _sanitize_text(device_brand, 64),
+            "device_model": _sanitize_text(device_model, 64),
+            "os_version": _sanitize_text(os_version, 64),
         }
         resp = httpx.post(
             f"{self.base_url}/activate",

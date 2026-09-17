@@ -6,6 +6,7 @@ class ApiConstants {
 
   // Auth
   static const String login = '$apiPrefix/auth/login';
+  static const String loginLocal = '$apiPrefix/auth/login-local';
   static const String register = '$apiPrefix/auth/register';
   static const String validateLicense = '$apiPrefix/auth/validate-license';
   static const String licenseSnapshot = '$apiPrefix/auth/license';
@@ -43,6 +44,7 @@ class ApiConstants {
   static const String balanzas = '$apiPrefix/balanzas';
   static String balanza(String id) => '$apiPrefix/balanzas/$id';
   static String balanzaProbar(String id) => '$apiPrefix/balanzas/$id/probar';
+  static const String balanzasDescubrir = '$apiPrefix/balanzas/descubrir';
 
   // Directorio
   static const String transportes = '$apiPrefix/transportes';
@@ -72,4 +74,22 @@ class ApiConstants {
   static const String advancedReportTercero = '$apiPrefix/reports/tercero';
   static const String advancedReportPesoRango = '$apiPrefix/reports/peso-rango';
   static const String advancedReportComparativo = '$apiPrefix/reports/comparativo-mensual';
+
+  // Identidad local (cuenta espejo / APP_ROLE=local)
+  static const String identity = '$apiPrefix/identity';
+
+  // Configuración unificada de la estación (cuenta + licencia en vivo)
+  static const String configAccount = '$apiPrefix/config/account';
+
+  // Perfil de la empresa (datos de contacto + logo)
+  static const String empresaPerfil = '$apiPrefix/empresa';
+
+  // Usuarios locales (gestión admin)
+  static const String usuarios = '$apiPrefix/usuarios';
+  static String usuario(String id) => '$apiPrefix/usuarios/$id';
+
+  // Sync de usuarios (cola local -> servidor central)
+  static const String syncUsuariosPendientes = '$apiPrefix/sync/usuarios/pendientes';
+  static const String syncUsuariosEntregados = '$apiPrefix/sync/usuarios/entregados';
+  static const String syncUsersServer = '$apiPrefix/sync/users';
 }

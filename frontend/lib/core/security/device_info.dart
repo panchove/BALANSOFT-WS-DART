@@ -13,7 +13,7 @@ class DeviceInfo {
         final androidInfo = await _plugin.androidInfo;
         _cachedInfo = HardwareInfo(
           hardwareId: androidInfo.id,
-          macAddress: androidInfo.id,
+          macAddress: await _realMacAddress(),
           brand: androidInfo.brand,
           model: androidInfo.model,
           osVersion: 'Android ${androidInfo.version.release}',
@@ -22,7 +22,7 @@ class DeviceInfo {
         final linuxInfo = await _plugin.linuxInfo;
         _cachedInfo = HardwareInfo(
           hardwareId: linuxInfo.machineId ?? linuxInfo.id,
-          macAddress: linuxInfo.machineId ?? '',
+          macAddress: await _realMacAddress(),
           brand: linuxInfo.prettyName,
           model: linuxInfo.name,
           osVersion: linuxInfo.version ?? '',
@@ -31,7 +31,7 @@ class DeviceInfo {
         final windowsInfo = await _plugin.windowsInfo;
         _cachedInfo = HardwareInfo(
           hardwareId: windowsInfo.deviceId,
-          macAddress: windowsInfo.deviceId,
+          macAddress: await _realMacAddress(),
           brand: windowsInfo.productName,
           model: windowsInfo.productName,
           osVersion:
@@ -40,7 +40,7 @@ class DeviceInfo {
       } else {
         _cachedInfo = HardwareInfo(
           hardwareId: 'unknown',
-          macAddress: 'unknown',
+          macAddress: '',
           brand: 'unknown',
           model: 'unknown',
           osVersion: 'unknown',
@@ -49,7 +49,7 @@ class DeviceInfo {
     } catch (_) {
       _cachedInfo = HardwareInfo(
         hardwareId: 'fallback',
-        macAddress: 'fallback',
+        macAddress: '',
         brand: 'unknown',
         model: 'unknown',
         osVersion: 'unknown',
@@ -57,6 +57,26 @@ class DeviceInfo {
     }
 
     return _cachedInfo!;
+  }
+
+  static Future<String> _realMacAddress() async {
+    if (!Platform.isLinux) return '';
+    try {
+      final dir = Directory('/sys/class/net');
+      if (!dir.existsSync()) return '';
+      for (final entry in dir.listSync()) {
+        final macFile = File('${entry.path}/address');
+        if (!macFile.existsSync()) continue;
+        final mac = macFile.readAsStringSync().trim().toUpperCase();
+        if (RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(mac) &&
+            mac != '00:00:00:00:00:00') {
+          return mac;
+        }
+      }
+    } catch (_) {
+      return '';
+    }
+    return '';
   }
 }
 

@@ -1,15 +1,17 @@
-"""Rutas de sincronización de pesajes offline."""
+"""Rutas de sincronización de pesajes offline y usuarios→credenciales."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa
 from app.core.config import settings
 from app.core.database import get_db
-from app.models import BoletoPesaje, Empresa, SyncLog
+from app.models import BoletoPesaje, Empresa, SyncLog, SyncQueue
 from app.schemas import (
     SyncBatchRequest,
     SyncBatchResponse,
@@ -87,3 +89,77 @@ async def pull_sync_data(
     from app.schemas import WeighingOut
 
     return {"pesajes": [WeighingOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# Sincronización de usuarios locales → credenciales globales
+# El App Flutter es el orquestador: lee lo pendiente, lo entrega al servidor
+# (POST {server}/api/v1/sync/users) y marca la entrega aquí.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/usuarios/pendientes")
+async def list_usuarios_pendientes(
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(SyncQueue)
+        .where(
+            SyncQueue.id_empresa == empresa.id_empresa,
+            SyncQueue.entidad == "usuario",
+            SyncQueue.pendiente.is_(True),
+        )
+        .order_by(SyncQueue.created_at)
+    )
+    items = []
+    for fila in result.scalars():
+        items.append(
+            {
+                "id_sync": str(fila.id_sync),
+                "entidad_id": fila.entidad_id,
+                "operacion": fila.operacion,
+                "payload": fila.payload,
+                "intentos": fila.intentos,
+                "error": fila.error,
+                "created_at": fila.created_at,
+            }
+        )
+    return {"pendientes": items}
+
+
+@router.post("/usuarios/entregados")
+async def marcar_usuarios_entregados(
+    payload: dict,
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Marca como entregados los items de usuario que el servidor confirmó."""
+    ids = payload.get("ids", [])
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="Se requiere la lista 'ids'.")
+    result = await db.execute(
+        select(SyncQueue).where(
+            SyncQueue.id_empresa == empresa.id_empresa,
+            SyncQueue.entidad == "usuario",
+            SyncQueue.id_sync.in_(ids),
+        )
+    )
+    marcados = 0
+    for fila in result.scalars():
+        fila.pendiente = False
+        fila.error = None
+        marcados += 1
+    db.add(
+        SyncLog(
+            id_empresa=empresa.id_empresa,
+            tipo="usuarios",
+            entidad="usuario",
+            registros=marcados,
+            errores=0,
+            detalle="Usuarios entregados al servidor",
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    await db.commit()
+    return {"entregados": marcados}

@@ -352,6 +352,7 @@ class Scale {
   final double? capacidadMax;
   final double? division;
   final bool activo;
+  final bool isSimulada;
   final String? puertoCom;
   final String? ipAddress;
   final int? puertoTcp;
@@ -366,6 +367,7 @@ class Scale {
     this.capacidadMax,
     this.division,
     this.activo = true,
+    this.isSimulada = false,
     this.puertoCom,
     this.ipAddress,
     this.puertoTcp,
@@ -381,6 +383,7 @@ class Scale {
         capacidadMax: NumParser.toDoubleOrNull(json['capacidad_max']),
         division: NumParser.toDoubleOrNull(json['division']),
         activo: json['activo'] ?? true,
+        isSimulada: json['is_simulada'] ?? false,
         puertoCom: json['puerto_com'],
         ipAddress: json['ip_address'],
         puertoTcp: (json['puerto_tcp'] as num?)?.toInt(),
@@ -396,6 +399,7 @@ class Scale {
         'capacidad_max': capacidadMax,
         'division': division,
         'activo': activo,
+        'is_simulada': isSimulada,
         'puerto_com': puertoCom,
         'ip_address': ipAddress,
         'puerto_tcp': puertoTcp,

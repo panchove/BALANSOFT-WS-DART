@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_controller.dart';
-import '../../../core/widgets/section_header.dart';
 import '../../../injection.dart' as di;
 import '../../../data/services/scale_api_client.dart';
 import '../../../data/datasources/local/local_storage.dart';
+import '../../../data/datasources/remote/api_client.dart';
+import '../../../domain/entities/catalogs.dart';
 import 'license_admin_screen.dart';
+import 'connections_screen.dart';
+import 'usuarios_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeController themeController;
@@ -19,42 +24,66 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _scaleHostCtrl = TextEditingController(text: '127.0.0.1');
-  final _scalePortCtrl = TextEditingController(text: '5555');
-  bool _scaleEnabled = true;
+  static const _scaleDefaultKey = 'scale_default_id';
+
+  List<Scale> _balanzas = const [];
+  Scale? _balanzaDefault;
+  bool _cargandoBalanzas = true;
 
   @override
   void initState() {
     super.initState();
-    _loadScaleConfig();
+    _loadBalanzas();
   }
 
-  Future<void> _loadScaleConfig() async {
-    final config = await di.sl<LocalStorage>().getScaleConfig();
-    if (!mounted) return;
-    setState(() {
-      _scaleHostCtrl.text = config.host;
-      _scalePortCtrl.text = config.port.toString();
-    });
+  Future<void> _loadBalanzas() async {
+    setState(() => _cargandoBalanzas = true);
+    try {
+      final resp = await di.sl<ApiClient>().getList(ApiConstants.balanzas);
+      final filas = (resp.data as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(Scale.fromJson)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _balanzas = filas;
+        final prevId = AppConfig.prefs.getString(_scaleDefaultKey);
+        if (prevId != null && prevId.isNotEmpty) {
+          final coincidencias = filas.where((b) => b.id == prevId);
+          _balanzaDefault =
+              coincidencias.isNotEmpty ? coincidencias.first : null;
+        } else {
+          _balanzaDefault = null;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _balanzas = const []);
+    } finally {
+      if (mounted) setState(() => _cargandoBalanzas = false);
+    }
   }
 
-  @override
-  void dispose() {
-    _scaleHostCtrl.dispose();
-    _scalePortCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveScaleConfig() async {
-    final host = _scaleHostCtrl.text.trim();
-    final port = int.tryParse(_scalePortCtrl.text) ?? 5555;
-    await di.sl<LocalStorage>().setScaleConfig(host: host, port: port);
-    di.sl<ScaleApiClient>().configurarFallbackTcp(host, port);
+  /// Al cambiar la báscula por defecto: persiste el id y refresca el
+  /// `ScaleApiClient` con los datos de hardware de esa báscula.
+  Future<void> _onBalanzaSeleccionada(Scale? b) async {
+    setState(() => _balanzaDefault = b);
+    if (b == null) {
+      await AppConfig.prefs.remove(_scaleDefaultKey);
+      return;
+    }
+    await AppConfig.prefs.setString(_scaleDefaultKey, b.id);
+    if (b.ipAddress != null && b.ipAddress!.isNotEmpty) {
+      di.sl<ScaleApiClient>().configurarFallbackTcp(
+        b.ipAddress!,
+        b.puertoTcp ?? 5555,
+      );
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configuración de báscula guardada'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text('Báscula por defecto: ${b.descripcion}'),
+          backgroundColor: SwsColors.success,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -62,205 +91,807 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isWide = width >= 900;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Configuración')),
-      body: ListView(
+      appBar: AppBar(
+        title: const Text('Configuración'),
+        actions: [
+          IconButton(
+            tooltip: 'Recargar',
+            icon: const Icon(Icons.refresh),
+            onPressed: () async {
+              await _loadBalanzas();
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _loadBalanzas();
+          if (mounted) setState(() {});
+        },
+        child: isWide ? _buildWideLayout(context) : _buildCompactLayout(context),
+      ),
+    );
+  }
+
+  // ── Layouts ─────────────────────────────────────────────────────────────
+
+  Widget _buildCompactLayout(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      children: [
+        const _AccountHeader(),
+        const SizedBox(height: 8),
+        ..._sections(context),
+      ],
+    );
+  }
+
+  Widget _buildWideLayout(BuildContext context) {
+    // Columna izquierda: identidad / cuenta / licencia / apariencia.
+    // Columna derecha: configuración operativa.
+    final izquierda = <Widget>[
+      const _SectionCard(
+        icon: Icons.account_balance_outlined,
+        title: 'Cuenta y Empresa',
         children: [
-          const SectionHeader(title: 'Cuenta'),
-          ListTile(
-            leading: const Icon(Icons.person_outlined),
-            title: const Text('Perfil'),
-            subtitle: BlocBuilder<AuthBloc, AuthState>(
-              builder: (context, state) {
-                if (state is AuthAuthenticated) {
-                  return Text('${state.user.nombre} - ${state.user.email}');
-                }
-                return const Text('No autenticado');
-              },
-            ),
-          ),
-          const ListTile(
-            leading: Icon(Icons.business_outlined),
-            title: Text('Empresa'),
-            subtitle: Text('Información de la empresa'),
-          ),
-          const Divider(),
-          const SectionHeader(title: 'Báscula / Dispositivo'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile(
-                  title: const Text('Conexión a báscula'),
-                  subtitle: const Text('Activar conexión a báscula BSDD / hardware'),
-                  value: _scaleEnabled,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) => setState(() => _scaleEnabled = v),
-                ),
-                if (_scaleEnabled) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: _scaleHostCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Dirección IP',
-                            hintText: '127.0.0.1',
-                            prefixIcon: Icon(Icons.wifi_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 1,
-                        child: TextField(
-                          controller: _scalePortCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Puerto',
-                            hintText: '5555',
-                            prefixIcon: Icon(Icons.settings_ethernet),
-                          ),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: _saveScaleConfig,
-                      child: const Text('Guardar configuración'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            ),
-          ),
-          const Divider(),
-          const SectionHeader(title: 'Licencia'),
-          const _LicenciaTile(),
-          const Divider(),
-          const SectionHeader(title: 'Sincronización'),
-          SwitchListTile(
-            secondary: const Icon(Icons.sync_outlined),
-            title: const Text('Sincronización automática'),
-            subtitle: const Text('Sincronizar cada 5 minutos'),
-            value: true,
-            onChanged: (v) {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.cloud_upload_outlined),
-            title: const Text('Sincronizar ahora'),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Sincronizando...')),
-              );
-            },
-          ),
-          const Divider(),
-          const SectionHeader(title: 'Archivos'),
-          const _DirectorioTile(),
-          const Divider(),
-          const SectionHeader(title: 'Apariencia'),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Tema'),
-            subtitle: Text(_temaLabel(widget.themeController.tema)),
-          ),
+          _AccountInfoTile(),
+          _IdentidadTile(),
+          _UsuariosTile(),
+        ],
+      ),
+      const _SectionCard(
+        icon: Icons.card_membership_outlined,
+        title: 'Licencia',
+        children: [_LicenseTile()],
+      ),
+      _SectionCard(
+        icon: Icons.palette_outlined,
+        title: 'Apariencia',
+        children: [
           _ThemeSelector(themeController: widget.themeController),
-          const Divider(),
-          const SectionHeader(title: 'General'),
-          const ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('Acerca de'),
-            subtitle: Text('Balansoft-WS v1.0.0'),
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: SwsColors.danger),
-            title: const Text('Cerrar Sesión', style: TextStyle(color: SwsColors.danger)),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Cerrar Sesión'),
-                  content: const Text('¿Está seguro que desea cerrar sesión?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancelar'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.read<AuthBloc>().add(LogoutEvent());
-                        Navigator.pushReplacementNamed(context, '/login');
-                      },
-                      child: const Text('Cerrar', style: TextStyle(color: SwsColors.danger)),
-                    ),
-                  ],
-                ),
-              );
-            },
+        ],
+      ),
+    ];
+    final derecha = <Widget>[
+      _SectionCard(
+        icon: Icons.straighten_outlined,
+        title: 'Báscula del Sistema',
+        children: [_buildBalanzasSelector()],
+      ),
+      _SectionCard(
+        icon: Icons.wifi_tethering_outlined,
+        title: 'Conexiones',
+        children: const [_ConexionesTile()],
+      ),
+      _SectionCard(
+        icon: Icons.sync_outlined,
+        title: 'Sincronización',
+        children: _syncChildren(context),
+      ),
+      const _SectionCard(
+        icon: Icons.folder_open_outlined,
+        title: 'Archivos',
+        children: [_DirectorioTile()],
+      ),
+      _cierreSesion(context),
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _AccountHeader(),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Column(children: izquierda)),
+              const SizedBox(width: 16),
+              Expanded(child: Column(children: derecha)),
+            ],
           ),
         ],
       ),
     );
   }
 
-  String _temaLabel(TemaApp tema) {
-    switch (tema) {
-      case TemaApp.claro:
-        return 'Claro';
-      case TemaApp.oscuro:
-        return 'Oscuro';
-      case TemaApp.sistema:
-        return 'Sistema';
+  // ── Secciones (móvil) ───────────────────────────────────────────────────
+
+  List<Widget> _sections(BuildContext context) {
+    return [
+      const _SectionCard(
+        icon: Icons.account_balance_outlined,
+        title: 'Cuenta y Empresa',
+        children: [
+          _AccountInfoTile(),
+          _IdentidadTile(),
+          _UsuariosTile(),
+        ],
+      ),
+      const _SectionCard(
+        icon: Icons.card_membership_outlined,
+        title: 'Licencia',
+        children: [_LicenseTile()],
+      ),
+      _SectionCard(
+        icon: Icons.straighten_outlined,
+        title: 'Báscula del Sistema',
+        children: [_buildBalanzasSelector()],
+      ),
+      const _SectionCard(
+        icon: Icons.wifi_tethering_outlined,
+        title: 'Conexiones',
+        children: [_ConexionesTile()],
+      ),
+      _SectionCard(
+        icon: Icons.sync_outlined,
+        title: 'Sincronización',
+        children: _syncChildren(context),
+      ),
+      const _SectionCard(
+        icon: Icons.folder_open_outlined,
+        title: 'Archivos',
+        children: [_DirectorioTile()],
+      ),
+      _SectionCard(
+        icon: Icons.palette_outlined,
+        title: 'Apariencia',
+        children: [
+          _ThemeSelector(themeController: widget.themeController),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _cierreSesion(context),
+    ];
+  }
+
+  List<Widget> _syncChildren(BuildContext context) {
+    return [
+      SwitchListTile(
+        secondary: const Icon(Icons.sync_outlined),
+        title: const Text('Sincronización automática'),
+        subtitle: const Text('Cada 5 minutos'),
+        value: true,
+        dense: true,
+        onChanged: (v) {},
+      ),
+      ListTile(
+        leading: const Icon(Icons.cloud_upload_outlined),
+        title: const Text('Sincronizar ahora'),
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sincronizando...')),
+          );
+        },
+      ),
+    ];
+  }
+
+  // ── Báscula por defecto (solo select) ───────────────────────────────────
+
+  Widget _buildBalanzasSelector() {
+    if (_cargandoBalanzas) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Selecciona la báscula que el sistema usará por defecto para '
+            'todos los pesajes.',
+            style: TextStyle(fontSize: 12.5, color: SwsColors.gray600),
+          ),
+        ),
+        InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Báscula por defecto',
+            prefixIcon: const Icon(Icons.scale_outlined),
+            suffixIcon: IconButton(
+              tooltip: 'Actualizar básculas',
+              onPressed: _loadBalanzas,
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<Scale?>(
+              value: _balanzaDefault,
+              isExpanded: true,
+              isDense: true,
+              hint: const Text('— Sin seleccionar —'),
+              items: _dropdownItems(),
+              onChanged: _onBalanzaSeleccionada,
+            ),
+          ),
+        ),
+        if (_balanzas.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text(
+              'No hay básculas registradas. Añádelas desde '
+              'Dispositivos → Añadir báscula.',
+              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<DropdownMenuItem<Scale?>> _dropdownItems() {
+    if (_balanzas.isEmpty) {
+      return const [
+        DropdownMenuItem<Scale?>(
+          value: null,
+          enabled: false,
+          child: Text('Sin básculas disponibles'),
+        ),
+      ];
+    }
+    return [
+      const DropdownMenuItem<Scale?>(
+        value: null,
+        child: Text('— Sin seleccionar —'),
+      ),
+      for (final b in _balanzas)
+        if (b.activo)
+          DropdownMenuItem<Scale?>(
+            value: b,
+            child: Text(
+              b.etiqueta,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+    ];
+  }
+
+  // ── Cierre de sesión ────────────────────────────────────────────────────
+
+  Widget _cierreSesion(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: ListTile(
+        leading: const Icon(Icons.logout, color: SwsColors.danger),
+        title: const Text(
+          'Cerrar Sesión',
+          style: TextStyle(color: SwsColors.danger),
+        ),
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Cerrar Sesión'),
+              content: const Text('¿Está seguro que desea cerrar sesión?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.read<AuthBloc>().add(LogoutEvent());
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
+                  child: const Text(
+                    'Cerrar',
+                    style: TextStyle(color: SwsColors.danger),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
-class _ThemeSelector extends StatelessWidget {
-  final ThemeController themeController;
-  const _ThemeSelector({required this.themeController});
+class _SectionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: themeController,
-      builder: (context, _) => RadioGroup<TemaApp>(
-        groupValue: themeController.tema,
-        onChanged: (v) {
-          if (v != null) themeController.setTema(v);
-        },
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          children: TemaApp.values.map((tema) {
-            return RadioListTile<TemaApp>(
-              title: Text(_label(tema)),
-              value: tema,
-              activeColor: SwsColors.accent,
-            );
-          }).toList(),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: SwsColors.accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountHeader extends StatefulWidget {
+  const _AccountHeader();
+
+  @override
+  State<_AccountHeader> createState() => _AccountHeaderState();
+}
+
+class _AccountHeaderState extends State<_AccountHeader> {
+  Map<String, dynamic>? _account;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await di.sl<ApiClient>().getAccountInfo();
+      if (!mounted) return;
+      setState(() {
+        _account = data;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'No se pudo cargar: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isWide = width >= 900;
+    final nombre = (_account?['nombre_comercial'] as String?)
+        ?? (_account?['nombre_fiscal'] as String?)
+        ?? 'Estación';
+    final rif = _account?['rif_nit'] as String? ?? '---';
+
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: isWide ? 0 : 12, vertical: 6),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [
+              SwsColors.primary,
+              SwsColors.primary.withValues(alpha: 0.85),
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: _loading && _account == null
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final apilado = constraints.maxWidth < 260;
+                    if (apilado) {
+                      return _headerApilado(nombre, rif);
+                    }
+                    return _headerFila(nombre, rif);
+                  },
+                ),
         ),
       ),
     );
   }
 
-  String _label(TemaApp tema) {
-    switch (tema) {
-      case TemaApp.claro:
-        return 'Claro';
-      case TemaApp.oscuro:
-        return 'Oscuro';
-      case TemaApp.sistema:
-        return 'Sistema (automático)';
+  Widget _headerApilado(String nombre, String rif) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white24,
+              child: Icon(Icons.business, color: Colors.white, size: 26),
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Actualizar',
+              icon: const Icon(Icons.refresh, color: Colors.white70, size: 22),
+              onPressed: _load,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _headerTextos(nombre, rif),
+        const SizedBox(height: 12),
+        _badges(),
+        if (_error != null) _errorText(),
+      ],
+    );
+  }
+
+  Widget _headerFila(String nombre, String rif) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white24,
+              child: Icon(Icons.business, color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: _headerTextos(nombre, rif)),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Actualizar',
+              icon: const Icon(Icons.refresh, color: Colors.white70, size: 22),
+              onPressed: _load,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _badges(),
+        if (_error != null) _errorText(),
+      ],
+    );
+  }
+
+  Widget _headerTextos(String nombre, String rif) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          nombre,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          'RIF: $rif',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.8),
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badges() {
+    final tier = (_account?['licencia_tier'] as String?) ?? '---';
+    final status = (_account?['licencia_status'] as String?) ?? '---';
+    final valid = _account?['licencia_valida'] == true;
+    final expires = _account?['licencia_expira'] as String?;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _BadgeChip(
+          label: tier,
+          icon: Icons.workspace_premium,
+          color: Colors.amber,
+          dark: true,
+        ),
+        _BadgeChip(
+          label: status,
+          icon: valid ? Icons.verified : Icons.error_outline,
+          color: valid ? SwsColors.success : SwsColors.danger,
+          dark: true,
+        ),
+        if (expires != null)
+          _BadgeChip(
+            label: _fmtDate(expires),
+            icon: Icons.calendar_today,
+            color: Colors.white70,
+            dark: true,
+          ),
+      ],
+    );
+  }
+
+  Widget _errorText() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Text(
+        _error!,
+        style: const TextStyle(color: Colors.white70, fontSize: 12),
+      ),
+    );
+  }
+
+  String _fmtDate(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '---';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+}
+
+class _BadgeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool dark;
+
+  const _BadgeChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.dark = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.15)
+            : color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: dark ? Colors.white : color),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: dark ? Colors.white : color,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountInfoTile extends StatelessWidget {
+  const _AccountInfoTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(Icons.person_outlined),
+      ),
+      title: const Text('Perfil'),
+      subtitle: BlocBuilder<AuthBloc, AuthState>(
+        builder: (context, state) {
+          if (state is AuthAuthenticated) {
+            return Text('${state.user.nombre} — ${state.user.email}');
+          }
+          return const Text('No autenticado');
+        },
+      ),
+    );
+  }
+}
+
+class _IdentidadTile extends StatefulWidget {
+  const _IdentidadTile();
+
+  @override
+  State<_IdentidadTile> createState() => _IdentidadTileState();
+}
+
+class _IdentidadTileState extends State<_IdentidadTile> {
+  Map<String, dynamic>? _identidad;
+  bool _sinIdentidad = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    try {
+      final id = await di.sl<ApiClient>().getIdentity();
+      if (!mounted) return;
+      setState(() {
+        _identidad = id;
+        _sinIdentidad = id == null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _sinIdentidad = true);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = _identidad;
+    final String sub;
+    if (id == null) {
+      sub = _sinIdentidad
+          ? 'Sin configurar — se registra en el primer login'
+          : 'Cargando...';
+    } else {
+      sub = '${id['nombre_comercial'] ?? id['nombre_fiscal'] ?? '---'}'
+          ' · ${id['licencia_tier'] ?? '---'}'
+          '${id['modo_offline'] == true ? ' · sin conexión' : ''}';
+    }
+    return ListTile(
+      dense: true,
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(Icons.account_balance_outlined),
+      ),
+      title: const Text('Identidad de la estación'),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
+      trailing: IconButton(
+        icon: const Icon(Icons.refresh, size: 20),
+        tooltip: 'Recargar',
+        onPressed: _cargar,
+      ),
+    );
+  }
+}
+
+class _UsuariosTile extends StatelessWidget {
+  const _UsuariosTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final rol = context.select<AuthBloc, String?>((bloc) {
+      final state = bloc.state;
+      return state is AuthAuthenticated ? state.user.rol : null;
+    });
+    final esAdmin = rol == 'ADMIN';
+    return ListTile(
+      dense: true,
+      leading: SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(esAdmin ? Icons.group_outlined : Icons.lock_outline),
+      ),
+      title: const Text('Usuarios y roles'),
+      subtitle: Text(
+        esAdmin
+            ? 'Crear, editar y desactivar operadores'
+            : 'Solo visible para administradores',
+      ),
+      enabled: esAdmin,
+      trailing: esAdmin ? const Icon(Icons.chevron_right) : null,
+      onTap: esAdmin
+          ? () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UsuariosScreen()),
+              )
+          : null,
+    );
+  }
+}
+
+class _LicenseTile extends StatelessWidget {
+  const _LicenseTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final rol = context.select<AuthBloc, String?>((bloc) {
+      final state = bloc.state;
+      return state is AuthAuthenticated ? state.user.rol : null;
+    });
+    final esAdmin = rol == 'ADMIN';
+    return ListTile(
+      dense: true,
+      leading: SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(
+          esAdmin ? Icons.card_membership_outlined : Icons.lock_outline,
+        ),
+      ),
+      title: const Text('Administración de licencias'),
+      subtitle: Text(
+        esAdmin
+            ? 'Tier, vencimiento y renovación'
+            : 'Solo visible para administradores',
+      ),
+      enabled: esAdmin,
+      trailing: esAdmin ? const Icon(Icons.chevron_right) : null,
+      onTap: esAdmin
+          ? () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LicenseAdminScreen()),
+              )
+          : null,
+    );
+  }
+}
+
+class _ConexionesTile extends StatelessWidget {
+  const _ConexionesTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final local = AppConfig.apiBaseUrl;
+    final localPendiente = local == null || local.trim().isEmpty;
+    return ListTile(
+      dense: true,
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(Icons.settings_ethernet),
+      ),
+      title: const Text('Servidores'),
+      subtitle: Text(
+        localPendiente
+            ? 'API local sin configurar · Central: ${AppConfig.serverApiUrl}'
+            : 'Local: $local · Central: ${AppConfig.serverApiUrl}',
+        style: const TextStyle(fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: localPendiente
+          ? const Icon(Icons.error_outline, color: SwsColors.warning)
+          : const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ConnectionsScreen()),
+      ),
+    );
   }
 }
 
@@ -299,7 +930,12 @@ class _DirectorioTileState extends State<_DirectorioTile> {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: const Icon(Icons.folder_open_outlined),
+      dense: true,
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(Icons.folder_open_outlined),
+      ),
       title: const Text('Carpeta de guardado'),
       subtitle: Text(
         _ruta ?? 'Obteniendo...',
@@ -308,7 +944,7 @@ class _DirectorioTileState extends State<_DirectorioTile> {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: IconButton(
-        icon: const Icon(Icons.copy),
+        icon: const Icon(Icons.copy, size: 20),
         onPressed: _copiar,
         tooltip: 'Copiar ruta',
       ),
@@ -317,35 +953,41 @@ class _DirectorioTileState extends State<_DirectorioTile> {
   }
 }
 
-/// Acceso a la administración de licencias (solo ADMIN, REQ-NF-ARQ-007).
-class _LicenciaTile extends StatelessWidget {
-  const _LicenciaTile();
+class _ThemeSelector extends StatelessWidget {
+  final ThemeController themeController;
+  const _ThemeSelector({required this.themeController});
 
   @override
   Widget build(BuildContext context) {
-    final rol = context.select<AuthBloc, String?>((bloc) {
-      final state = bloc.state;
-      return state is AuthAuthenticated ? state.user.rol : null;
-    });
-    final esAdmin = rol == 'ADMIN';
-    return ListTile(
-      leading: Icon(
-        esAdmin ? Icons.card_membership_outlined : Icons.lock_outline,
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) => RadioGroup<TemaApp>(
+        groupValue: themeController.tema,
+        onChanged: (v) {
+          if (v != null) themeController.setTema(v);
+        },
+        child: Column(
+          children: TemaApp.values.map((tema) {
+            return RadioListTile<TemaApp>(
+              title: Text(_label(tema)),
+              value: tema,
+              dense: true,
+              activeColor: SwsColors.accent,
+            );
+          }).toList(),
+        ),
       ),
-      title: const Text('Administración de licencias'),
-      subtitle: Text(
-        esAdmin
-            ? 'Tier, vencimiento y renovación'
-            : 'Solo visible para administradores',
-      ),
-      enabled: esAdmin,
-      onTap: esAdmin
-          ? () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const LicenseAdminScreen(),
-                ),
-              )
-          : null,
     );
+  }
+
+  String _label(TemaApp tema) {
+    switch (tema) {
+      case TemaApp.claro:
+        return 'Claro';
+      case TemaApp.oscuro:
+        return 'Oscuro';
+      case TemaApp.sistema:
+        return 'Sistema (automático)';
+    }
   }
 }

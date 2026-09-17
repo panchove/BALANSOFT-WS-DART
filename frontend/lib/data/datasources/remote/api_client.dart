@@ -4,7 +4,8 @@ import '../../../core/constants/api_constants.dart';
 
 class ApiClient {
   final Dio _dio;
-  final String _baseUrl;
+  String _baseUrl;
+  String? _serverToken;
   Future<String?> Function()? _refreshTokenHandler;
 
   String get baseUrl => _baseUrl;
@@ -21,6 +22,13 @@ class ApiClient {
               },
             )) {
     _setupInterceptor();
+  }
+
+  /// Cambia la URL base de la API local en caliente (Ajustes > Conexiones).
+  /// Las repositorios comparten esta misma instancia, así el cambio aplica a
+  /// todas las llamadas sin reiniciar la app.
+  void setBaseUrl(String url) {
+    _baseUrl = url.replaceAll(RegExp(r'/$'), '');
   }
 
   void onUnauthorized(Future<String?> Function() handler) {
@@ -57,6 +65,43 @@ class ApiClient {
     _dio.options.headers.remove('Authorization');
   }
 
+  /// Token de la sesión contra el servidor central (credencial global).
+  /// Cuando está presente se usa para las llamadas server-bound en lugar
+  /// del token local de la estación.
+  void setServerToken(String? token) {
+    _serverToken = (token == null || token.isEmpty) ? null : token;
+  }
+
+  String _serverBase([String? serverUrl]) {
+    final url = (serverUrl ?? AppConfig.serverApiUrl)
+            ?.replaceAll(RegExp(r'/$'), '') ??
+        '';
+    return url;
+  }
+
+  /// Login contra el servidor central: obtiene la credencial global de la
+  /// cuenta (necesaria para `/api/v1/sync/*`, `/api/v1/licencias`, etc.).
+  Future<Response> serverLogin({
+    required String email,
+    required String password,
+    required String hardwareId,
+    String? serverUrl,
+  }) async {
+    final url = _serverBase(serverUrl);
+    if (url.isEmpty) {
+      throw StateError('Servidor central no configurado');
+    }
+    return _dio.post(
+      '$url/api/v1/auth/login',
+      data: {
+        'email': email,
+        'password': password,
+        'hardware_id': hardwareId,
+      },
+      options: Options(receiveTimeout: const Duration(seconds: 10)),
+    );
+  }
+
   Future<bool> health() async {
     try {
       final response = await _dio.get('$_baseUrl${ApiConstants.health}');
@@ -69,6 +114,28 @@ class ApiClient {
   Future<Response> login(Map<String, dynamic> body) async {
     final response = await _dio.post('$_baseUrl/api/v1/auth/login', data: body);
     return response;
+  }
+
+  /// Login OFFLINE: valida credenciales locales sin consultar el LM.
+  /// Se usa como respaldo cuando el login estándar falla por red o el LM está caído.
+  Future<Response> loginLocal(Map<String, dynamic> body) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.loginLocal}', data: body);
+    return response;
+  }
+
+  /// Comprueba si el servidor central (cuenta/licencia) responde.
+  Future<bool> serverHealth({String? serverUrl}) async {
+    final url = (serverUrl ?? AppConfig.serverApiUrl)
+            ?.replaceAll(RegExp(r'/$'), '') ??
+        AppConfig.apiBaseUrl;
+    try {
+      final response = await _dio.get('$url${ApiConstants.health}',
+          options: Options(receiveTimeout: const Duration(seconds: 5)));
+      return response.statusCode == 200;
+    } on DioException {
+      return false;
+    }
   }
 
   Future<Response> register(Map<String, dynamic> body) async {
@@ -117,6 +184,98 @@ class ApiClient {
   Future<Map<String, dynamic>> getLicenseSnapshot() async {
     final response = await _dio.get('$_baseUrl${ApiConstants.licenseSnapshot}');
     return response.data as Map<String, dynamic>;
+  }
+
+  /// Identidad de la estación local (GET /api/v1/identity).
+  /// Lanza 404 si la cuenta aún no se ha configurado tras un login.
+  Future<Map<String, dynamic>?> getIdentity() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.identity}');
+    return (response.data as Map<String, dynamic>?)?.cast<String, dynamic>();
+  }
+
+  /// Persiste la identidad de la estación local (PUT /api/v1/identity, solo ADMIN).
+  Future<void> saveIdentity(Map<String, dynamic> body) async {
+    await _dio.put('$_baseUrl${ApiConstants.identity}', data: body);
+  }
+
+  /// Información unificada de la estación: cuenta espejo del servidor +
+  /// licencia validada en vivo contra el LM (GET /api/v1/config/account).
+  Future<Map<String, dynamic>> getAccountInfo() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.configAccount}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Perfil de la empresa local (datos de contacto + logo).
+  Future<Map<String, dynamic>> getEmpresaPerfil() async {
+    final response =
+        await _dio.get('$_baseUrl${ApiConstants.empresaPerfil}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Actualiza el perfil de la empresa local (solo ADMIN).
+  Future<Map<String, dynamic>> updateEmpresaPerfil(
+    Map<String, dynamic> body,
+  ) async {
+    final response =
+        await _dio.put('$_baseUrl${ApiConstants.empresaPerfil}', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Usuarios de la estación (ADMIN/AUDITOR).
+  Future<List<dynamic>> listUsuarios() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.usuarios}');
+    return (response.data as List<dynamic>?) ?? const [];
+  }
+
+  /// Crea un usuario local (ADMIN) y lo encola para sincronizar al servidor.
+  Future<Map<String, dynamic>> createUsuario(Map<String, dynamic> body) async {
+    final response = await _dio.post('$_baseUrl${ApiConstants.usuarios}', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Actualiza un usuario local (ADMIN) y lo encola para sincronizar.
+  Future<Map<String, dynamic>> updateUsuario(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _dio.put('$_baseUrl${ApiConstants.usuario(id)}', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Lista de usuarios sincronizados pendientes de enviar al servidor central.
+  Future<List<dynamic>> usuariosPendientes() async {
+    final response =
+        await _dio.get('$_baseUrl${ApiConstants.syncUsuariosPendientes}');
+    return (response.data?['pendientes'] as List<dynamic>?) ?? const [];
+  }
+
+  /// Marca los usuarios entregados al servidor como sincronizados.
+  Future<void> marcarUsuariosEntregados(List<String> ids) async {
+    await _dio.post(
+      '$_baseUrl${ApiConstants.syncUsuariosEntregados}',
+      data: {'ids': ids},
+    );
+  }
+
+  /// Empuja los usuarios locales pendientes al servidor central (best-effort).
+  /// Usa el token de la credencial global (`serverLogin`) si está disponible;
+  /// si no, el interceptor no podrá autenticar y la cola queda intacta.
+  Future<void> pushUsuariosServer(
+    List<Map<String, dynamic>> items, {
+    String? serverUrl,
+  }) async {
+    final url = _serverBase(serverUrl);
+    if (url.isEmpty) return;
+    final token = _serverToken;
+    if (token == null) return;
+    await _dio.post(
+      '$url${ApiConstants.syncUsersServer}',
+      data: {'items': items},
+      options: Options(
+        receiveTimeout: const Duration(seconds: 10),
+        headers: {'Authorization': 'Bearer $token'},
+      ),
+    );
   }
 
   Future<Response> createWeighing(Map<String, dynamic> body) async {
@@ -300,6 +459,13 @@ Future<Response> getMonthlyReport(int year, int month) async {
   Future<Response> getList(String path) async {
     final response = await _dio.get('$_baseUrl$path');
     return response;
+  }
+
+  /// Escanea las básculas conectadas/disponibles (TCP + serial).
+  Future<List<Map<String, dynamic>>> descubrirBalanzas() async {
+    final response =
+        await _dio.get('$_baseUrl${ApiConstants.balanzasDescubrir}');
+    return (response.data as List? ?? []).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<Response> getItem(String path) async {

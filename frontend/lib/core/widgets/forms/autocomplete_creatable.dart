@@ -39,6 +39,16 @@ class AutocompleteCreatable<T extends Object> extends StatefulWidget {
   final String? hint;
   final Key? fieldKey;
 
+  /// Notifica el [FocusNode] interno del campo (el que el propio
+  /// [Autocomplete] usa para abrir el desplegable). Permite enfocar o pedir
+  /// el foco desde fuera (p. ej. navegación con flechas) sin romper el
+  /// desplegable de sugerencias.
+  final ValueChanged<FocusNode>? onFocusNodeReady;
+
+  /// Se dispara tras confirmar un valor que YA existe (Enter con coincidencia
+  /// exacta o selección desde la lista) para avanzar al siguiente campo.
+  final VoidCallback? onNext;
+
   const AutocompleteCreatable({
     super.key,
     required this.items,
@@ -53,6 +63,8 @@ class AutocompleteCreatable<T extends Object> extends StatefulWidget {
     this.crear,
     this.hint,
     this.fieldKey,
+    this.onFocusNodeReady,
+    this.onNext,
   });
 
   @override
@@ -96,6 +108,38 @@ class _AutocompleteCreatableState<T extends Object>
     }
   }
 
+  void _alEnviarEnter(VoidCallback cerrar) {
+    final texto = _controller?.text.trim() ?? '';
+    if (texto.isEmpty) {
+      cerrar();
+      return;
+    }
+    _ultimoQuery = texto;
+    final lower = texto.toLowerCase();
+    final coincidencia = widget.items
+        .where((i) => widget.label(i).toLowerCase() == lower)
+        .toList();
+    if (coincidencia.isNotEmpty) {
+      final item = coincidencia.first;
+      _controller?.text = widget.label(item);
+      widget.onSelected(item);
+      cerrar();
+      widget.onNext?.call();
+      return;
+    }
+    if (widget.crear != null) {
+      _crearNuevo();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No se encontró "$texto" en el catálogo'),
+        backgroundColor: SwsColors.warning,
+      ),
+    );
+    cerrar();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Autocomplete<Object>(
@@ -127,9 +171,11 @@ class _AutocompleteCreatableState<T extends Object>
         final item = option as T;
         _controller?.text = widget.label(item);
         widget.onSelected(item);
+        widget.onNext?.call();
       },
       fieldViewBuilder: (context, textController, focusNode, onSubmitted) {
         _controller = textController;
+        widget.onFocusNodeReady?.call(focusNode);
         return TextFormField(
           key: widget.fieldKey,
           controller: textController,
@@ -154,6 +200,7 @@ class _AutocompleteCreatableState<T extends Object>
               ? (v) => Validators.required(v, widget.fieldName)
               : null,
           onChanged: (value) => widget.onTextChanged?.call(value),
+          onFieldSubmitted: (_) => _alEnviarEnter(onSubmitted),
         );
       },
     );

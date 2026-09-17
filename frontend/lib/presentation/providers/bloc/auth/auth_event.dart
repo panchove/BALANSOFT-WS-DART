@@ -52,9 +52,13 @@ class RegisterEvent extends AuthEvent {
       [empresaNombre, empresaRif, usuarioNombre, email, password, licenciaKey];
 }
 
-class LogoutEvent extends AuthEvent {}
+class LogoutEvent extends AuthEvent {
+  const LogoutEvent();
+}
 
-class CheckAuthStatusEvent extends AuthEvent {}
+class CheckAuthStatusEvent extends AuthEvent {
+  const CheckAuthStatusEvent();
+}
 
 class ForgotPasswordEvent extends AuthEvent {
   final String email;

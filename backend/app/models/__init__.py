@@ -31,6 +31,37 @@ def _now_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+class IdentidadLocal(Base):
+    """Vínculo singleton con la cuenta del servidor (solo 1 fila por máquina).
+
+    Guarda el id_cuenta y la licencia cacheados para trabajo offline
+    (docs/MANEJO_DB.md §6.2 y §8). La PK booleana forzada a TRUE garantiza
+    que solo exista una fila.
+    """
+
+    __tablename__ = "identidad_local"
+
+    id: Mapped[bool] = mapped_column(Boolean, primary_key=True, default=True)
+    id_cuenta: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    rif_nit: Mapped[str] = mapped_column(String(20))
+    nombre_fiscal: Mapped[str] = mapped_column(String(255))
+    nombre_comercial: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    licencia_expira: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    hardware_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rol_dispositivo: Mapped[str] = mapped_column(String(20), default="LOCAL")
+    ultima_validacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    modo_offline: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
 class Empresa(Base):
     __tablename__ = "empresas"
 
@@ -43,6 +74,7 @@ class Empresa(Base):
     direccion: Mapped[str | None] = mapped_column(Text, nullable=True)
     telefono: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -68,6 +100,9 @@ class Usuario(Base):
     )
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    id_credencial: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
     nombre: Mapped[str] = mapped_column(String(150))
     email: Mapped[str] = mapped_column(String(255), unique=True)
@@ -296,6 +331,7 @@ class Balanza(Base):
     capacidad_max: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     division: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_simulada: Mapped[bool] = mapped_column(Boolean, default=False)
     puerto_com: Mapped[str | None] = mapped_column(String(50), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     puerto_tcp: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,8 +12,11 @@ import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
 
+/// Estado de conexión de una báscula, derivado de `/balanzas/{id}/probar`.
+enum EstadoBalanza { sinVerificar, disponible, inestable, noDisponible }
+
 /// Módulo de dispositivos: configuración de la conexión de las básculas
-/// (hardware HAL: TCP / serial) y prueba de conexión en vivo.
+/// (hardware HAL: TCP / serial), prueba de conexión en vivo y monitoreo.
 class DispositivosScreen extends StatefulWidget {
   const DispositivosScreen({super.key});
 
@@ -25,6 +29,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   List<Scale> _balanzas = const [];
   bool _cargando = true;
   String? _error;
+
+  /// Estado por balanza (id → estado).
+  final Map<String, EstadoBalanza> _estados = {};
+  final Map<String, PruebaConexion> _ultimaPrueba = {};
+  bool _verificando = false;
 
   @override
   void initState() {
@@ -44,13 +53,56 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
           .map(Scale.fromJson)
           .toList();
       if (!mounted) return;
-      setState(() => _balanzas = filas);
+      setState(() {
+        _balanzas = filas;
+        // Limpiar estados de balanzas que ya no existen
+        _estados.removeWhere((id, _) => !filas.any((b) => b.id == id));
+        _ultimaPrueba.removeWhere((id, _) => !filas.any((b) => b.id == id));
+      });
+      // Verificar estados (secuencial, sin bloquear la UI)
+      unawaited(_verificarEstados(filas));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _mensajeError(e));
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
+  }
+
+  /// Prueba cada báscula **una por una** y actualiza su estado.
+  ///
+  /// El bucle secuencial es deliberado: cuando hay varias básculas apuntando
+  /// al mismo pty/serial (o cuando el HAL serial es bloqueante), disparar
+  /// todas en paralelo satura el pool de conexiones y provoca el error
+  /// `device reports readiness to read but returned no data`.
+  Future<void> _verificarEstados(List<Scale> balanzas) async {
+    if (balanzas.isEmpty) return;
+    if (mounted) setState(() => _verificando = true);
+    for (final b in balanzas) {
+      final prueba = await _probarSilencioso(b.id);
+      if (!mounted) return;
+      setState(() {
+        _estados[b.id] = _estadoDesde(prueba);
+        if (prueba != null) _ultimaPrueba[b.id] = prueba;
+      });
+    }
+    if (mounted) setState(() => _verificando = false);
+  }
+
+  Future<PruebaConexion?> _probarSilencioso(String id) async {
+    try {
+      final data = await _api.probarBalanza(id);
+      return PruebaConexion.fromJson(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  EstadoBalanza _estadoDesde(PruebaConexion? p) {
+    if (p == null) return EstadoBalanza.noDisponible;
+    if (!p.conectado) return EstadoBalanza.noDisponible;
+    if (p.estable) return EstadoBalanza.disponible;
+    return EstadoBalanza.inestable;
   }
 
   String _mensajeError(Object e) {
@@ -61,6 +113,288 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       }
     }
     return 'No se pudo cargar los dispositivos. Revise la conexión con la API.';
+  }
+
+  // ─── Escanear: descubre + auto-agrega nuevas + recarga ─────────────────
+
+  Future<void> _escanear() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Escaneando básculas conectadas…')),
+    );
+
+    List<Map<String, dynamic>> encontradas;
+    try {
+      encontradas = await _api.descubrirBalanzas();
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(_mensajeError(e)),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+      return;
+    }
+
+    if (encontradas.isEmpty) {
+      messenger.hideCurrentSnackBar();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No se detectaron básculas conectadas'),
+        ),
+      );
+      return;
+    }
+
+    // Detectar cuáles son nuevas (no registradas por IP:puerto o puerto serial)
+    final registradas = <String>{
+      for (final b in _balanzas) _claveHardware(b),
+    };
+    final nuevas = <Map<String, dynamic>>[];
+    for (final b in encontradas) {
+      final clave = _claveDesdeDescubierta(b);
+      if (!registradas.contains(clave)) {
+        nuevas.add(b);
+        registradas.add(clave);
+      }
+    }
+
+    var agregadas = 0;
+    for (final b in nuevas) {
+      try {
+        await _api.createItem(ApiConstants.balanzas, {
+          'descripcion': (b['descripcion'] ?? 'Báscula').toString(),
+          'activo': true,
+          'protocolo': b['protocolo'] ?? 'tcp',
+          'ip_address': b['ip_address'],
+          'puerto_tcp': b['puerto_tcp'],
+          'puerto_com': b['puerto_com'],
+          // El backend devuelve `is_simulada` en snake_case.
+          'is_simulada': b['is_simulada'] ?? false,
+        });
+        agregadas++;
+      } catch (_) {
+        // Si una falla, seguimos con las demás
+      }
+    }
+
+    messenger.hideCurrentSnackBar();
+    if (!mounted) return;
+    await _cargar();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          '${encontradas.length} detectada(s) · '
+          '$agregadas nueva(s) añadida(s) · '
+          '${encontradas.length - agregadas} ya registrada(s)',
+        ),
+        backgroundColor: agregadas > 0 ? SwsColors.success : null,
+      ),
+    );
+  }
+
+  String _claveHardware(Scale b) {
+    if (b.protocolo == 'serial') return 'serial:${b.puertoCom ?? ''}';
+    return 'tcp:${b.ipAddress ?? ''}:${b.puertoTcp ?? ''}';
+  }
+
+  String _claveDesdeDescubierta(Map<String, dynamic> b) {
+    final protocolo = (b['protocolo'] ?? 'tcp').toString();
+    if (protocolo == 'serial') return 'serial:${b['puerto_com'] ?? ''}';
+    return 'tcp:${b['ip_address'] ?? ''}:${b['puerto_tcp'] ?? ''}';
+  }
+
+  // ─── Eliminar ──────────────────────────────────────────────────────────
+
+  Future<void> _eliminar(Scale b) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: SwsColors.danger),
+            SizedBox(width: 10),
+            Expanded(child: Text('Eliminar báscula')),
+          ],
+        ),
+        content: Text(
+          '¿Eliminar "${b.descripcion}"?\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: SwsColors.danger),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    try {
+      await _api.deleteItem(ApiConstants.balanza(b.id));
+      if (!mounted) return;
+      await _cargar();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Báscula eliminada'),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mensajeError(e)),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    }
+  }
+
+  // ─── Agregar: solo IP+Puerto (simulada) ────────────────────────────────
+
+  Future<void> _agregarBalanza() async {
+    final descCtrl = TextEditingController();
+    final ipCtrl = TextEditingController(text: '127.0.0.1');
+    final puertoCtrl = TextEditingController(text: '5555');
+
+    final creada = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.scale, color: SwsColors.primary),
+            SizedBox(width: 12),
+            Expanded(child: Text('Añadir báscula TCP')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: SwsColors.blue100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: SwsColors.primary),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Conexión TCP. Por defecto apunta al simulador '
+                        'local en 127.0.0.1:5555.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción *',
+                  hintText: 'Báscula entrada',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ipCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Dirección IP *',
+                  hintText: '127.0.0.1',
+                  prefixIcon: Icon(Icons.language),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: puertoCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Puerto TCP *',
+                  hintText: '5555',
+                  prefixIcon: Icon(Icons.router_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final desc = descCtrl.text.trim();
+              final ip = ipCtrl.text.trim();
+              final puerto = int.tryParse(puertoCtrl.text.trim());
+              if (desc.isEmpty || ip.isEmpty || puerto == null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Complete descripción, IP y puerto'),
+                    backgroundColor: SwsColors.danger,
+                  ),
+                );
+                return;
+              }
+              Navigator.of(ctx).pop({
+                'descripcion': desc,
+                'activo': true,
+                'protocolo': 'tcp',
+                'ip_address': ip,
+                'puerto_tcp': puerto,
+                'is_simulada': true,
+              });
+            },
+            child: const Text('Añadir'),
+          ),
+        ],
+      ),
+    );
+    descCtrl.dispose();
+    ipCtrl.dispose();
+    puertoCtrl.dispose();
+    if (creada == null || !mounted) return;
+    try {
+      await _api.createItem(ApiConstants.balanzas, creada);
+      if (!mounted) return;
+      await _cargar();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Báscula añadida correctamente'),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mensajeError(e)),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    }
   }
 
   void _abrirDetalle(Scale balanza) {
@@ -84,17 +418,19 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       const SnackBar(content: Text('Probando conexión…')),
     );
     try {
-      final data =
+      final prueba =
           PruebaConexion.fromJson(await _api.probarBalanza(balanza.id));
+      if (!mounted) return;
+      setState(() {
+        _estados[balanza.id] = _estadoDesde(prueba);
+        _ultimaPrueba[balanza.id] = prueba;
+      });
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
-          backgroundColor: data.conectado ? SwsColors.success : SwsColors.danger,
-          content: Text(
-            data.conectado
-                ? '${balanza.descripcion}: conectado · ${data.pesoKg?.toStringAsFixed(1) ?? '-'} kg'
-                : '${balanza.descripcion}: sin lectura (${data.detalle ?? 'revisar configuración'})',
-          ),
+          backgroundColor:
+              prueba.conectado ? SwsColors.success : SwsColors.danger,
+          content: Text(_mensajePrueba(balanza, prueba)),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -109,6 +445,15 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     }
   }
 
+  String _mensajePrueba(Scale b, PruebaConexion p) {
+    if (!p.conectado) {
+      return '${b.descripcion}: sin conexión'
+          '${p.detalle != null ? ' (${p.detalle})' : ''}';
+    }
+    final peso = p.pesoKg?.toStringAsFixed(1) ?? '-';
+    return '${b.descripcion}: ${p.estable ? "disponible" : "inestable"} · $peso kg';
+  }
+
   bool get _esAdmin {
     final state = context.read<AuthBloc>().state;
     return state is AuthAuthenticated && state.user.isAdmin;
@@ -117,7 +462,34 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dispositivos')),
+      appBar: AppBar(
+        title: const Text('Dispositivos'),
+        actions: [
+          if (_verificando)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          IconButton(
+            key: const Key('dispositivos_escanear'),
+            tooltip: 'Escanea básculas conectadas',
+            icon: const Icon(Icons.radar_outlined),
+            onPressed: _escanear,
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('dispositivos_agregar'),
+        onPressed: _agregarBalanza,
+        icon: const Icon(Icons.add),
+        label: const Text('Añadir báscula'),
+      ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -145,7 +517,8 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
         SizedBox(height: 12),
         Center(
           child: Text(
-            'No hay básculas registradas.\nCree una en Inventario → Balanzas.',
+            'No hay básculas registradas.\n'
+            'Use "Añadir báscula" o "Escanear" para detectarlas.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SwsColors.gray500),
           ),
@@ -155,18 +528,31 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   }
 
   Widget _tarjeta(Scale b) {
+    final estado = _estados[b.id] ?? EstadoBalanza.sinVerificar;
+    final prueba = _ultimaPrueba[b.id];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: SwsColors.blue100,
-          foregroundColor: SwsColors.primary,
+          backgroundColor: _colorEstado(estado).withValues(alpha: 0.12),
+          foregroundColor: _colorEstado(estado),
           child: Icon(
             b.tieneHardware ? Icons.sensors : Icons.scale_outlined,
             size: 20,
           ),
         ),
-        title: Text(b.descripcion),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(b.descripcion, overflow: TextOverflow.ellipsis),
+            ),
+            if (b.isSimulada) ...[
+              const SizedBox(width: 8),
+              _badgeSimulada(),
+            ],
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -175,24 +561,21 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
               b.configuracionHardware,
               style: const TextStyle(fontSize: 12),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Row(
               children: [
-                Text(
-                  b.activo ? 'Activa' : 'Inactiva',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: b.activo ? SwsColors.success : SwsColors.danger,
+                _chipEstado(estado),
+                const SizedBox(width: 6),
+                _chipProtocolo(b.protocolo),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _textoEstado(estado, prueba),
+                    style: const TextStyle(fontSize: 11, color: SwsColors.gray600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (b.codigo != null) ...[
-                  const Text(' · ', style: TextStyle(fontSize: 11)),
-                  Text(
-                    'Código ${b.codigo}',
-                    style: const TextStyle(fontSize: 11, color: SwsColors.gray500),
-                  ),
-                ],
               ],
             ),
           ],
@@ -206,10 +589,126 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
               color: SwsColors.primary,
               onPressed: () => _probarRapido(b),
             ),
+            IconButton(
+              tooltip: 'Eliminar',
+              icon: const Icon(Icons.delete_outline),
+              color: SwsColors.danger,
+              onPressed: () => _eliminar(b),
+            ),
             const Icon(Icons.chevron_right),
           ],
         ),
         onTap: () => _abrirDetalle(b),
+      ),
+    );
+  }
+
+  Color _colorEstado(EstadoBalanza e) {
+    switch (e) {
+      case EstadoBalanza.disponible:
+        return SwsColors.success;
+      case EstadoBalanza.inestable:
+        return SwsColors.warning;
+      case EstadoBalanza.noDisponible:
+        return SwsColors.danger;
+      case EstadoBalanza.sinVerificar:
+        return SwsColors.gray500;
+    }
+  }
+
+  String _textoEstado(EstadoBalanza e, PruebaConexion? p) {
+    switch (e) {
+      case EstadoBalanza.disponible:
+        return p?.pesoKg != null
+            ? 'Disponible · ${p!.pesoKg!.toStringAsFixed(1)} kg'
+            : 'Disponible';
+      case EstadoBalanza.inestable:
+        return 'Inestable · peso oscilando';
+      case EstadoBalanza.noDisponible:
+        return p?.detalle?.isNotEmpty == true
+            ? 'No disponible · ${p!.detalle}'
+            : 'No disponible';
+      case EstadoBalanza.sinVerificar:
+        return 'Sin verificar';
+    }
+  }
+
+  Widget _chipEstado(EstadoBalanza e) {
+    final color = _colorEstado(e);
+    final texto = switch (e) {
+      EstadoBalanza.disponible => 'Disponible',
+      EstadoBalanza.inestable => 'Inestable',
+      EstadoBalanza.noDisponible => 'No disponible',
+      EstadoBalanza.sinVerificar => 'Sin verificar',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 6),
+          Text(
+            texto,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipProtocolo(String protocolo) {
+    final esSerial = protocolo.toLowerCase() == 'serial';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: SwsColors.gray200,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            esSerial ? Icons.usb : Icons.router_outlined,
+            size: 10,
+            color: SwsColors.gray700,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            protocolo.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: SwsColors.gray700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badgeSimulada() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: SwsColors.blue100,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'SIMULADA',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: SwsColors.primary,
+        ),
       ),
     );
   }
@@ -293,6 +792,9 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       _probando = true;
       _resultado = null;
       _error = null;
+      // Detener el monitor en vivo mientras se prueba: así el polling de
+      // `/live` no compite por el pty con esta prueba puntual.
+      _monitoreo = false;
     });
     try {
       final data =
@@ -343,6 +845,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       'capacidad_max': b.capacidadMax,
       'division': b.division,
       'activo': b.activo,
+      'is_simulada': b.isSimulada,
       'protocolo': _protocolo,
       'ip_address': ip,
       'puerto_tcp': puertoTcp,
@@ -457,7 +960,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                   controller: _comCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Puerto serial',
-                    hintText: '/dev/ttyUSB0',
+                    hintText: '/dev/ttyUSB0 o /tmp/bsdd_entrada',
                     prefixIcon: Icon(Icons.usb),
                   ),
                 ),

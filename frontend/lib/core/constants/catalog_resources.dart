@@ -2,7 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'api_constants.dart';
 
-enum CatalogFieldType { texto, multilinea, numero, entero, dropdown, email, foto }
+enum CatalogFieldType {
+  texto,
+  multilinea,
+  numero,
+  entero,
+  dropdown,
+  email,
+  foto
+}
 
 class CatalogField {
   final String key;
@@ -11,6 +19,7 @@ class CatalogField {
   final CatalogFieldType tipo;
   final bool requerido;
   final List<String>? opciones;
+  final List<String>? opcionLabels;
   final String? catalogoPath;
   final String? catalogoIdKey;
   final String? catalogoTituloKey;
@@ -23,6 +32,7 @@ class CatalogField {
     this.tipo = CatalogFieldType.texto,
     this.requerido = false,
     this.opciones,
+    this.opcionLabels,
     this.catalogoPath,
     this.catalogoIdKey,
     this.catalogoTituloKey,
@@ -42,6 +52,15 @@ class CatalogResource {
   final String? Function(Map<String, dynamic> fila)? subtituloFila;
   final List<CatalogField> campos;
 
+  /// Filtro client-side aplicado en la lista por el campo `tipo`.
+  /// Permite presentar un mismo catálogo (p.ej. `terceros`) segmentado
+  /// como Clientes (`CLIENTE`) o Proveedores (`PROVEEDOR`) en la UI.
+  final String? tipoFiltro;
+
+  /// Si es `true`, la pantalla CRUD muestra el selector C/P/A
+  /// (Cliente / Proveedor / Ambos) para segmentar la lista por `tipo`.
+  final bool filtrarTipoUI;
+
   const CatalogResource({
     required this.clave,
     required this.plural,
@@ -53,10 +72,19 @@ class CatalogResource {
     required this.tituloFila,
     this.subtituloFila,
     required this.campos,
+    this.tipoFiltro,
+    this.filtrarTipoUI = false,
   });
 
   String idDe(Map<String, dynamic> fila) =>
       '${fila[idKey] ?? fila['id'] ?? ''}';
+
+  bool pasaTipoFiltro(Map<String, dynamic> fila) {
+    final t = tipoFiltro;
+    if (t == null) return true;
+    final tipo = (fila['tipo'] as String?) ?? '';
+    return tipo == t || tipo == 'AMBOS';
+  }
 
   /// Clave del primer campo tipo foto (para mostrar miniatura en la lista).
   String? get campoFotoKey {
@@ -446,6 +474,7 @@ class AppCatalogos {
         icono: Icons.category_outlined,
         tipo: CatalogFieldType.dropdown,
         opciones: ['CLIENTE', 'PROVEEDOR', 'AMBOS'],
+        opcionLabels: ['Cliente', 'Proveedor', 'Cliente/Proveedor'],
         requerido: true,
       ),
       const CatalogField(
@@ -479,8 +508,120 @@ class AppCatalogos {
     ],
   );
 
+  static final _clientes = CatalogResource(
+    clave: 'clientes',
+    plural: 'Clientes',
+    singular: 'Cliente',
+    icono: Icons.people_outline,
+    listaPath: ApiConstants.terceros,
+    itemPath: ApiConstants.tercero,
+    idKey: 'id_tercero',
+    tipoFiltro: 'CLIENTE',
+    tituloFila: (f) => '${f['razon_social'] ?? ''}',
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['identificacion_fiscal'] != null)
+          f['identificacion_fiscal'] as String,
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: _terceros.campos,
+  );
+
+  static final _proveedores = CatalogResource(
+    clave: 'proveedores',
+    plural: 'Proveedores',
+    singular: 'Proveedor',
+    icono: Icons.store_outlined,
+    listaPath: ApiConstants.terceros,
+    itemPath: ApiConstants.tercero,
+    idKey: 'id_tercero',
+    tipoFiltro: 'PROVEEDOR',
+    tituloFila: (f) => '${f['razon_social'] ?? ''}',
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['identificacion_fiscal'] != null)
+          f['identificacion_fiscal'] as String,
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: _terceros.campos,
+  );
+
+  static final _clientesYProveedores = CatalogResource(
+    clave: 'terceros',
+    plural: 'Clientes / Proveedores',
+    singular: 'Cliente/Proveedor',
+    icono: Icons.people_outline,
+    listaPath: ApiConstants.terceros,
+    itemPath: ApiConstants.tercero,
+    idKey: 'id_tercero',
+    filtrarTipoUI: true,
+    tituloFila: (f) => '${f['razon_social'] ?? ''}',
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['identificacion_fiscal'] != null)
+          f['identificacion_fiscal'] as String,
+        if (f['tipo'] != null) _tipoTerceroLabel(f['tipo'] as String),
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: _terceros.campos,
+  );
+
+  /// Etiqueta legible del rol de un tercero (CLIENTE / PROVEEDOR / AMBOS).
+  static String _tipoTerceroLabel(String tipo) {
+    return switch (tipo) {
+      'CLIENTE' => 'Cliente',
+      'PROVEEDOR' => 'Proveedor',
+      'AMBOS' => 'Cliente/Proveedor',
+      _ => tipo,
+    };
+  }
+
+  /// Grupos de navegación según `docs/MODELO_ESTANDAR.md`.
+
+  static final CatalogSection clientes = CatalogSection(
+    titulo: 'Clientes',
+    icono: Icons.people_outline,
+    recursos: [_clientes],
+  );
+
+  static final CatalogSection proveedores = CatalogSection(
+    titulo: 'Proveedores',
+    icono: Icons.store_outlined,
+    recursos: [_proveedores],
+  );
+
+  static final CatalogSection clientesYProveedores = CatalogSection(
+    titulo: 'Clientes / Proveedores',
+    icono: Icons.people_outline,
+    recursos: [_clientesYProveedores],
+  );
+
+  static final CatalogSection flotaYTransporte = CatalogSection(
+    titulo: 'Flota y Transporte',
+    icono: Icons.local_shipping_outlined,
+    recursos: [_camiones, _remolques, _transportes, _conductores],
+  );
+
+  static final CatalogSection inventarioBase = CatalogSection(
+    titulo: 'Inventario Base',
+    icono: Icons.inventory_2_outlined,
+    recursos: [_productos, _almacenes, _balanzas],
+  );
+
   static final CatalogSection flota = CatalogSection(
     titulo: 'Flota',
+    icono: Icons.directions_car_outlined,
+    recursos: [_camiones, _remolques],
+  );
+
+  static final CatalogSection vehiculosYChutos = CatalogSection(
+    titulo: 'Vehículos / Chutos',
     icono: Icons.directions_car_outlined,
     recursos: [_camiones, _remolques],
   );
@@ -498,4 +639,13 @@ class AppCatalogos {
   );
 
   static final List<CatalogSection> secciones = [flota, inventario, directorio];
+
+  /// Accesos públicos a recursos individuales (para navegación directa desde
+  /// el sidebar según docs/NAV.md).
+  static CatalogResource get camionResource => _camiones;
+  static CatalogResource get conductorResource => _conductores;
+  static CatalogResource get transporteResource => _transportes;
+  static CatalogResource get productoResource => _productos;
+  static CatalogResource get almacenResource => _almacenes;
+  static CatalogResource get tercerosResource => _clientesYProveedores;
 }

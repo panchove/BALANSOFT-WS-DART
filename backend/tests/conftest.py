@@ -86,3 +86,16 @@ async def empresa(db: AsyncSession) -> Empresa:
     await db.commit()
     await db.refresh(emp)
     return emp
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _cerrar_sesiones_balanza():
+    """Cierra las sesiones persistentes de balanza tras cada test.
+
+    El registro de sesiones es global; sin esto, una conexión viva con el
+    servidor TCP de un test podría filtrarse al siguiente.
+    """
+    from app.core.scale_session import get_scale_session_manager
+
+    yield
+    await get_scale_session_manager().cerrar_todas()

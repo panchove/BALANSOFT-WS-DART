@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -16,6 +17,7 @@ from app.api.dependencies import (
 )
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.hardware import obtener_hardware_id
 from app.core.license_client import LicenseError, get_license_client
 from app.core.monitoring import inc_active_user, inc_license_error
 from app.core.security import (
@@ -25,7 +27,7 @@ from app.core.security import (
     verify_password,
     verify_token,
 )
-from app.models import BoletoPesaje, Empresa, Usuario
+from app.models import BoletoPesaje, Empresa, IdentidadLocal, Usuario
 from app.schemas import (
     CompanyOut,
     ForgotPasswordRequest,
@@ -54,6 +56,32 @@ def _company_out(e: Empresa) -> CompanyOut:
         licencia_status=e.licencia_status,
         licencia_expira=e.licencia_expira,
     )
+
+
+async def _persistir_hardware_id(
+    db: AsyncSession, empresa: Empresa, hardware_id: str
+) -> None:
+    """Cachea el fingerprint de la estación en ``identidad_local``.
+
+    Así ``create_weighing`` valida la licencia con el mismo ``hardware_id``
+    que el login (evita DEVICE_NOT_REGISTERED en licencias CENTRAL).
+    """
+    identidad = (
+        await db.execute(
+            select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+        )
+    ).scalar_one_or_none()
+    if identidad is None:
+        identidad = IdentidadLocal(
+            id=True,
+            id_cuenta=empresa.id_empresa,
+            rif_nit=empresa.rif_nit,
+            nombre_fiscal=empresa.nombre_fiscal,
+            nombre_comercial=empresa.nombre_comercial,
+        )
+        db.add(identidad)
+    identidad.hardware_id = hardware_id
+    identidad.ultima_validacion = datetime.now(UTC).replace(tzinfo=None)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -151,11 +179,12 @@ async def login(
     licencia: dict | None = None
     if empresa.licencia_key:
         licencia_key = empresa.licencia_key
+        hardware_id = payload.hardware_id or obtener_hardware_id()
         try:
             info = await asyncio.to_thread(
                 lambda: get_license_client().validate(
                     licencia_key,
-                    payload.hardware_id or "desconocido",
+                    hardware_id,
                     mac_address=payload.mac_address,
                     device_brand=payload.device_brand,
                     device_model=payload.device_model,
@@ -166,6 +195,7 @@ async def login(
             empresa.licencia_tier = info.tier
             empresa.licencia_status = info.status
             empresa.licencia_expira = info.expires_at
+            await _persistir_hardware_id(db, empresa, hardware_id)
             await db.commit()
             licencia = {
                 "valid": info.valid,
@@ -199,6 +229,47 @@ async def login(
     )
 
 
+@router.post("/login-local", response_model=LoginResponse)
+async def login_local(
+    payload: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """Login OFFLINE: valida credenciales locales SIN consultar el LM.
+
+    Pensado para el modo sin conexión de la estación (docs/MANEJO_DB.md):
+    en ausencia de red no se puede validar la licencia, pero el operador debe
+    poder seguir trabajando. El token emitido lleva la marca ``offline: true``.
+    """
+    result = await db.execute(
+        select(Usuario).where(Usuario.email == payload.email.lower())
+    )
+    usuario = result.scalar_one_or_none()
+    if usuario is None or not verify_password(payload.password, usuario.password_hash):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    if not usuario.activo:
+        raise HTTPException(status_code=403, detail="Usuario inactivo")
+
+    empresa = (
+        await db.execute(
+            select(Empresa).where(Empresa.id_empresa == usuario.id_empresa)
+        )
+    ).scalar_one()
+    if not empresa.activa:
+        raise HTTPException(status_code=403, detail="Empresa inactiva")
+
+    access = create_access_token(
+        str(usuario.id_usuario), extra={"rol": usuario.rol, "offline": True}
+    )
+    refresh = create_refresh_token(str(usuario.id_usuario))
+    return LoginResponse(
+        access_token=access,
+        refresh_token=refresh,
+        user=to_user_out(usuario),
+        empresa=_company_out(empresa),
+        license=None,
+    )
+
+
 @router.post("/validate-license")
 async def validate_license(
     payload: ValidateLicenseRequest,
@@ -211,11 +282,18 @@ async def validate_license(
             select(Empresa).where(Empresa.id_empresa == current_user.id_empresa)
         )
     ).scalar_one()
+    licencia_key = empresa.licencia_key or payload.licencia_key
+    if not licencia_key:
+        raise HTTPException(
+            status_code=400,
+            detail="La empresa no tiene una licencia configurada",
+        )
+    hardware_id = payload.hardware_id or obtener_hardware_id()
     try:
         info = await asyncio.to_thread(
             lambda: get_license_client().validate(
-                empresa.licencia_key or payload.licencia_key,
-                payload.hardware_id or "desconocido",
+                licencia_key,
+                hardware_id,
                 product_code=settings.license_product_code,
             )
         )
@@ -225,6 +303,7 @@ async def validate_license(
     empresa.licencia_tier = info.tier
     empresa.licencia_status = info.status
     empresa.licencia_expira = info.expires_at
+    await _persistir_hardware_id(db, empresa, hardware_id)
     await db.commit()
     return {
         "valid": info.valid,

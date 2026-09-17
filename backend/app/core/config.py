@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws"
     database_url_sync: str = "postgresql+psycopg2://sqlman:7767@localhost:5432/balansoft_ws"
 
+    # Rol del despliegue (arquitectura de dos BDs, docs/MANEJO_DB.md):
+    #   "local"  -> estación: DB operativa (boletos, catálogos, usuarios) + login-local offline
+    #   "server" -> central: DB de cuenta y licencia (cuentas, credenciales, licencias, sync)
+    app_role: str = "local"
+    # URL base del servidor (solo para roles "local"; vacío = no configurado)
+    server_api_url: str = ""
+    # URL de la DB del servidor. En rol "server" se usa database_url si esto es None.
+    server_database_url: str | None = None
+
     # LM Local (SGLB)
     license_api_url: str = "http://localhost:8080/api/v1"
     license_admin_url: str = "http://localhost:5000"
@@ -112,6 +121,11 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
         return list(self.cors_origins)
+
+    @property
+    def active_server_database_url(self) -> str:
+        """URL de la DB del servidor (cuenta/licencia). En rol server = database_url."""
+        return self.server_database_url or self.database_url
 
 
 @lru_cache

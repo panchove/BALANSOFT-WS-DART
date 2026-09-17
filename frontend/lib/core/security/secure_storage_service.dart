@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SecureStorageService {
   static const String accessTokenKey = 'access_token';
   static const String refreshTokenKey = 'refresh_token';
+  static const String serverAccessTokenKey = 'server_access_token';
+  static const String serverRefreshTokenKey = 'server_refresh_token';
   static const String licenseKey = 'licencia_key';
 
   // Claves legacy usadas por versiones previas en SharedPreferences.
@@ -33,12 +35,26 @@ class SecureStorageService {
   Future<String?> getAccessToken() => _read(accessTokenKey);
   Future<String?> getRefreshToken() => _read(refreshTokenKey);
 
+  /// Tokens de la sesión contra el servidor central (credencial global).
+  Future<void> saveServerTokens(String accessToken, String refreshToken) async {
+    await _write(serverAccessTokenKey, accessToken);
+    await _write(serverRefreshTokenKey, refreshToken);
+  }
+
+  Future<String?> getServerAccessToken() => _read(serverAccessTokenKey);
+  Future<String?> getServerRefreshToken() => _read(serverRefreshTokenKey);
+
   Future<void> saveLicenseKey(String key) => _write(licenseKey, key);
   Future<String?> getLicenseKey() => _read(licenseKey);
 
   Future<void> clearAuth() async {
     await _delete(accessTokenKey);
     await _delete(refreshTokenKey);
+  }
+
+  Future<void> clearServerAuth() async {
+    await _delete(serverAccessTokenKey);
+    await _delete(serverRefreshTokenKey);
   }
 
   /// Migración one-shot: mueve tokens de SharedPreferences al almacén seguro.

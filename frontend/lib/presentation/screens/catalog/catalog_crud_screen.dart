@@ -8,6 +8,8 @@ import '../../../injection.dart' as di;
 import '../../providers/bloc/catalog_crud/catalog_crud_cubit.dart';
 import 'catalog_edit_screen.dart';
 
+enum _FiltroTipo { cliente, proveedor, ambos }
+
 class CatalogCrudScreen extends StatefulWidget {
   final CatalogResource recurso;
 
@@ -19,6 +21,18 @@ class CatalogCrudScreen extends StatefulWidget {
 
 class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
   final _searchCtrl = TextEditingController();
+  _FiltroTipo _tipoSeleccionado = _FiltroTipo.ambos;
+
+  /// El cubit se resuelve una sola vez en el State: los métodos pueden usarlo
+  /// sin depender de `context.read` (que aquí se ejecuta por encima del
+  /// provider, causando ProviderNotFoundError).
+  late final CatalogCrudCubit _cubit = di.sl<CatalogCrudCubit>();
+
+  @override
+  void initState() {
+    super.initState();
+    _cubit.cargar(widget.recurso);
+  }
 
   @override
   void dispose() {
@@ -26,17 +40,31 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
     super.dispose();
   }
 
+  bool _pasaFiltro(Map<String, dynamic> fila) {
+    if (!widget.recurso.pasaTipoFiltro(fila)) return false;
+    final tipo = (fila['tipo'] as String?) ?? '';
+    switch (_tipoSeleccionado) {
+      case _FiltroTipo.ambos:
+        return true;
+      case _FiltroTipo.cliente:
+        return tipo == 'CLIENTE' || tipo == 'AMBOS';
+      case _FiltroTipo.proveedor:
+        return tipo == 'PROVEEDOR' || tipo == 'AMBOS';
+    }
+  }
+
   Future<void> _abrirEditor({Map<String, dynamic>? inicial}) async {
-    final guardado = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => CatalogEditScreen(
-          recurso: widget.recurso,
-          inicial: inicial,
-        ),
+    final guardado = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CatalogEditScreen(
+        recurso: widget.recurso,
+        inicial: inicial,
+        modal: true,
       ),
     );
     if (guardado == true && mounted) {
-      context.read<CatalogCrudCubit>().cargar(widget.recurso);
+      _cubit.cargar(widget.recurso);
     }
   }
 
@@ -98,8 +126,8 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => di.sl<CatalogCrudCubit>()..cargar(widget.recurso),
+    return BlocProvider.value(
+      value: _cubit,
       child: Scaffold(
         appBar: AppBar(title: Text(widget.recurso.plural)),
         body: BlocBuilder<CatalogCrudCubit, CatalogCrudState>(
@@ -150,14 +178,15 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
             }
             final query = _searchCtrl.text.trim().toLowerCase();
             final filtrados = query.isEmpty
-                ? state.items
+                ? state.items.where(_pasaFiltro).toList()
                 : state.items.where((fila) {
-                    final titulo = widget.recurso
-                        .tituloFila(fila)
-                        .toLowerCase();
-                    final sub =
-                        widget.recurso.subtituloFila?.call(fila)?.toLowerCase() ??
-                            '';
+                    if (!_pasaFiltro(fila)) return false;
+                    final titulo =
+                        widget.recurso.tituloFila(fila).toLowerCase();
+                    final sub = widget.recurso.subtituloFila
+                            ?.call(fila)
+                            ?.toLowerCase() ??
+                        '';
                     final id = widget.recurso.idDe(fila).toLowerCase();
                     return titulo.contains(query) ||
                         sub.contains(query) ||
@@ -165,13 +194,44 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
                   }).toList();
             return Column(
               children: [
+                if (widget.recurso.filtrarTipoUI)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<_FiltroTipo>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _FiltroTipo.cliente,
+                            label: Text('Cliente'),
+                          ),
+                          ButtonSegment(
+                            value: _FiltroTipo.proveedor,
+                            label: Text('Proveedor'),
+                          ),
+                          ButtonSegment(
+                            value: _FiltroTipo.ambos,
+                            label: Text('Ambos'),
+                          ),
+                        ],
+                        selected: {_tipoSeleccionado},
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onSelectionChanged: (sel) =>
+                            setState(() => _tipoSeleccionado = sel.first),
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
-                      hintText: 'Buscar ${widget.recurso.plural.toLowerCase()}…',
+                      hintText:
+                          'Buscar ${widget.recurso.plural.toLowerCase()}…',
                       prefixIcon: const Icon(Icons.search),
                       isDense: true,
                       border: OutlineInputBorder(
@@ -196,18 +256,23 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
                         : ListView.separated(
                             physics: const AlwaysScrollableScrollPhysics(),
                             itemCount: filtrados.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             itemBuilder: (context, index) {
                               final fila = filtrados[index];
                               return Card(
-                                margin: const EdgeInsets.symmetric(horizontal: 16),
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 child: ListTile(
                                   leading: _fotoLeading(fila),
                                   title: Text(widget.recurso.tituloFila(fila)),
-                                  subtitle: widget.recurso.subtituloFila?.call(fila) != null
+                                  subtitle: widget.recurso.subtituloFila
+                                              ?.call(fila) !=
+                                          null
                                       ? Text(
-                                          widget.recurso.subtituloFila!.call(fila)!,
+                                          widget.recurso.subtituloFila!
+                                              .call(fila)!,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         )

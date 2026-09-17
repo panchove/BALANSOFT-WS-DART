@@ -33,6 +33,7 @@ from app.models import (
     Conductor,
     Empresa,
     Kardex,
+    LogSistema,
     Producto,
     Remolque,
     Tercero,
@@ -301,6 +302,50 @@ class WeighingService:
                 pesaje.litros = _fmt(pesaje.peso_neto / dens)
             else:
                 pesaje.litros = None
+
+    async def _aplicar_tolerancia(
+        self,
+        db: AsyncSession,
+        pesaje: BoletoPesaje,
+    ) -> str | None:
+        """Advertencia de tolerancia comercial (MODEL.md §5.2).
+
+        Si |PDV| % supera `productos.tolerancia`, se emite una advertencia:
+        NO bloquea el cierre, pero queda registrada en `logs_sistema`, en la
+        auditoría del cierre y se devuelve en `WeighingOut.advertencia_tolerancia`.
+        """
+        if pesaje.id_producto is None or pesaje.porcentaje_desviacion is None:
+            return None
+        producto = (
+            await db.execute(
+                select(Producto).where(Producto.id_producto == pesaje.id_producto)
+            )
+        ).scalar_one_or_none()
+        if producto is None or producto.tolerancia is None:
+            return None
+
+        desviacion_pct = abs(pesaje.porcentaje_desviacion) * 100
+        if desviacion_pct <= producto.tolerancia:
+            return None
+
+        advertencia = (
+            f"Desviación {desviacion_pct:.2f}% supera la tolerancia de "
+            f"{producto.tolerancia:.2f}% configurada para «{producto.nombre}»."
+        )
+        db.add(
+            LogSistema(
+                nivel="WARN",
+                modulo="weighing",
+                mensaje="Tolerancia comercial superada",
+                detalle={
+                    "boleto": str(pesaje.boleto),
+                    "producto": producto.nombre,
+                    "desviacion_pct": str(desviacion_pct),
+                    "tolerancia": str(producto.tolerancia),
+                },
+            )
+        )
+        return advertencia
 
     async def _registrar_kardex(
         self,
@@ -603,6 +648,9 @@ class WeighingService:
         for campo, valor in calculos.items():
             setattr(pesaje, campo, valor)
         self._apply_litros(pesaje, pesaje.densidad)
+        advertencia_tolerancia = await self._aplicar_tolerancia(db, pesaje)
+        # La advertencia no se persiste en el boleto: viaja en la respuesta.
+        object.__setattr__(pesaje, "_advertencia_tolerancia", advertencia_tolerancia)
         pesaje.estado_boleto = BoletoPesaje.ESTADO_CERRADO
         pesaje.salida_por = salida_por
         pesaje.updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -617,6 +665,7 @@ class WeighingService:
             detalle={
                 "numero_boleto": pesaje.numero_boleto,
                 "peso_salida_vehiculo": float(pesaje.peso_salida_vehiculo or 0),
+                "advertencia_tolerancia": advertencia_tolerancia,
             },
             ip=ip,
         )

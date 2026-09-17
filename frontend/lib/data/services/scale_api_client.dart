@@ -63,15 +63,17 @@ class ScaleApiClient extends ScaleTcpClient {
   Future<void> conectar([String? host, int port = 5555]) async {
     if (host != null) {
       configurarFallbackTcp(host, port);
-      _usandoTcp = true;
     }
-    if (_balanzaId == null && _usandoTcp) {
-      await super.conectar();
+    // El socket TCP directo (simulador BSDD) queda emparejado de forma
+    // persistente: se mantiene vivo aunque la API entregue el peso. Su
+    // reconexión la gestiona ScaleTcpClient; aquí solo se asegura.
+    unawaited(super.asegurarConexion());
+    if (_balanzaId == null) {
+      // Sin balanza registrada seleccionada: se muestra el peso por TCP.
+      _usandoTcp = true;
       notifyListeners();
       return;
     }
-    _usandoTcp = false;
-    _apiError = '';
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(_intervalo, (_) => _leerEnVivo());
     await _leerEnVivo();
@@ -82,36 +84,37 @@ class ScaleApiClient extends ScaleTcpClient {
     if (_balanzaId == null) return;
     try {
       final peso = await _datasource.readLive(_balanzaId!);
-      _apiPeso = peso;
-      _apiError = '';
-      _volverATcp(false);
+      if (peso.pesoKg == null) {
+        // El backend responde pero no pudo leer el HAL: se muestra TCP.
+        _apiPeso = null;
+        _apiError = 'Sin lectura del HAL (usando TCP)';
+        _usandoTcp = true;
+      } else {
+        _apiPeso = peso;
+        _apiError = '';
+        _usandoTcp = false;
+      }
     } on ScaleNotConfiguredException {
       _apiPeso = null;
       _apiError = 'Balanza sin hardware configurado (usando TCP)';
-      _volverATcp(true);
+      _usandoTcp = true;
     } on ScaleNotFoundException {
       _apiPeso = null;
-      _apiError = 'Balanza no encontrada';
+      _apiError = 'Balanza no encontrada (usando TCP)';
+      _usandoTcp = true;
     } on ScaleConnectionException {
       _apiPeso = null;
       _apiError = 'Servidor inalcanzable (usando TCP)';
-      _volverATcp(true);
+      _usandoTcp = true;
     }
     notifyListeners();
-  }
-
-  void _volverATcp(bool activar) {
-    if (_usandoTcp == activar) return;
-    _usandoTcp = activar;
-    if (activar) {
-      unawaited(super.conectar());
-    }
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    // Cierra el socket TCP directo (fin del emparejamiento desde la app).
     super.dispose();
   }
 }

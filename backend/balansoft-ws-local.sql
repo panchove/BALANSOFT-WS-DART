@@ -1,69 +1,101 @@
 -- ============================================================
--- BALANSOFT-WS - SCHEMA DE BASE DE DATOS DE NEGOCIO
--- Base separada: balansoft_ws (independiente del LM SGLB)
--- PostgreSQL 16+
+-- BALANSOFT-WS-LOCAL - SCHEMA OPERATIVO (MÁQUINA DEL CLIENTE)
+-- Una sola empresa por máquina. Contiene TODO lo operativo:
+-- usuarios locales con roles, flota, inventario, boletos,
+-- kardex, auditoría local, configuración, etc.
+-- Se sincroniza con balansoft_ws (servidor) mediante sync.
 -- ============================================================
 
 BEGIN;
 
--- Extensiones
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================
--- 1. MÓDULO EMPRESA Y USUARIO
+-- 0. IDENTIDAD LOCAL (vínculo con la cuenta del servidor)
+-- Solo una fila. Guarda el id_cuenta y datos de la licencia
+-- cacheados para permitir trabajo offline.
 -- ============================================================
+CREATE TABLE IF NOT EXISTS identidad_local (
+    id                  BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id = TRUE), -- solo 1 fila
+    id_cuenta           UUID NOT NULL,           -- FK lógica a balansoft_ws.cuentas
+    rif_nit             VARCHAR(20) NOT NULL,
+    nombre_fiscal       VARCHAR(255) NOT NULL,
+    nombre_comercial    VARCHAR(255),
+    licencia_key        VARCHAR(255),
+    licencia_tier       VARCHAR(20),
+    licencia_status     VARCHAR(20),
+    licencia_expira     TIMESTAMP,
+    hardware_id         VARCHAR(255),            -- huella de esta máquina
+    rol_dispositivo     VARCHAR(20) NOT NULL DEFAULT 'LOCAL', -- LOCAL / SERVIDOR_LOCAL
+    ultima_validacion   TIMESTAMP,               -- última vez que se validó online
+    modo_offline        BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
+-- ============================================================
+-- 1. EMPRESA (espejo local de la cuenta, para FKs internas)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS empresas (
     id_empresa       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_cuenta        UUID NOT NULL UNIQUE,       -- 1:1 con la cuenta del servidor
     nombre_fiscal    VARCHAR(255) NOT NULL,
     nombre_comercial VARCHAR(255),
     rif_nit          VARCHAR(20) NOT NULL UNIQUE,
     direccion        TEXT,
     telefono         VARCHAR(50),
     email            VARCHAR(255),
-    licencia_key     VARCHAR(255),          -- clave de licencia en el LM (BWS)
-    licencia_tier    VARCHAR(20),           -- DEMO / MONOPUESTA / CENTRAL
-    licencia_status  VARCHAR(20),
-    licencia_expira  TIMESTAMP,
+    logo_url         VARCHAR(500),
     activa           BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================
+-- 2. USUARIOS LOCALES (creados por el ADMIN local)
+-- Roles: ADMIN / OPERADOR / AUDITOR / TRABAJADOR
+-- El login se valida contra el servidor, pero el perfil
+-- operativo vive aquí.
+-- ============================================================
 CREATE TABLE IF NOT EXISTS usuarios (
     id_usuario       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa       UUID NOT NULL REFERENCES empresas(id_empresa),
+    -- Vínculo con la credencial global del servidor
+    id_credencial    UUID,                       -- FK lógica a balansoft_ws.credenciales
     nombre           VARCHAR(150) NOT NULL,
     email            VARCHAR(255) NOT NULL UNIQUE,
-    password_hash    VARCHAR(255) NOT NULL,
-    rol              VARCHAR(30) NOT NULL DEFAULT 'OPERADOR', -- ADMIN / OPERADOR / SUPERVISOR
+    password_hash    VARCHAR(255),               -- caché local para modo offline
+    rol              VARCHAR(30) NOT NULL DEFAULT 'TRABAJADOR',
+                     -- ADMIN / OPERADOR / AUDITOR / TRABAJADOR
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
+    ultimo_login     TIMESTAMP,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_rol_usuario CHECK (rol IN ('ADMIN','OPERADOR','AUDITOR','TRABAJADOR'))
 );
 
--- ============================================================
--- 2. MÓDULO DIRECTORIO / TRANSPORTES
--- (antes de camiones, que lo referencia)
--- ============================================================
+CREATE INDEX IF NOT EXISTS idx_usuarios_empresa ON usuarios (id_empresa);
+CREATE INDEX IF NOT EXISTS idx_usuarios_rol ON usuarios (rol, activo);
 
+-- ============================================================
+-- 3. DIRECTORIO / TRANSPORTES
+-- ============================================================
 CREATE TABLE IF NOT EXISTS transportes (
-    id_transporte        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_empresa           UUID NOT NULL REFERENCES empresas(id_empresa),
-    codigo               VARCHAR(20),
-    razon_social         VARCHAR(150) NOT NULL,
+    id_transporte         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa            UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo                VARCHAR(20),
+    razon_social          VARCHAR(150) NOT NULL,
     identificacion_fiscal VARCHAR(20),
-    telefono             VARCHAR(50),
-    contacto             VARCHAR(150),
-    activo               BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    telefono              VARCHAR(50),
+    contacto              VARCHAR(150),
+    activo                BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================
--- 3. MÓDULO FLOTA
+-- 4. FLOTA
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS marcas (
     id_marca     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa   UUID NOT NULL REFERENCES empresas(id_empresa),
@@ -72,7 +104,6 @@ CREATE TABLE IF NOT EXISTS marcas (
     created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS uq_marcas_empresa_nombre ON marcas (id_empresa, nombre);
 
 CREATE TABLE IF NOT EXISTS modelos_camion (
@@ -86,7 +117,6 @@ CREATE TABLE IF NOT EXISTS modelos_camion (
     created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS uq_modelos_empresa_nombre ON modelos_camion (id_empresa, nombre);
 
 CREATE TABLE IF NOT EXISTS camiones (
@@ -102,7 +132,6 @@ CREATE TABLE IF NOT EXISTS camiones (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS uq_camiones_empresa_placa ON camiones (id_empresa, placa);
 
 CREATE TABLE IF NOT EXISTS remolques (
@@ -116,44 +145,41 @@ CREATE TABLE IF NOT EXISTS remolques (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE INDEX IF NOT EXISTS idx_remolques_empresa ON remolques (id_empresa, placa);
 
 -- ============================================================
--- 4. MÓDULO DIRECTORIO (conductores, terceros)
+-- 5. DIRECTORIO (conductores, terceros)
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS conductores (
-    cedula_dni      VARCHAR(20) PRIMARY KEY,
-    id_empresa      UUID NOT NULL REFERENCES empresas(id_empresa),
-    nombre_completo VARCHAR(200) NOT NULL,
-    telefono        VARCHAR(50),
+    cedula_dni        VARCHAR(20) PRIMARY KEY,
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
+    nombre_completo   VARCHAR(200) NOT NULL,
+    telefono          VARCHAR(50),
     licencia_conducir VARCHAR(50),
-    foto_url        VARCHAR(500),
-    activo          BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    foto_url          VARCHAR(500),
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS terceros (
-    id_tercero          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_empresa          UUID NOT NULL REFERENCES empresas(id_empresa),
-    codigo              VARCHAR(20),
-    tipo                VARCHAR(30) NOT NULL,   -- CLIENTE / PROVEEDOR / AMBOS
-    razon_social        VARCHAR(200) NOT NULL,
+    id_tercero            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa            UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo                VARCHAR(20),
+    tipo                  VARCHAR(30) NOT NULL,
+    razon_social          VARCHAR(200) NOT NULL,
     identificacion_fiscal VARCHAR(20),
-    direccion           TEXT,
-    telefono            VARCHAR(50),
-    email               VARCHAR(255),
-    activo              BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    direccion             TEXT,
+    telefono              VARCHAR(50),
+    email                 VARCHAR(255),
+    activo                BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================
--- 5. MÓDULO INVENTARIO
+-- 6. INVENTARIO
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS productos (
     id_producto       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
@@ -161,9 +187,9 @@ CREATE TABLE IF NOT EXISTS productos (
     nombre            VARCHAR(150) NOT NULL,
     descripcion       VARCHAR(200),
     densidad_estandar NUMERIC(8,4),
-    unidad_medida     VARCHAR(20) NOT NULL DEFAULT 'TON',  -- TON / KG / M3 / UN
-    es_kardex         BOOLEAN NOT NULL DEFAULT FALSE,      -- genera movimientos de kardex
-    tolerancia        NUMERIC(8,4),                        -- % tolerancia comercial
+    unidad_medida     VARCHAR(20) NOT NULL DEFAULT 'TON',
+    es_kardex         BOOLEAN NOT NULL DEFAULT FALSE,
+    tolerancia        NUMERIC(8,4),
     peso_unidad       NUMERIC(12,4),
     activo            BOOLEAN NOT NULL DEFAULT TRUE,
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -171,45 +197,43 @@ CREATE TABLE IF NOT EXISTS productos (
 );
 
 CREATE TABLE IF NOT EXISTS almacenes (
-    id_almacen       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_empresa       UUID NOT NULL REFERENCES empresas(id_empresa),
-    codigo           VARCHAR(20),
-    nombre           VARCHAR(150) NOT NULL,
-    ubicacion        VARCHAR(255),
+    id_almacen        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo            VARCHAR(20),
+    nombre            VARCHAR(150) NOT NULL,
+    ubicacion         VARCHAR(255),
     capacidad_max_ton NUMERIC(12,2),
-    stock_actual_ton NUMERIC(12,2) NOT NULL DEFAULT 0,
-    activo           BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    stock_actual_ton  NUMERIC(12,2) NOT NULL DEFAULT 0,
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS balanzas (
-    id_balanza      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_empresa      UUID NOT NULL REFERENCES empresas(id_empresa),
-    codigo          VARCHAR(20),
-    descripcion     VARCHAR(150) NOT NULL,
-    marca           VARCHAR(100),
-    modelo          VARCHAR(100),
-    capacidad_max   NUMERIC(12,2),
-    division        NUMERIC(12,2),
-    activo          BOOLEAN NOT NULL DEFAULT TRUE,
-    puerto_com      VARCHAR(50),
-    ip_address      VARCHAR(45),
-    puerto_tcp      INTEGER,
-    protocolo       VARCHAR(20) DEFAULT 'tcp',
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id_balanza    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa    UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo        VARCHAR(20),
+    descripcion   VARCHAR(150) NOT NULL,
+    marca         VARCHAR(100),
+    modelo        VARCHAR(100),
+    capacidad_max NUMERIC(12,2),
+    division      NUMERIC(12,2),
+    activo        BOOLEAN NOT NULL DEFAULT TRUE,
+    is_simulada   BOOLEAN NOT NULL DEFAULT FALSE,
+    puerto_com    VARCHAR(50),
+    ip_address    VARCHAR(45),
+    puerto_tcp    INTEGER,
+    protocolo     VARCHAR(20) DEFAULT 'tcp',
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================
--- 6. MÓDULO TRANSACCIONAL - BOLETOS DE PESAJE
+-- 7. TRANSACCIONAL - BOLETOS DE PESAJE
 -- ============================================================
--- El rediseño completo (numero_boleto CA- secuencial, estatus,
--- tipo_operacion, pesos simples) se completa en el Paso 3.
-
 CREATE TABLE IF NOT EXISTS boletos_pesaje (
     boleto                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    numero_boleto            VARCHAR(30) UNIQUE,  -- TA-00000001 secuencial, no se reutiliza
+    numero_boleto            VARCHAR(30) UNIQUE,
     id_empresa               UUID NOT NULL REFERENCES empresas(id_empresa),
     id_vehiculo              VARCHAR(20),
     remolque                 BOOLEAN NOT NULL DEFAULT FALSE,
@@ -238,22 +262,22 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     costo_flete              NUMERIC(12,2),
     observaciones            TEXT,
 
-    -- Auditoría de operativas (MODEL.md)
+    -- Auditoría de operativas
     creado_por               VARCHAR(150),
     salida_por               VARCHAR(150),
     modificado_por           VARCHAR(150),
     anulado_por              VARCHAR(150),
     motivo_anulacion         TEXT,
 
-    -- Cálculos MODEL.md: PTE/PTS/PNT/PND/PDF/PDV
+    -- Cálculos MODEL.md
     peso_total_entrada       NUMERIC(12,2),
     peso_total_salida        NUMERIC(12,2),
-    peso_neto                NUMERIC(12,2),       -- PNT firmado
-    peso_neto_declarado      NUMERIC(12,2),       -- PND
-    peso_diferencia          NUMERIC(12,2),       -- PDF = PNT - PND
-    porcentaje_desviacion    NUMERIC(8,4),        -- PDV = PDF / PND (%)
+    peso_neto                NUMERIC(12,2),
+    peso_neto_declarado      NUMERIC(12,2),
+    peso_diferencia          NUMERIC(12,2),
+    porcentaje_desviacion    NUMERIC(8,4),
 
-    -- Campos legacy (compatibilidad)
+    -- Campos legacy
     peso_bruto               NUMERIC(12,2),
     peso_tara                NUMERIC(12,2),
     diferencia_peso          NUMERIC(12,2),
@@ -262,7 +286,7 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     litros                   NUMERIC(12,2),
     unidades                 NUMERIC(12,2),
 
-    estado_boleto            VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE', -- PENDIENTE / CERRADO / MODIFICADO / ANULADO
+    estado_boleto            VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
     sincronizado             BOOLEAN NOT NULL DEFAULT FALSE,
     sync_intentos            INTEGER NOT NULL DEFAULT 0,
     created_at               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -272,18 +296,14 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
 CREATE TABLE IF NOT EXISTS imagenes_pesaje (
     id_imagen     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     boleto        UUID NOT NULL REFERENCES boletos_pesaje(boleto) ON DELETE CASCADE,
-    tipo          VARCHAR(30) NOT NULL,  -- placa / vehiculo / documento
+    tipo          VARCHAR(30) NOT NULL,
     url           TEXT NOT NULL,
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================
--- 6b. KARDEX (MODEL.md)
---     ID movimiento: 10 = INGRESO POR BASCULA (positivo),
---                    60 = DESPACHO POR BASCULA (negativo).
---     Los ANULADOS no generan kardex.
+-- 8. KARDEX
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS kardex (
     id_kardex       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa      UUID NOT NULL REFERENCES empresas(id_empresa),
@@ -293,7 +313,7 @@ CREATE TABLE IF NOT EXISTS kardex (
     id_almacen      UUID REFERENCES almacenes(id_almacen),
     fecha_documento TIMESTAMP,
     documento       VARCHAR(100),
-    valor           NUMERIC(12,2) NOT NULL,  -- magnitud; signo según id_movimiento
+    valor           NUMERIC(12,2) NOT NULL,
     boleto          UUID REFERENCES boletos_pesaje(boleto),
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -302,14 +322,13 @@ CREATE INDEX IF NOT EXISTS idx_kardex_empresa_fecha ON kardex (id_empresa, fecha
 CREATE INDEX IF NOT EXISTS idx_kardex_producto_almacen ON kardex (id_producto, id_almacen);
 
 -- ============================================================
--- 7. MÓDULO SINCRONIZACIÓN
+-- 9. SINCRONIZACIÓN LOCAL (cola que se envía al servidor)
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS sync_queue (
     id_sync       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa    UUID NOT NULL REFERENCES empresas(id_empresa),
-    entidad       VARCHAR(50) NOT NULL,      -- pesaje / vehiculo / ...
-    operacion     VARCHAR(20) NOT NULL,      -- create / update / delete
+    entidad       VARCHAR(50) NOT NULL,
+    operacion     VARCHAR(20) NOT NULL,
     entidad_id    VARCHAR(100) NOT NULL,
     payload       JSONB NOT NULL,
     pendiente     BOOLEAN NOT NULL DEFAULT TRUE,
@@ -322,7 +341,7 @@ CREATE TABLE IF NOT EXISTS sync_queue (
 CREATE TABLE IF NOT EXISTS sync_logs (
     id_log        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa    UUID,
-    tipo          VARCHAR(30) NOT NULL,     -- push / pull / full
+    tipo          VARCHAR(30) NOT NULL,
     entidad       VARCHAR(50),
     registros     INTEGER NOT NULL DEFAULT 0,
     errores       INTEGER NOT NULL DEFAULT 0,
@@ -331,9 +350,8 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 );
 
 -- ============================================================
--- 8. MÓDULO AUDITORÍA
+-- 10. AUDITORÍA LOCAL
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS auditoria (
     id_auditoria  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_usuario    UUID REFERENCES usuarios(id_usuario),
@@ -346,17 +364,6 @@ CREATE TABLE IF NOT EXISTS auditoria (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_usuario  UUID NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
-    token_hash  VARCHAR(128) NOT NULL,
-    expira      TIMESTAMP NOT NULL,
-    usado       BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_password_reset_usuario ON password_reset_tokens (id_usuario, usado);
-
 CREATE TABLE IF NOT EXISTS logs_sistema (
     id_log        BIGSERIAL PRIMARY KEY,
     nivel         VARCHAR(10) NOT NULL,
@@ -367,9 +374,8 @@ CREATE TABLE IF NOT EXISTS logs_sistema (
 );
 
 -- ============================================================
--- 9. MÓDULO CONFIGURACIÓN
+-- 11. CONFIGURACIÓN LOCAL
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS configuraciones (
     clave         VARCHAR(100) PRIMARY KEY,
     valor         TEXT,
@@ -389,7 +395,6 @@ CREATE TABLE IF NOT EXISTS parametros_sistema (
 -- ============================================================
 -- ÍNDICES
 -- ============================================================
-
 CREATE INDEX IF NOT EXISTS idx_boletos_pesaje_fechas    ON boletos_pesaje (fecha_hora_entrada, fecha_hora_salida);
 CREATE INDEX IF NOT EXISTS idx_boletos_pesaje_vehiculo  ON boletos_pesaje (id_vehiculo);
 CREATE INDEX IF NOT EXISTS idx_boletos_pesaje_conductor ON boletos_pesaje (id_conductor);
@@ -404,6 +409,5 @@ CREATE INDEX IF NOT EXISTS idx_almacenes_empresa        ON almacenes (id_empresa
 CREATE INDEX IF NOT EXISTS idx_sync_queue_pend          ON sync_queue (pendiente, intentos);
 CREATE INDEX IF NOT EXISTS idx_auditoria_usuario        ON auditoria (id_usuario);
 CREATE INDEX IF NOT EXISTS idx_auditoria_fecha          ON auditoria (created_at);
-CREATE INDEX IF NOT EXISTS idx_usuarios_empresa         ON usuarios (id_empresa);
 
 COMMIT;

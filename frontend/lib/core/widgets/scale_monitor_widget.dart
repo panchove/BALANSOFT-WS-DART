@@ -86,15 +86,17 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     final conectado = cliente.conectado;
     final conectando = cliente.conectando;
     final peso = _peso;
+    final estable = cliente.ultimoPeso?.estable ?? true;
 
     Color estadoColor;
     String estadoTexto;
     IconData estadoIcono;
     if (conectado) {
-      final estable = cliente.ultimoPeso?.estable ?? true;
+      // Mientras la báscula se manipula el peso cambia ("recibiendo"); al
+      // detenerse se marca estable y se usa el peso donde quedó.
       estadoColor = estable ? SwsColors.success : SwsColors.warning;
-      estadoTexto = estable ? 'Estable' : 'Inestable';
-      estadoIcono = Icons.wifi;
+      estadoTexto = estable ? 'Estable' : 'Recibiendo peso…';
+      estadoIcono = estable ? Icons.wifi : Icons.sync;
     } else if (conectando) {
       estadoColor = SwsColors.warning;
       estadoTexto = 'Conectando...';
@@ -174,7 +176,9 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                     fontFamily: 'monospace',
                     fontSize: 38,
                     fontWeight: FontWeight.w800,
-                    color: conectado ? SwsColors.primary : SwsColors.gray400,
+                    color: !conectado
+                        ? SwsColors.gray400
+                        : (estable ? SwsColors.primary : SwsColors.warning),
                     letterSpacing: 2,
                   ),
                 ),
@@ -195,22 +199,27 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () {
-                        final p = widget.client.pesoActual;
-                        if (p != null) {
-                          widget.onPesoLeido?.call(p);
-                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Peso capturado de la báscula'),
-                              backgroundColor: SwsColors.success,
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.bolt, size: 18),
-                      label: const Text('Tomar peso'),
+                      // Solo se captura cuando el peso está asentado: así se usa
+                      // el valor donde quedó la báscula y no un transitorio.
+                      onPressed: estable
+                          ? () {
+                              final p = widget.client.pesoActual;
+                              if (p != null) {
+                                widget.onPesoLeido?.call(p);
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Peso capturado de la báscula'),
+                                    backgroundColor: SwsColors.success,
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                      icon: Icon(estable ? Icons.bolt : Icons.hourglass_top,
+                          size: 18),
+                      label: Text(estable ? 'Tomar peso' : 'Recibiendo peso…'),
                       style: FilledButton.styleFrom(
                         backgroundColor: SwsColors.success,
                         padding: const EdgeInsets.symmetric(vertical: 10),

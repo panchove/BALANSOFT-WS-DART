@@ -20,6 +20,7 @@ import 'presentation/screens/auth/reset_password_screen.dart';
 import 'presentation/screens/dashboard/home_shell.dart';
 import 'presentation/screens/weighing/weighing_detail_screen.dart';
 import 'presentation/screens/settings/settings_screen.dart';
+import 'presentation/screens/settings/connections_screen.dart';
 
 final themeController = ThemeController();
 
@@ -83,12 +84,16 @@ class BalansoftApp extends StatelessWidget {
           theme: buildLightTheme(),
           darkTheme: buildDarkTheme(),
           themeMode: themeController.themeMode,
-          initialRoute: '/login',
+          // Primera ejecución: si la API local no está configurada, se abre la
+          // pantalla de conexiones (el servidor central siempre está predefinido).
+          initialRoute:
+              AppConfig.localApiConfigured ? '/login' : '/connections',
           routes: {
             '/login': (_) => const LoginScreen(),
             '/register': (_) => const RegisterScreen(),
             '/forgot-password': (_) => const ForgotPasswordScreen(),
             '/reset-password': (_) => const ResetPasswordScreen(),
+            '/connections': (_) => const ConnectionsScreen(setupMode: true),
             '/dashboard': (_) => HomeShell(themeController: themeController),
             '/weighing/detail': (ctx) {
               final boleto = ModalRoute.of(ctx)!.settings.arguments as String;

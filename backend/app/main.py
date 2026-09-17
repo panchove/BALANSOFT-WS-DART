@@ -11,11 +11,12 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1.endpoints import API_ROUTERS
+from app.api.v1.endpoints import API_ROUTERS, SERVER_ROUTERS
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
 from app.core.monitoring import MetricsMiddleware, metrics_text
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.scale_session import get_scale_session_manager
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -23,6 +24,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("balansoft_ws")
 API_VERSION = "1.0.0"
+
+# Rol del despliegue: "local" monta la API operativa (estación); "server" monta
+# la API de cuenta/licencia central (docs/MANEJO_DB.md).
+ROUTERS = SERVER_ROUTERS if settings.app_role == "server" else API_ROUTERS
 
 # --- CORS hardening --------------------------------------------------------
 _origins = settings.cors_origins_list
@@ -36,8 +41,12 @@ if "*" in _origins and settings.app_env != "development":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Balansoft-WS API iniciando (env=%s)", settings.app_env)
+    log.info(
+        "Balansoft-WS API iniciando (env=%s, rol=%s)", settings.app_env, settings.app_role
+    )
     yield
+    # Emparejamiento: cerrar las conexiones persistentes con las balanzas.
+    await get_scale_session_manager().cerrar_todas()
     log.info("Balansoft-WS API detenida")
 
 
@@ -124,7 +133,7 @@ if settings.rate_limit_enabled:
 if settings.metrics_enabled:
     app.add_middleware(MetricsMiddleware)
 
-for router in API_ROUTERS:
+for router in ROUTERS:
     app.include_router(router)
 
 os.makedirs(settings.media_dir, exist_ok=True)

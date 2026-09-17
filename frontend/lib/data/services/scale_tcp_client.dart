@@ -71,10 +71,27 @@ class ScaleTcpClient extends ChangeNotifier {
     await _conectar();
   }
 
+  /// Asegura la conexión usando el host/puerto **ya configurados**.
+  ///
+  /// A diferencia de [conectar] (que sobreescribe el puerto por defecto),
+  /// esto preserva la configuración actual y permite mantener un socket
+  /// persistente sin resetear el emparejamiento. Es idempotente: si ya hay
+  /// conexión (o está en curso) no hace nada.
+  Future<void> asegurarConexion() async {
+    if (_socket != null || _conectando) return;
+    await _conectar();
+  }
+
   Future<void> _conectar() async {
-    await _desconectar(notificar: false);
-    if (_host == null || _host!.isEmpty) return;
+    // Guard de reentrada: evita abrir dos sockets si `configurar` dispara una
+    // conexión y el llamador invoca `asegurarConexion` acto seguido.
+    if (_conectando) return;
     _conectando = true;
+    await _desconectar(notificar: false);
+    if (_host == null || _host!.isEmpty) {
+      _conectando = false;
+      return;
+    }
     _error = '';
     notifyListeners();
     try {

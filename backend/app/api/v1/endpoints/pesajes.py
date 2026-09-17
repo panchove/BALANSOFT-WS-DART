@@ -33,10 +33,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_empresa, get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.hardware import obtener_hardware_id
 from app.core.license_client import LicenseError, LicenseInfo, get_license_client
 from app.core.monitoring import inc_pesaje_anulado, inc_pesaje_cerrado, inc_pesaje_creado
-from app.core.scale_hal import get_scale_hal
-from app.models import Balanza, BoletoPesaje, Empresa, ImagenPesaje, Usuario
+from app.core.scale_session import get_scale_session_manager
+from app.models import (
+    Balanza,
+    BoletoPesaje,
+    Empresa,
+    IdentidadLocal,
+    ImagenPesaje,
+    Usuario,
+)
 from app.schemas import (
     WeighingAnular,
     WeighingClose,
@@ -91,10 +99,18 @@ async def create_weighing(
     # la creación para no operar sin licencia verificada).
     lic_info: LicenseInfo | None = None
     if empresa.licencia_key:
+        identidad = (
+            await db.execute(
+                select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+            )
+        ).scalar_one_or_none()
+        hardware_id = (
+            identidad.hardware_id if identidad else None
+        ) or obtener_hardware_id()
         try:
             info = get_license_client().validate(
                 empresa.licencia_key,
-                "server",
+                hardware_id,
                 product_code=settings.license_product_code,
             )
             lic_info = LicenseInfo(
@@ -145,7 +161,11 @@ async def close_weighing(
     )
     tier = (empresa.licencia_tier or "DEMO").upper()
     inc_pesaje_cerrado(tier)
-    return _resolve_to_weighing_out(pesaje)
+    out = _resolve_to_weighing_out(pesaje)
+    advertencia = getattr(pesaje, "_advertencia_tolerancia", None)
+    if advertencia:
+        out.advertencia_tolerancia = advertencia
+    return out
 
 
 @router.put("/{boleto}/anular", response_model=WeighingOut)
@@ -396,6 +416,7 @@ async def delete_imagen(
 class PesoEnVivoOut(BaseModel):
     peso_kg: float | None
     estable: bool
+    conectado: bool = False
     balanza: str
     hardware: str
     timestamp: datetime
@@ -419,18 +440,18 @@ async def peso_en_vivo(
         raise HTTPException(status_code=404, detail="Balanza no encontrada")
 
     try:
-        hal = get_scale_hal(balanza)
+        # Sesión persistente: la conexión con la balanza queda emparejada y se
+        # reutiliza entre polls (no se abre/cierra en cada lectura).
+        sesion = await get_scale_session_manager().obtener(balanza)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    peso = await hal.read_weight()
-    estable = await hal.is_stable() if peso is not None else False
-    hardware = "tcp" if balanza.ip_address else "serial"
-
+    ultimo = sesion.ultimo
     return PesoEnVivoOut(
-        peso_kg=peso,
-        estable=estable,
+        peso_kg=sesion.peso_kg,
+        estable=sesion.estable,
+        conectado=sesion.conectado,
         balanza=balanza.descripcion,
-        hardware=hardware,
-        timestamp=datetime.now(UTC),
+        hardware=sesion.hardware,
+        timestamp=ultimo.timestamp if ultimo else datetime.now(UTC),
     )

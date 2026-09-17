@@ -40,8 +40,11 @@ ThemeData buildLightTheme() {
     ),
     scaffoldBackgroundColor: SwsColors.light,
     appBarTheme: const AppBarTheme(
-      backgroundColor: SwsColors.primary,
-      foregroundColor: Colors.white,
+      backgroundColor: SwsColors.light,
+      foregroundColor: SwsColors.dark,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
     ),
     tabBarTheme: const TabBarThemeData(
       labelColor: Colors.white,
@@ -112,8 +115,11 @@ ThemeData buildDarkTheme() {
     ),
     scaffoldBackgroundColor: SwsColors.darkBg,
     appBarTheme: const AppBarTheme(
-      backgroundColor: SwsColors.darkCard,
+      backgroundColor: SwsColors.darkBg,
       foregroundColor: SwsColors.darkText,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
     ),
     tabBarTheme: const TabBarThemeData(
       labelColor: SwsColors.darkText,
