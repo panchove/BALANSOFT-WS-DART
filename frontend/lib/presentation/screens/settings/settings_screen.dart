@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../injection.dart' as di;
@@ -14,6 +15,7 @@ import '../../../domain/entities/catalogs.dart';
 import 'license_admin_screen.dart';
 import 'connections_screen.dart';
 import 'usuarios_screen.dart';
+import '../setup/environment_check_screen.dart';
 import '../../../core/utils/save_file_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -167,7 +169,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 const _SectionCard(
         icon: Icons.wifi_tethering_outlined,
         title: 'Conexiones',
-        children: [_ConexionesTile()],
+        children: [_ConexionesTile(), _IntegridadTile()],
+      ),
+      const _SectionCard(
+        icon: Icons.storage_outlined,
+        title: 'Servidor Local (WServer)',
+        children: [_WServerPanel()],
       ),
       _SectionCard(
         icon: Icons.sync_outlined,
@@ -228,7 +235,12 @@ const _SectionCard(
       const _SectionCard(
         icon: Icons.wifi_tethering_outlined,
         title: 'Conexiones',
-        children: [_ConexionesTile()],
+        children: [_ConexionesTile(), _IntegridadTile()],
+      ),
+      const _SectionCard(
+        icon: Icons.storage_outlined,
+        title: 'Servidor Local (WServer)',
+        children: [_WServerPanel()],
       ),
       _SectionCard(
         icon: Icons.sync_outlined,
@@ -863,6 +875,171 @@ class _LicenseTile extends StatelessWidget {
   }
 }
 
+class _WServerPanel extends StatefulWidget {
+  const _WServerPanel();
+
+  @override
+  State<_WServerPanel> createState() => _WServerPanelState();
+}
+
+class _WServerPanelState extends State<_WServerPanel> {
+  bool? _online;
+  bool _trabajando = false;
+  bool _autostart = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WServerManager.autostartActivo().then((v) {
+      if (mounted) setState(() => _autostart = v);
+    });
+    _checarEstado();
+  }
+
+  Future<void> _checarEstado() async {
+    setState(() => _trabajando = true);
+    final online = await WServerManager.isOnline();
+    if (!mounted) return;
+    setState(() {
+      _online = online;
+      _trabajando = false;
+    });
+  }
+
+  Future<void> _encender() async {
+    setState(() => _trabajando = true);
+    try {
+      await WServerManager.ensureRunning();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _trabajando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo iniciar el WServer: $e'),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+      return;
+    }
+    await _checarEstado();
+  }
+
+  Future<void> _apagar() async {
+    setState(() => _trabajando = true);
+    await WServerManager.detener();
+    await _checarEstado();
+  }
+
+  Future<void> _toggleAutostart(bool value) async {
+    setState(() => _trabajando = true);
+    final ok = await WServerManager.setAutostart(value);
+    await AppConfig.setWServerAutostart(value);
+    if (!mounted) return;
+    setState(() {
+      _trabajando = false;
+      _autostart = ok && value;
+    });
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            value
+                ? 'El WServer se iniciará al encender la computadora'
+                : 'Arranque automático desactivado',
+          ),
+          backgroundColor: SwsColors.success,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base =
+        AppConfig.apiBaseUrl?.trim().isNotEmpty == true
+            ? AppConfig.apiBaseUrl!
+            : AppConfig.defaultApiBaseUrl;
+    final online = _online;
+
+    final estadoColor =
+        _trabajando
+            ? SwsColors.warning
+            : (online == true
+                ? SwsColors.success
+                : (online == false ? SwsColors.danger : SwsColors.gray500));
+
+    final estadoTexto =
+        _trabajando
+            ? 'Verificando...'
+            : (online == true
+                ? 'Activo · $base'
+                : (online == false
+                    ? 'Apagado · no responde en $base'
+                    : 'Comprobando conexión...'));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              Icon(Icons.circle, size: 12, color: estadoColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  estadoTexto,
+                  style: const TextStyle(fontSize: 12.5),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Comprobar de nuevo',
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: _checarEstado,
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              if (online != true)
+                FilledButton.icon(
+                  onPressed: _trabajando ? null : _encender,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Encender'),
+                )
+              else ...[
+                OutlinedButton.icon(
+                  onPressed: _trabajando ? null : _apagar,
+                  icon: const Icon(Icons.stop, size: 18),
+                  label: const Text('Apagar'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Divider(height: 16),
+        SwitchListTile(
+          dense: true,
+          secondary: const Icon(Icons.power_settings_new_outlined),
+          title: const Text('Iniciar al encender la computadora'),
+          subtitle: const Text(
+            'La estación arranca el WServer automáticamente para operar sin abrir el sistema.',
+            style: TextStyle(fontSize: 11.5),
+          ),
+          value: _autostart,
+          onChanged: _trabajando ? null : _toggleAutostart,
+        ),
+      ],
+    );
+  }
+}
+
 class _ConexionesTile extends StatelessWidget {
   const _ConexionesTile();
 
@@ -891,6 +1068,33 @@ class _ConexionesTile extends StatelessWidget {
           : const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const ConnectionsScreen()),
+      ),
+    );
+  }
+}
+
+class _IntegridadTile extends StatelessWidget {
+  const _IntegridadTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(Icons.health_and_safety_outlined),
+      ),
+      title: const Text('Integridad del Sistema'),
+      subtitle: const Text(
+        'Verificar PostgreSQL, puerto y drivers locales.',
+        style: TextStyle(fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const EnvironmentCheckScreen(setupMode: false),
+        ),
       ),
     );
   }

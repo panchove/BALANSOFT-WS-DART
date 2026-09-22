@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/brand_text.dart';
@@ -19,6 +21,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Si ya hay una conexión local configurada, asegura que el WServer esté
+    // levantado antes de intentar el login (p. ej. tras un reinicio del
+    // equipo sin autostart activo). Best-effort: no bloquea la pantalla.
+    if (AppConfig.localApiConfigured) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WServerManager.ensureRunning().catchError((_) => false);
+      });
+    }
+  }
 
   @override
   void dispose() {

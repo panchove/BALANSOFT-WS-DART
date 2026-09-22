@@ -4,7 +4,7 @@ class AppConfig {
   static const String appName = 'Balansoft-WS';
   static const String appVersion = '1.0.0';
 
-  static const String defaultServerApiUrl = 'http://localhost:8002';
+  static const String defaultServerApiUrl = 'http://ws.balansoft.com.ve';
   static const String defaultApiBaseUrl = 'http://localhost:8000';
 
   static String? apiBaseUrl;
@@ -12,6 +12,7 @@ class AppConfig {
   static String? licenseApiUrl;
   static String? publicKey;
   static bool offline = false;
+  static bool wserverAutostart = false;
 
   static late SharedPreferences _prefs;
 
@@ -28,6 +29,7 @@ class AppConfig {
     licenseApiUrl = _prefs.getString('license_api_url') ?? 'http://localhost:8080';
     publicKey = _prefs.getString('public_key');
     offline = _prefs.getBool('offline') ?? false;
+    wserverAutostart = _prefs.getBool('wserver_autostart') ?? false;
   }
 
   static SharedPreferences get prefs => _prefs;
@@ -55,5 +57,11 @@ class AppConfig {
   static Future<void> setOffline(bool value) async {
     offline = value;
     await _prefs.setBool('offline', value);
+  }
+
+  /// ¿Arrancar el WServer automáticamente al encender el equipo?
+  static Future<void> setWServerAutostart(bool value) async {
+    wserverAutostart = value;
+    await _prefs.setBool('wserver_autostart', value);
   }
 }

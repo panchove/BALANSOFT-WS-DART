@@ -1,11 +1,13 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "icon_data.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -24,6 +26,23 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  // Icono de la ventana (Balansoft-WS) cargado desde los bytes PNG incrustados
+  // en el binario: no depende de archivos externos en el sistema de archivos.
+  GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
+  if (loader != nullptr &&
+      gdk_pixbuf_loader_write(
+          loader, kBalansoftWsIconPng, kBalansoftWsIconPngSize, nullptr) &&
+      gdk_pixbuf_loader_close(loader, nullptr)) {
+    GdkPixbuf* pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+    if (pixbuf != nullptr) {
+      gtk_window_set_icon(window, pixbuf);
+      gtk_window_set_default_icon(pixbuf);
+    }
+  }
+  if (loader != nullptr) {
+    g_object_unref(loader);
+  }
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu

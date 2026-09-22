@@ -234,6 +234,48 @@ def _procesar_script(uri: str, script: Path, etiqueta: str) -> None:
 # ---------------------------------------------------------------------------
 # Arranque de la API
 # ---------------------------------------------------------------------------
+import re
+
+def _actualizar_env_si_aplica(home: Path, args: argparse.Namespace) -> None:
+    """Actualiza el archivo .env con los parámetros proporcionados."""
+    if not any([args.db_host, args.db_port, args.db_user, args.db_pass, args.db_name, args.api_port]):
+        return
+        
+    env_file = home / ".env"
+    if not env_file.exists():
+        return
+        
+    texto = env_file.read_text(encoding="utf-8")
+    
+    # 1. Extraer los valores actuales de DATABASE_URL
+    match = re.search(r"DATABASE_URL=postgresql\+asyncpg://(.*?):(.*?)@(.*?):(\d+)/(.*)", texto)
+    if match:
+        curr_user, curr_pass, curr_host, curr_port, curr_db = match.groups()
+    else:
+        curr_user, curr_pass, curr_host, curr_port, curr_db = "balansoft", "CHANGE_ME", "localhost", "5432", "balansoft_ws_local"
+        
+    # 2. Aplicar overrides
+    new_user = args.db_user if args.db_user else curr_user
+    new_pass = args.db_pass if args.db_pass else curr_pass
+    new_host = args.db_host if args.db_host else curr_host
+    new_port = args.db_port if args.db_port else curr_port
+    new_db = args.db_name if args.db_name else curr_db
+    
+    # 3. Reemplazar URLs en el texto
+    new_url_async = f"postgresql+asyncpg://{new_user}:{new_pass}@{new_host}:{new_port}/{new_db}"
+    new_url_sync = f"postgresql+psycopg2://{new_user}:{new_pass}@{new_host}:{new_port}/{new_db}"
+    
+    texto = re.sub(r"^DATABASE_URL=.*$", f"DATABASE_URL={new_url_async}", texto, flags=re.MULTILINE)
+    texto = re.sub(r"^DATABASE_URL_SYNC=.*$", f"DATABASE_URL_SYNC={new_url_sync}", texto, flags=re.MULTILINE)
+    
+    # 4. Reemplazar puerto API si aplica
+    if args.api_port:
+        texto = re.sub(r"^API_PORT=.*$", f"API_PORT={args.api_port}", texto, flags=re.MULTILINE)
+        
+    env_file.write_text(texto, encoding="utf-8")
+    print("[WServer] .env actualizado con los nuevos parámetros de configuración.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="WServer",
@@ -246,6 +288,14 @@ def main() -> int:
         action="store_true",
         help="no tocar la BD: solo levantar la API con la configuración existente",
     )
+    # Argumentos de configuración de BD
+    parser.add_argument("--db-host", type=str, help="Host de la base de datos PostgreSQL")
+    parser.add_argument("--db-port", type=str, help="Puerto de la base de datos PostgreSQL")
+    parser.add_argument("--db-user", type=str, help="Usuario de la base de datos")
+    parser.add_argument("--db-pass", type=str, help="Contraseña de la base de datos")
+    parser.add_argument("--db-name", type=str, help="Nombre de la base de datos")
+    parser.add_argument("--api-port", type=str, help="Puerto donde levantará la API local")
+    
     args = parser.parse_args()
 
     if args.version:
@@ -254,6 +304,9 @@ def main() -> int:
 
     home = Path(args.home).expanduser().resolve() if args.home else resolver_home()
     asegurar_estructura(home)
+    
+    # Actualizar .env si se pasaron argumentos por consola
+    _actualizar_env_si_aplica(home, args)
 
     # La configuración (.env) es relativa al CWD: la app se ejecuta desde home.
     os.chdir(home)

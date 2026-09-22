@@ -61,6 +61,7 @@ dev_dependencies:
   bloc_test: ^9.1.3
   integration_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
 
   # Tests: fake de ConnectivityPlatform (misma versión que connectivity_plus 4.0.2)
   connectivity_plus_platform_interface: ^1.2.4
@@ -75,3 +76,17 @@ flutter:
     - family: BalansoftBrand
       fonts:
         - asset: assets/fonts/BLADRMF_.TTF
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "../BALANSOFT-WS.png"
+  web:
+    generate: true
+    image_path: "../BALANSOFT-WS.png"
+    background_color: "#1a3a5c"
+    theme_color: "#1a3a5c"
+  windows:
+    generate: true
+    image_path: "../BALANSOFT-WS.png"
+    icon_size: 48

@@ -78,6 +78,7 @@ exe = EXE(
     strip=False,
     upx=True,
     upx_exclude=[],
+    icon=str(ROOT / "wserver_icon.ico"),
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,

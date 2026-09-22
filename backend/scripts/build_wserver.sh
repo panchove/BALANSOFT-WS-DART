@@ -21,11 +21,24 @@ echo ""
 
 # 1) Asegurar PyInstaller en el entorno
 uv run python -c "import PyInstaller" 2>/dev/null || {
-  echo "[1] Instalando pyinstaller (dev dep)..."
-  uv add --dev pyinstaller
+  echo "[1] Instalando pyinstaller y pillow (dev dep)..."
+  uv add --dev pyinstaller pillow
 }
 
 echo "[1] PyInstaller: $(uv run python -c 'import PyInstaller; print(PyInstaller.__version__)')"
+
+# 1.5) Preparar icono
+if [[ -f "../wserver_icon.jpeg" ]]; then
+    echo "[1.5] Generando icono wserver_icon.ico desde JPEG..."
+    uv run python -c "
+from PIL import Image
+try:
+    img = Image.open('../wserver_icon.jpeg')
+    img.save('wserver_icon.ico', format='ICO', sizes=[(256, 256)])
+except Exception as e:
+    print('Error generando icono:', e)
+"
+fi
 
 # 2) Compilar one-file
 echo "[2] Compilando WServer..."
@@ -40,6 +53,20 @@ if [[ ! -x "${BIN}" ]]; then
 fi
 SIZE=$(du -h "${BIN}" | cut -f1)
 echo "[3] ✅ Binario generado: ${BIN} (${SIZE})"
+
+# 4) Integrar al bundle de Flutter (si existe)
+BUNDLE_DIR="../frontend/build/linux/x64/release/bundle"
+if [[ -d "${BUNDLE_DIR}" ]]; then
+  echo "[4] Integrando WServer en el bundle de Flutter Desktop..."
+  # Binario junto al ejecutable de la app (lo busca WServerManager) + icono
+  # para el .desktop de autostart.
+  cp "${BIN}" "${BUNDLE_DIR}/WServer"
+  chmod +x "${BUNDLE_DIR}/WServer"
+  if [[ -f "../wserver_icon.jpeg" ]]; then
+    cp "../wserver_icon.jpeg" "${BUNDLE_DIR}/wserver_icon.jpeg"
+  fi
+  echo "    ✅ WServer + wserver_icon.jpeg copiados a la raíz del bundle."
+fi
 
 echo ""
 echo "== Listo =="

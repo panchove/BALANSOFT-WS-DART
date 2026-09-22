@@ -24,6 +24,9 @@ import 'presentation/screens/weighing/weighing_detail_screen.dart';
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/settings/connections_screen.dart';
 
+import 'presentation/screens/setup/mode_selection_screen.dart';
+import 'presentation/screens/setup/database_config_screen.dart';
+
 final themeController = ThemeController();
 
 void main() async {
@@ -42,18 +45,6 @@ void main() async {
   await AppConfig.init();
   await themeController.load();
   await di.init();
-
-  // Primera instalación: la API local aún no está configurada. Se asegura de
-  // que el WServer (backend local compilado) esté levantado para que el modo
-  // instalación de "Conexiones" pueda probar/editar la conexión de entrada.
-  if (!AppConfig.localApiConfigured) {
-    try {
-      await WServerManager.ensureRunning();
-    } catch (_) {
-      // Best-effort: si WServer no está disponible, el usuario podrá indicar
-      // la URL de una API local/externa de forma manual.
-    }
-  }
 
   runApp(const BalansoftApp());
 }
@@ -101,12 +92,13 @@ class BalansoftApp extends StatelessWidget {
           darkTheme: buildDarkTheme(),
           themeMode: themeController.themeMode,
           // Primera ejecución: si la API local no está configurada, se abre la
-          // verificación de entorno (instalación) y después la pantalla de
-          // conexiones.
+          // selección de modo (instalación).
           initialRoute:
-              AppConfig.localApiConfigured ? '/login' : '/setup',
+              AppConfig.localApiConfigured ? '/login' : '/mode_selection',
           routes: {
+            '/mode_selection': (_) => const ModeSelectionScreen(),
             '/setup': (_) => const EnvironmentCheckScreen(setupMode: true),
+            '/db_config': (_) => const DatabaseConfigScreen(),
             '/login': (_) => const LoginScreen(),
             '/register': (_) => const RegisterScreen(),
             '/forgot-password': (_) => const ForgotPasswordScreen(),
