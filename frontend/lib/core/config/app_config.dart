@@ -4,7 +4,7 @@ class AppConfig {
   static const String appName = 'Balansoft-WS';
   static const String appVersion = '1.0.0';
 
-  static const String defaultServerApiUrl = 'http://ws.balansoft.com.ve';
+  static const String defaultServerApiUrl = 'https://ws.balansoft.com.ve';
   static const String defaultApiBaseUrl = 'http://localhost:8000';
 
   static String? apiBaseUrl;

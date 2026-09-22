@@ -272,7 +272,7 @@ async def login_central(
         "device_model": payload.device_model,
     }
     try:
-        resp = await httpx.AsyncClient(timeout=10).post(
+        resp = await httpx.AsyncClient(timeout=10, follow_redirects=True).post(
             f"{server_url}/api/v1/auth/login", json=cuerpo
         )
     except httpx.TransportError as exc:
