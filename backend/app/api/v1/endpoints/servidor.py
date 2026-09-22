@@ -539,9 +539,20 @@ async def alta_licencia(
     cred: Credencial = Depends(get_server_credencial),
     db: AsyncSession = Depends(get_server_db),
 ) -> dict:
-    """Da de alta una licencia adicional (solo ADMIN global)."""
+    """Da de alta una licencia adicional (solo ADMIN global).
+
+    El ADMIN solo puede operar sobre su propia cuenta: se valida que
+    ``payload.id_cuenta`` coincida con ``id_cuenta`` de la credencial para
+    impedir escalación entre cuentas (un ADMIN de A no da alta licencias o
+    toca las cuentas de B).
+    """
     if cred.rol_global != "ADMIN":
         raise HTTPException(status_code=403, detail="Se requiere rol ADMIN global")
+    if payload.id_cuenta != cred.id_cuenta:
+        raise HTTPException(
+            status_code=403,
+            detail="El ADMIN solo puede operar sobre su propia cuenta",
+        )
     cuenta = await db.get(Cuenta, payload.id_cuenta)
     if cuenta is None:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada")
@@ -761,6 +772,8 @@ async def panel_cuenta_actualizar(
                 or datetime.now(UTC).replace(tzinfo=None) + timedelta(days=365),
                 max_usuarios=lic_campos["max_usuarios"],
                 max_equipos=lic_campos["max_equipos"],
+                max_sesiones=lic_campos["max_sesiones"]
+                or _max_sesiones_default(lic_campos["licencia_tier"] or "DEMO"),
             )
             db.add(licencia)
             cambios.append("licencia")
@@ -968,9 +981,18 @@ async def server_sync_push(
             .order_by(Dispositivo.ultima_conexion.desc())
         )
     ).scalar_one_or_none()
+    # `sync_sesiones`/`sync_cola` exigen id_dispositivo NOT NULL (DDL del
+    # servidor). El sync llega de una estación registrada: sin dispositivo
+    # activo no se acepta el lote (404/409) en vez de estallar con 500.
+    if disp is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No hay dispositivo activo para la cuenta: inicie sesión "
+            "desde la estación antes de sincronizar",
+        )
     sesion_sync = SyncSesion(
         id_cuenta=cred.id_cuenta,
-        id_dispositivo=disp.id_dispositivo if disp else None,
+        id_dispositivo=disp.id_dispositivo,
         tipo=payload.tipo,
         estado="PENDIENTE",
         registros_subidos=len(payload.items),

@@ -4,7 +4,15 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../models/user_model.dart';
 import '../../../domain/entities/user.dart';
+import '../../../core/security/secure_storage_service.dart';
 
+/// Almacenamiento local del cliente.
+///
+/// TODO lo sensible (usuario con rol, licencia y matriz de accesos) vive en el
+/// almacén seguro a través de [SecureStorageService]; NADA de esto se persiste
+/// en texto plano (`SharedPreferences`). Solo quedan en SharedPreferences
+/// parámetros NO sensibles: host/puerto de la báscula y directorios de
+/// exportación.
 class LocalStorage {
   static const _userKey = 'cached_user';
   static const _licenseKey = 'cached_license';
@@ -12,24 +20,26 @@ class LocalStorage {
   static const _scalePortKey = 'scale_port';
   static const _accesosKey = 'cached_matriz_accesos';
 
+  final SecureStorageService _secure;
+
+  LocalStorage({SecureStorageService? secureStorage})
+      : _secure = secureStorage ?? SecureStorageService();
+
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
   Future<void> saveUser(User user) async {
-    final prefs = await _prefs;
     final userModel = UserModel.fromEntity(user);
-    await prefs.setString(_userKey, jsonEncode(userModel.toJson()));
+    await _secure.writeRaw(_userKey, jsonEncode(userModel.toJson()));
   }
 
   Future<User?> getCachedUser() async {
-    final prefs = await _prefs;
-    final json = prefs.getString(_userKey);
+    final json = await _secure.readRaw(_userKey);
     if (json == null) return null;
     return UserModel.fromJson(jsonDecode(json));
   }
 
   Future<void> cacheLicense(Map<String, dynamic> license) async {
-    final prefs = await _prefs;
-    await prefs.setString(_licenseKey, jsonEncode(license));
+    await _secure.writeRaw(_licenseKey, jsonEncode(license));
   }
 
   Map<String, dynamic>? getCachedLicense() {
@@ -37,20 +47,17 @@ class LocalStorage {
   }
 
   Future<Map<String, dynamic>?> getCachedLicenseAsync() async {
-    final prefs = await _prefs;
-    final json = prefs.getString(_licenseKey);
+    final json = await _secure.readRaw(_licenseKey);
     if (json == null) return null;
     return jsonDecode(json);
   }
 
   Future<void> clearLicense() async {
-    final prefs = await _prefs;
-    await prefs.remove(_licenseKey);
+    await _secure.clearRaw(_licenseKey);
   }
 
   Future<void> clearAuth() async {
-    final prefs = await _prefs;
-    await prefs.remove(_userKey);
+    await _secure.clearRaw(_userKey);
   }
 
   Future<void> setScaleConfig({required String host, required int port}) async {
@@ -67,13 +74,11 @@ class LocalStorage {
   }
 
   Future<void> cacheMatrizAccesos(Map<String, Map<String, String>> matriz) async {
-    final prefs = await _prefs;
-    await prefs.setString(_accesosKey, jsonEncode(matriz));
+    await _secure.writeRaw(_accesosKey, jsonEncode(matriz));
   }
 
   Future<Map<String, Map<String, String>>?> getCachedMatrizAccesos() async {
-    final prefs = await _prefs;
-    final raw = prefs.getString(_accesosKey);
+    final raw = await _secure.readRaw(_accesosKey);
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -91,8 +96,7 @@ class LocalStorage {
   }
 
   Future<void> clearMatrizAccesos() async {
-    final prefs = await _prefs;
-    await prefs.remove(_accesosKey);
+    await _secure.clearRaw(_accesosKey);
   }
 
   Future<String> getDescargasDir() async {

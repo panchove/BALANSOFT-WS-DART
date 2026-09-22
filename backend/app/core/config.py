@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     # de parsing multilínea en .env y en EnvironmentFile de systemd). Es la vía
     # recomendada en servidores (mismo patrón que BALANSOFT-SG: keys/*.pem).
     license_public_key_path: str | None = None
-    license_product_code: str = "BWS"
+    # Código de producto registrado en el LM (products.code: "WS"). La clave de
+    # licencia usa el prefijo BWS-… pero `product_code` enviado al LM es "WS".
+    license_product_code: str = "WS"
 
     # API
     api_host: str = "0.0.0.0"

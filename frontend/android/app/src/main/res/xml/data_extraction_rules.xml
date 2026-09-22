@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Desactiva el respaldo/restauración automática de Android: la sesión
+     (tokens, usuario con rol, matriz de accesos, licencia) NO debe salir del
+     dispositivo vía Android Auto Backup ni por transferencia de dispositivo. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <disable />
+    </cloud-backup>
+    <device-transfer>
+        <disable />
+    </device-transfer>
+</data-extraction-rules>

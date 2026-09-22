@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +29,24 @@ from app.core.config import settings
 log = logging.getLogger(__name__)
 
 SIGNED_FIELDS = ["valid", "status", "expires_at", "tier", "plan_type",
-                 "features", "server_time", "nonce"]
+                 "features", "server_time", "nonce", "validada_en"]
+
+# Ventana de frescura del `server_time` (mismo contrato que BALANSOFT-SG,
+# docs/USO-API.md §6): -5 min .. +24 h. El LM usa `validada_en` como ancla de
+# tiempo del servidor para decisiones de vigencia.
+_MAX_CLOCK_SKEW = timedelta(minutes=5)   # servidor demasiado adelantado
+_MAX_FUTURE_ALLOWED = timedelta(hours=24)  # ventana de frescura del server_time
+
+# Formato de clave: `{B+prefijo}-XXXX-XXXX-XXXX-XXXX` (marca B + iniciales del
+# producto 2-10 letras, ej. BWS-…). Mismo regex que BALANSOFT-SG.
+LICENSE_KEY_RE = re.compile(
+    r"^[A-Z0-9]{2,11}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
+)
+
+# Anti-replay: nonces ya vistos en memoria (se reinician al arrancar el proceso).
+# Igual patrón que BALANSOFT-SG. Al correr con varios workers, la protección es
+# por proceso.
+_nonces_vistos: set[str] = set()
 
 
 def _now_naive() -> datetime:
@@ -79,22 +96,117 @@ class LicenseInfo:
         return (self.tier or "").upper() == "DEMO"
 
 
-def _canonical_json(payload: dict[str, Any]) -> bytes:
+def canonical_json(payload: dict[str, Any]) -> bytes:
+    """Serialización canónica de la firma (USO-API.md §6): claves ordenadas,
+    separadores compactos, sin espacios. Idéntica a BALANSOFT-SG / LM para que
+    la firma Ed25519 coincida."""
     return json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), default=str
+        payload, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
+
+
+_canonical_json = canonical_json
+
+
+def validate_license_key_format(key: str) -> str:
+    """Normaliza y valida el formato de la clave (no la valida en el LM).
+
+    Portado desde BALANSOFT-SG: mayúsculas y patrón ``{B+PREFIJO}-XXXX-XXXX-XXXX-XXXX``.
+    """
+    normalized = key.strip().upper()
+    if not LICENSE_KEY_RE.match(normalized):
+        raise LicenseError(
+            "Formato de clave de licencia inválido (esperado BWS-XXXX-XXXX-XXXX-XXXX)"
+        )
+    return normalized
 
 
 def _verify_signature(payload: dict[str, Any], signature: str, public_key_pem: str) -> bool:
     try:
-        public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+        key_bytes = (
+            public_key_pem.encode("utf-8")
+            if isinstance(public_key_pem, str)
+            else public_key_pem
+        )
+        public_key = serialization.load_pem_public_key(key_bytes)
         if not isinstance(public_key, Ed25519PublicKey):
             return False
         raw = base64.b64decode(signature)
-        public_key.verify(raw, _canonical_json(payload))
+        public_key.verify(raw, canonical_json(payload))
         return True
     except Exception:
         return False
+
+
+def check_signature_metadata(response: dict[str, Any]) -> None:
+    """Exige que la respuesta declare algoritmo y versión de firma esperados.
+
+    Portado desde BALANSOFT-SG: `signature_algorithm=ed25519`,
+    `signature_version=1`.
+    """
+    if (
+        response.get("signature_algorithm") != "ed25519"
+        or response.get("signature_version") != 1
+    ):
+        raise LicenseSignatureError(
+            "Respuesta de validación no firmada correctamente (algoritmo/versión)"
+        )
+
+
+def check_freshness(server_time: str, now: datetime | None = None) -> None:
+    """Rechaza respuestas demasiado viejas o del futuro (-5 min .. +24 h, §6).
+
+    Portado desde BALANSOFT-SG: la ventana es ASIMÉTRICA (el LM puede estar
+    hasta 5 min adelantado o 24 h atrasado respecto de `server_time`).
+    """
+    if not server_time:
+        raise LicenseSignatureError("server_time ausente en la respuesta")
+    try:
+        ts = datetime.fromisoformat(server_time)
+    except ValueError:
+        raise LicenseSignatureError("server_time inválido en la respuesta") from None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    ahora = now if now is not None else datetime.now(UTC)
+    if ahora.tzinfo is None:
+        ahora = ahora.replace(tzinfo=UTC)
+    if ts < ahora - _MAX_CLOCK_SKEW or ts > ahora + _MAX_FUTURE_ALLOWED:
+        raise LicenseSignatureError(
+            "Respuesta de validación fuera de la ventana de tiempo"
+        )
+
+
+def check_nonce(nonce: str) -> None:
+    """Anti-replay: un `nonce` ya visto invalida la respuesta (en memoria)."""
+    if not nonce:
+        raise LicenseSignatureError("Respuesta de validación sin nonce")
+    if nonce in _nonces_vistos:
+        raise LicenseSignatureError(
+            "Respuesta de validación repetida (nonce ya usado)"
+        )
+    _nonces_vistos.add(nonce)
+
+
+def validar_respuesta_firmada(
+    response: dict[str, Any],
+    public_key_pem: str | bytes | None,
+) -> None:
+    """Valida una respuesta de /validate: metadatos + firma + frescura + anti-replay.
+
+    Portado desde BALANSOFT-SG (`licencia_ml.py`): cubre exactamente
+    `SIGNED_FIELDS` (los 9 campos, incluido `validada_en`).
+    """
+    check_signature_metadata(response)
+    if public_key_pem is None:
+        raise LicenseSignatureError("No hay clave pública del LM configurada")
+    signature = response.get("signature")
+    if not signature:
+        raise LicenseSignatureError("Respuesta de validación sin firma")
+    signed_payload = {k: response.get(k) for k in SIGNED_FIELDS}
+    if not _verify_signature(signed_payload, signature, public_key_pem):
+        raise LicenseSignatureError("Firma Ed25519 de /validate inválida")
+    check_freshness(response.get("server_time", ""))
+    check_nonce(response.get("nonce", ""))
 
 
 class LicenseClient:
@@ -140,6 +252,7 @@ class LicenseClient:
         os_version: str | None = None,
         product_code: str | None = None,
     ) -> LicenseInfo:
+        license_key = validate_license_key_format(license_key)
         token = self._get_token(license_key)
         payload = {
             "license_key": license_key,
@@ -168,24 +281,10 @@ class LicenseClient:
 
         data = resp.json()
 
-        # Verificación de firma Ed25519 (anti-fake-server)
-        signature = data.get("signature")
-        signed_payload = {k: data.get(k) for k in SIGNED_FIELDS}
-        if not self.public_key or not signature:
-            raise LicenseSignatureError("LM no devolvió firma o no hay clave pública")
-        if not _verify_signature(signed_payload, signature, self.public_key):
-            raise LicenseSignatureError("Firma Ed25519 de /validate inválida")
-
-        # Anti-replay: server_time no debe estar adelantado / desfasado > 5 min
-        server_time_raw = data.get("server_time")
-        if server_time_raw:
-            try:
-                server_time = datetime.fromisoformat(server_time_raw)
-                drift = abs((_now_naive() - server_time).total_seconds())
-                if drift > 300:
-                    raise LicenseSignatureError("Respuesta del LM fuera de rango temporal")
-            except ValueError:
-                pass
+        # Verificación de la respuesta firmada Ed25519 (anti-fake-server).
+        # Mismo contrato que BALANSOFT-SG: metadatos + firma de los 9 campos
+        # (incluido `validada_en`) + frescura asimétrica + anti-replay por nonce.
+        validar_respuesta_firmada(data, self.public_key)
 
         expires = data.get("expires_at")
         return LicenseInfo(

@@ -34,9 +34,9 @@ Future<void> init() async {
 
   // Datasources
   sl.registerLazySingleton<ApiClient>(() => ApiClient());
-  sl.registerLazySingleton<LocalStorage>(() => LocalStorage());
-  sl.registerLazySingleton<DatabaseHelper>(() => DatabaseHelper());
   sl.registerLazySingleton<SecureStorageService>(() => SecureStorageService());
+  sl.registerLazySingleton<LocalStorage>(() => LocalStorage(secureStorage: sl()));
+  sl.registerLazySingleton<DatabaseHelper>(() => DatabaseHelper());
 
   // Repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepository(
