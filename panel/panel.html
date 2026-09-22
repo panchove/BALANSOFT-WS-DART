@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Balansoft WS — Panel Administrativo</title>
+    <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="vendor/icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="css/balansoft.css?v=5" />
+    <script>
+      (function () {
+        var t = localStorage.getItem('sglb-theme');
+        var d =
+          t === 'dark' || t === 'light'
+            ? t
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+        document.documentElement.setAttribute('data-theme', d);
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- ==========================================
+    NAVBAR
+    ========================================== -->
+    <nav class="navbar navbar-expand-lg navbar-sglb">
+      <div class="container">
+        <a class="navbar-brand" href="panel.html">
+          <span class="brand-text">baLnsoft</span>
+          <span class="version">WS</span>
+        </a>
+
+        <!-- Botón hamburguesa (móvil) -->
+        <button class="navbar-toggler" type="button" id="menuToggle" aria-label="Toggle navigation">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+
+        <!-- Menú desktop -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav nav-tools align-items-center ms-auto">
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-person-circle"></i>
+                <span class="user-email" id="sessionUser">Administrador</span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li class="dropdown-header d-flex align-items-center gap-2 py-2">
+                  <div class="dropdown-role-indicator">
+                    <span class="role-badge role-admin" id="sessionRoleBadge">
+                      <i class="bi bi-shield-fill-check me-1"></i>Administrador
+                    </span>
+                  </div>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item" href="#" onclick="toggleTheme(); return false;">
+                    <i class="bi bi-moon-stars-fill me-2" id="themeToggleIcon"></i>
+                    <span id="themeToggleText">Modo oscuro</span>
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item text-danger" href="#" id="btnLogout">
+                    <i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión
+                  </a>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ==========================================
+    MENÚ LATERAL - SOLO MÓVIL
+    ========================================== -->
+    <div class="nav-overlay" id="navOverlay"></div>
+    <div class="nav-sidebar" id="navSidebar">
+      <div class="sidebar-header">
+        <div class="d-flex align-items-center gap-2">
+          <span class="brand-text">baLnsoft</span>
+          <span class="sidebar-version">WS</span>
+        </div>
+        <button class="sidebar-close" id="sidebarClose">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div class="sidebar-body">
+        <div class="sidebar-user">
+          <div class="d-flex align-items-center gap-3">
+            <i class="bi bi-person-circle fs-1" style="color: rgba(255,255,255,0.6);"></i>
+            <div>
+              <div class="fw-semibold text-white" style="font-size: 0.9rem;" id="sidebarUser">Administrador</div>
+              <div class="sidebar-role">
+                <span class="role-badge role-admin">
+                  <i class="bi bi-shield-fill-check me-1"></i>Administrador
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="sidebar-divider">
+
+        <ul class="sidebar-nav sidebar-nav-tools">
+          <li class="sidebar-nav-item">
+            <button class="sidebar-nav-link" type="button" onclick="toggleTheme(); return false;">
+              <i class="bi bi-moon-stars-fill" id="themeToggleIconSidebar"></i>
+              <span id="themeToggleTextSidebar">Modo oscuro</span>
+            </button>
+          </li>
+          <li class="sidebar-nav-item">
+            <button class="sidebar-nav-link text-danger" type="button" id="btnLogoutSidebar">
+              <i class="bi bi-box-arrow-right"></i>
+              <span>Cerrar sesión</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==========================================
+    PAGE HEADER
+    ========================================== -->
+    <div class="page-header">
+      <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-center">
+          <h1>
+            <i class="bi bi-grid-3x3-gap-fill"></i>
+            Panel Administrativo
+          </h1>
+          <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item"><a href="panel.html">Inicio</a></li>
+              <li class="breadcrumb-item active" aria-current="page">Panel</li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+    MAIN CONTENT
+    ========================================== -->
+    <main class="container pb-5 main-content">
+      <!-- ============ CRUD único: Cuentas ============ -->
+      <div class="card-sglb card p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <h2 class="card-title h5 mb-0">
+            <i class="bi bi-buildings me-1"></i>Cuentas registradas
+          </h2>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-brand btn-sm" id="btnRefresh">
+              <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+            </button>
+            <button class="btn btn-brand btn-sm" id="btnNuevaCuenta">
+              <i class="bi bi-plus-lg me-1"></i>Nueva cuenta
+            </button>
+          </div>
+        </div>
+
+        <p class="text-secondary mb-3" style="font-size: 0.85rem">
+          Registra o edita las cuentas de las estaciones con sus contraseñas. Al crear una
+          cuenta, la disponibilidad de la clave de licencia se verifica contra el LM del
+          servidor en el mismo formulario; sin una licencia válida el alta se rechaza.
+        </p>
+
+        <div id="cuentasAlert" class="alert alert-danger alert-box d-none" role="alert"></div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle table-sglb">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>RIF / NIT</th>
+                <th>Email admin</th>
+                <th>Estado</th>
+                <th class="text-end">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="cuentasBody"></tbody>
+          </table>
+          <div id="cuentasEmpty" class="text-secondary text-center py-4 d-none">
+            Aún no hay cuentas registradas. Usa el botón <strong>Nueva cuenta</strong> para dar de alta la primera.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ==========================================
+    FOOTER
+    ========================================== -->
+    <footer class="footer-sglb">
+      <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-center">
+          <span class="footer-text">
+            &copy; 2026 <strong>Balansoft</strong> — Sistema de Gestión de Licencias
+          </span>
+          <div class="footer-version">
+            <i class="bi bi-shield-check"></i>
+            <span id="footerApi"></span>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- ==========================================
+    MODAL: Registrar / Editar cuenta
+    ========================================== -->
+    <div class="modal fade" id="cuentaModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="cuentaModalTitle">Registrar cuenta</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div id="modalAlert" class="alert alert-box d-none" role="alert"></div>
+            <form id="cuentaForm">
+              <input type="hidden" id="eId" />
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label" id="lblNombreFiscal">Nombre de la empresa</label>
+                  <input type="text" class="form-control" id="eNombreFiscal" required minlength="3" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">RIF / NIT</label>
+                  <input type="text" class="form-control" id="eRif" required minlength="5"
+                         placeholder="J-12345678-9" value="J-" />
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label" id="lblEmail">Correo del administrador</label>
+                  <input type="email" class="form-control" id="eEmail" />
+                </div>
+                <div class="col-md-6" id="wrapUsuario">
+                  <label class="form-label">Nombre del administrador</label>
+                  <input type="text" class="form-control" id="eUsuario" />
+                </div>
+                <div class="col-md-6" id="wrapPassword">
+                  <label class="form-label" id="lblPassword">Contraseña del administrador</label>
+                  <div class="input-group">
+                    <input type="password" class="form-control" id="ePassword" minlength="6" autocomplete="new-password" />
+                    <button class="btn btn-outline-brand" type="button" id="btnTogglePassword"
+                            tabindex="-1" title="Mostrar / ocultar contraseña">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+                  <div class="small text-secondary mt-1" id="pwHelp">
+                    Tú creas esta contraseña para el administrador de la estación.
+                  </div>
+                </div>
+
+                <div class="col-md-6 d-none" id="wrapNombreComercial">
+                  <label class="form-label">Nombre comercial</label>
+                  <input type="text" class="form-control" id="eNombreComercial" />
+                </div>
+                <div class="col-md-6 d-none" id="wrapTelefono">
+                  <label class="form-label">Teléfono</label>
+                  <input type="text" class="form-control" id="eTelefono" />
+                </div>
+                <div class="col-md-6 d-none" id="wrapActiva">
+                  <label class="form-label">Estado de la cuenta</label>
+                  <select class="form-select" id="eActiva">
+                    <option value="true">Activa</option>
+                    <option value="false">Inactiva</option>
+                  </select>
+                </div>
+                <div class="col-12 d-none" id="wrapDireccion">
+                  <label class="form-label">Dirección</label>
+                  <textarea class="form-control" id="eDireccion" rows="2"></textarea>
+                </div>
+                <div class="col-md-6 d-none" id="wrapLicStatus">
+                  <label class="form-label">Estatus de licencia</label>
+                  <select class="form-select" id="eLicStatus">
+                    <option value="ACTIVA">ACTIVA</option>
+                    <option value="INACTIVA">INACTIVA</option>
+                    <option value="SUSPENDIDA">SUSPENDIDA</option>
+                    <option value="VENCIDA">VENCIDA</option>
+                    <option value="ANULADA">ANULADA</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Clave de licencia (LM)</label>
+                  <input type="text" class="form-control" id="eLicKey" placeholder="BWS-…" />
+                </div>
+
+                <div class="col-12">
+                  <div class="card-sglb card p-3 lm-info">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                      <h6 class="mb-0 text-uppercase small text-secondary">
+                        <i class="bi bi-info-circle me-1"></i>Datos de licencia (LM)
+                      </h6>
+                      <button class="btn btn-outline-brand btn-sm" type="button" id="btnLmCheck"
+                              title="Consultar la licencia en el License Manager">
+                        <span class="spinner-border spinner-border-sm d-none" id="spinnerLm" role="status"></span>
+                        <i class="bi bi-arrow-repeat me-1"></i>Consultar LM
+                      </button>
+                    </div>
+                    <div class="row g-3 small">
+                      <div class="col-6 col-md-3">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Plan</div>
+                        <div class="fw-semibold" id="lmTier">—</div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Tipo</div>
+                        <div id="lmPlanType">—</div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Vence</div>
+                        <div id="lmExpira">—</div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Máx. equipos</div>
+                        <div id="lmMaxEquipos">—</div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Máx. usuarios</div>
+                        <div id="lmMaxUsuarios">—</div>
+                      </div>
+                      <div class="col-6 col-md-6">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Cliente</div>
+                        <div id="lmCliente">—</div>
+                      </div>
+                      <div class="col-6 col-md-6">
+                        <div class="text-secondary text-uppercase" style="font-size: 0.7rem;">Distribuidor</div>
+                        <div id="lmDistribuidor">—</div>
+                      </div>
+                      <div class="col-12">
+                        <div class="text-secondary" id="lmNota" style="font-size: 0.75rem;">
+                          Plan, tipo, vencimiento y límites provienen del License Manager; al
+                          crear la cuenta la licencia se valida contra el LM.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-check mt-3 d-none" id="wrapConfirmar">
+                <input class="form-check-input" type="checkbox" id="eConfirmar" />
+                <label class="form-check-label" for="eConfirmar" style="font-size: 0.85rem">
+                  Confirmo que la clave de licencia pertenece a un cliente y que la cuenta será
+                  usada por su estación.
+                </label>
+              </div>
+
+              <button class="btn btn-brand w-100 mt-4" type="submit" id="btnGuardarCuenta">
+                <span class="spinner-border spinner-border-sm d-none" id="spinnerGuardar" role="status"></span>
+                <span id="btnGuardarLabel">Verificar licencia y crear cuenta</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de detalle de cuenta -->
+    <div class="modal fade" id="detalleModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="detalleModalTitle">Detalle de la cuenta</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body" id="detalleModalBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-brand btn-sm" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de verificación rápida de licencia -->
+    <div class="modal fade" id="licenciaModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="licenciaModalTitle">Vigencia de licencia</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body" id="licenciaModalBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-brand btn-sm" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="config.js?v=5"></script>
+    <script src="js/api.js?v=5"></script>
+    <script src="js/auth.js?v=5"></script>
+    <script src="js/sglb-ui.js?v=5"></script>
+    <script src="js/panel.js?v=5"></script>
+    <script>
+      /* ---------- TEMA CLARO / OSCURO (localStorage 'sglb-theme') ---------- */
+      function getPreferredTheme() {
+        var stored = localStorage.getItem('sglb-theme');
+        if (stored === 'dark' || stored === 'light') return stored;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      function updateThemeUI(theme) {
+        var isDark = theme === 'dark';
+        var icon = document.getElementById('themeToggleIcon');
+        var text = document.getElementById('themeToggleText');
+        var iconS = document.getElementById('themeToggleIconSidebar');
+        var textS = document.getElementById('themeToggleTextSidebar');
+        if (icon) icon.className = isDark ? 'bi bi-sun-fill me-2' : 'bi bi-moon-stars-fill me-2';
+        if (text) text.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+        if (iconS) iconS.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+        if (textS) textS.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+      }
+      function toggleTheme() {
+        var current = document.documentElement.getAttribute('data-theme') || getPreferredTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('sglb-theme', next);
+        document.documentElement.setAttribute('data-theme', next);
+        updateThemeUI(next);
+      }
+      updateThemeUI(getPreferredTheme());
+
+      /* ---------- URL base de la API en el footer ---------- */
+      var footerApi = document.getElementById('footerApi');
+      if (footerApi && window.BalansoftConfig) {
+        footerApi.textContent = 'API: ' + window.BalansoftConfig.apiBase;
+      }
+
+      /* ---------- MENÚ LATERAL MÓVIL ---------- */
+      document.addEventListener('DOMContentLoaded', function () {
+        var menuToggle = document.getElementById('menuToggle');
+        var sidebar = document.getElementById('navSidebar');
+        var overlay = document.getElementById('navOverlay');
+        var closeBtn = document.getElementById('sidebarClose');
+        var body = document.body;
+
+        function openMenu() {
+          sidebar.classList.add('open');
+          overlay.classList.add('active');
+          menuToggle.classList.add('active');
+          body.style.overflow = 'hidden';
+        }
+        function closeMenu() {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+          menuToggle.classList.remove('active');
+          body.style.overflow = '';
+        }
+        if (menuToggle) menuToggle.addEventListener('click', function () {
+          if (sidebar.classList.contains('open')) closeMenu();
+          else openMenu();
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeMenu);
+        if (overlay) overlay.addEventListener('click', closeMenu);
+        document.querySelectorAll('.sidebar-nav-link').forEach(function (link) {
+          link.addEventListener('click', closeMenu);
+        });
+        window.addEventListener('resize', function () {
+          if (window.innerWidth >= 992 && sidebar.classList.contains('open')) closeMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && sidebar.classList.contains('open')) closeMenu();
+        });
+
+        /* ---------- Asegurar footer siempre abajo ---------- */
+        var main = document.querySelector('main');
+        var footer = document.querySelector('.footer-sglb');
+        if (main && footer) {
+          var updateHeight = function () {
+            var vh = window.innerHeight;
+            var nav = (document.querySelector('.navbar-sglb') || {}).offsetHeight || 0;
+            var head = (document.querySelector('.page-header') || {}).offsetHeight || 0;
+            var foot = footer.offsetHeight || 0;
+            var min = vh - nav - head - foot - 40;
+            main.style.minHeight = (min > 100 ? min : 100) + 'px';
+          };
+          updateHeight();
+          window.addEventListener('resize', updateHeight);
+        }
+      });
+    </script>
+  </body>
+</html>

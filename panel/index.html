@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Balansoft WS — Panel Administrativo</title>
+    <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="vendor/icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="css/balansoft.css?v=4" />
+  </head>
+  <body class="login-body">
+    <div class="login-container">
+      <div class="login-card">
+        <!-- Barra superior: estado + conexión al servidor -->
+        <div class="login-header-bar">
+          <a href="#apiModal" class="btn-nav-back" data-bs-toggle="modal">
+            <i class="bi bi-gear me-1"></i>Conexión al servidor
+          </a>
+          <button type="button" class="btn-nav-back" title="URL base de la API">
+            <i class="bi bi-hdd-network me-1"></i><span id="apiBadgeLabel">API</span>
+          </button>
+        </div>
+
+        <!-- Logo e Identidad -->
+        <div class="login-logo">
+          <div class="logo-icon">
+            <i class="bi bi-shield-lock-fill" style="font-size: 2rem; color: var(--sglb-accent);"></i>
+          </div>
+          <h2 class="brand-text">baLnsoft<span style="font-size: 1rem">WS</span></h2>
+          <p><i class="bi bi-arrow-right-short text-primary"></i> Panel Administrativo</p>
+        </div>
+
+        <!-- Formulario de Inicio de Sesión -->
+        <div id="alertBox" class="alert alert-danger alert-box d-none" role="alert"></div>
+
+        <form id="loginForm" novalidate>
+          <div class="form-floating-custom">
+            <label for="email">
+              <i class="bi bi-envelope me-1" style="color: #4a90d9;"></i>
+              Correo del administrador
+            </label>
+            <div class="input-icon-wrapper">
+              <span class="input-icon"><i class="bi bi-envelope"></i></span>
+              <input
+                type="email"
+                name="email"
+                id="email"
+                class="form-control"
+                autocomplete="username"
+                placeholder="admin@balansoft.local"
+                required
+                autofocus
+              />
+            </div>
+          </div>
+
+          <div class="form-floating-custom">
+            <label for="password">
+              <i class="bi bi-lock me-1" style="color: #4a90d9;"></i>
+              Contraseña
+            </label>
+            <div class="input-icon-wrapper">
+              <span class="input-icon"><i class="bi bi-lock"></i></span>
+              <input
+                type="password"
+                name="password"
+                id="password"
+                class="form-control"
+                autocomplete="current-password"
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                class="toggle-password"
+                onclick="togglePasswordVisibility()"
+                aria-label="Mostrar contraseña"
+              >
+                <i class="bi bi-eye" id="togglePasswordIcon"></i>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-login" id="btnLogin">
+            <span class="spinner-border spinner-border-sm d-none" id="spinner" role="status"></span>
+            <i class="bi bi-box-arrow-in-right me-1" id="loginIcon"></i>Entrar
+          </button>
+        </form>
+
+        <!-- Footer -->
+        <div class="login-footer">
+          <p class="text-muted mb-0">
+            <i class="bi bi-shield-check text-success me-1"></i>
+            &copy; 2026 <strong style="color: #0d2b4a;">Balansoft</strong>
+            <span class="mx-1">&bull;</span>
+            Sistema de Gestión de Licencias
+          </p>
+          <div class="api-text" id="apiBaseLabel"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de configuración de la API del servidor -->
+    <div class="modal fade" id="apiModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6">API del servidor</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-secondary" style="font-size: 0.85rem">
+              URL base de la API del servidor central (APP_ROLE=server), por ejemplo
+              <code>http://127.0.0.1:8001/api/v1</code>.
+            </p>
+            <input type="url" class="form-control" id="apiBaseInput" />
+            <div id="apiAlert" class="alert alert-danger alert-box d-none mt-3" role="alert"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-brand btn-sm" id="btnTestApi">
+              Probar conexión
+            </button>
+            <button type="button" class="btn btn-brand btn-sm" id="btnApiOk">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="config.js?v=4"></script>
+    <script src="js/api.js?v=4"></script>
+    <script src="js/auth.js?v=4"></script>
+    <script src="js/sglb-ui.js?v=4"></script>
+    <script>
+      (function () {
+        function renderApiBase() {
+          var host = window.BalansoftConfig.apiBase
+            .replace(/^https?:\/\//, '')
+            .replace(/\/api\/v\d+$/, '')
+            .replace(/\/+$/, '');
+          document.getElementById('apiBadgeLabel').textContent = 'API: ' + host;
+          document.getElementById('apiBaseLabel').textContent = window.BalansoftConfig.apiBase;
+        }
+        renderApiBase();
+
+        var apiModal = document.getElementById('apiModal');
+        apiModal.addEventListener('show.bs.modal', function () {
+          document.getElementById('apiBaseInput').value = window.BalansoftConfig.apiBase;
+          document.getElementById('apiAlert').classList.add('d-none');
+        });
+
+        document.getElementById('btnApiOk').addEventListener('click', function () {
+          var el = document.getElementById('apiBaseInput');
+          var url = el.value.trim();
+          if (!url) {
+            showApiError('Ingresa la URL base de la API.');
+            return;
+          }
+          if (!/^https?:\/\//i.test(url)) {
+            showApiError('La URL debe comenzar con http:// o https://');
+            return;
+          }
+          window.BalansoftConfig.apiBase = url;
+          bootstrap.Modal.getInstance(apiModal).hide();
+          renderApiBase();
+          showLoginError('');
+        });
+
+        document.getElementById('btnTestApi').addEventListener('click', function () {
+          var el = document.getElementById('apiBaseInput');
+          var url = el.value.trim();
+          var box = document.getElementById('apiAlert');
+          box.className = 'alert alert-info alert-box mt-3';
+          box.textContent = 'Probando conexión…';
+          box.classList.remove('d-none');
+          window.balansoftApi('/panel/login', {
+            method: 'POST',
+            body: { email: 'prueba@valida', password: 'x' },
+            auth: false,
+          })
+            .then(function () {
+              box.className = 'alert alert-success alert-box mt-3';
+              box.textContent = 'El servidor respondió correctamente.';
+            })
+            .catch(function (err) {
+              var msg = err.message;
+              if (err.status === 404) {
+                msg =
+                  'Se alcanzó un servidor, pero no expone el panel del proveedor. ' +
+                  '¿Es la API con APP_ROLE=server? Usa la URL del servidor central ' +
+                  '(p. ej. http://127.0.0.1:8001/api/v1), no la de la estación (8000).';
+              }
+              box.className = 'alert alert-warning alert-box mt-3';
+              box.textContent = msg;
+            });
+        });
+
+        function showApiError(msg) {
+          var box = document.getElementById('apiAlert');
+          box.textContent = msg;
+          box.className = 'alert alert-danger alert-box mt-3';
+          box.classList.remove('d-none');
+        }
+
+        function showLoginError(msg) {
+          var box = document.getElementById('alertBox');
+          if (!msg) {
+            box.classList.add('d-none');
+            return;
+          }
+          box.textContent = msg;
+          box.classList.remove('d-none');
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var btn = document.getElementById('btnLogin');
+          var spinner = document.getElementById('spinner');
+          var icon = document.getElementById('loginIcon');
+          btn.disabled = true;
+          spinner.classList.remove('d-none');
+          icon.classList.add('d-none');
+          showLoginError('');
+
+          window.BalansoftAuth
+            .login(
+              document.getElementById('email').value.trim(),
+              document.getElementById('password').value
+            )
+            .then(function (payload) {
+              window.BalansoftAuth.saveSession(payload);
+              window.location.replace('panel.html');
+            })
+            .catch(function (err) {
+              if (err.status === 404) {
+                showLoginError(
+                  'Not Found: la URL no es la API del servidor central. ' +
+                    'Abre el engranaje y usa p. ej. http://127.0.0.1:8001/api/v1 (no la estación en 8000).'
+                );
+              } else {
+                showLoginError(err.message);
+              }
+              btn.disabled = false;
+              spinner.classList.add('d-none');
+              icon.classList.remove('d-none');
+            });
+        });
+      })();
+
+      function togglePasswordVisibility() {
+        var passwordInput = document.getElementById('password');
+        var icon = document.getElementById('togglePasswordIcon');
+        if (passwordInput.type === 'password') {
+          passwordInput.type = 'text';
+          icon.className = 'bi bi-eye-slash';
+        } else {
+          passwordInput.type = 'password';
+          icon.className = 'bi bi-eye';
+        }
+      }
+    </script>
+  </body>
+</html>
