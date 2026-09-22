@@ -405,7 +405,8 @@
         };
         if (key) payload.licencia_key = key;
         if (lmData) {
-          payload.licencia_tier = lmData.tier;
+          var t = String(lmData.tier || '').toUpperCase();
+          if (t === 'DEMO' || t === 'CENTRAL') payload.licencia_tier = lmData.tier;
           payload.max_equipos = lmData.max_equipos;
           payload.max_usuarios = lmData.max_usuarios;
           if (lmData.expires_at) {

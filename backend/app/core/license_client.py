@@ -331,6 +331,69 @@ class LicenseClient:
             raise LicenseError(resp.text)
         return resp.json()
 
+    def validate_or_activate(
+        self,
+        license_key: str,
+        hardware_id: str,
+        *,
+        mac_address: str | None = None,
+        device_brand: str | None = None,
+        device_model: str | None = None,
+        os_version: str | None = None,
+        product_code: str | None = None,
+    ) -> LicenseInfo:
+        """Valida la licencia en el LM y, si aún no está activada, la activa.
+
+        El LM exige ``POST /activate`` antes del primer ``/validate``: mientras
+        la licencia está ``AVAILABLE``, ``/validate`` responde ``valid=false``
+        («Licencia no activada — debe activarse primero mediante /activate»).
+        Este método cierra esa brecha: si ``/validate`` señala que la licencia
+        está disponible o que el dispositivo de una CENTRAL aún no está
+        registrado, intenta activarla y vuelve a validar.
+
+        NO se auto-activa ante ``HARDWARE_MISMATCH`` (DEMO/MONOPUESTO ya
+        activada en otra máquina, o titular de otra cuenta) ni ante estados
+        SUSPENDIDA/VENCIDA/INACTIVA/EXPIRED: ahí la respuesta de ``/validate``
+        es el estado real y se devuelve tal cual, sin tocar el LM.
+        """
+        info = self.validate(
+            license_key,
+            hardware_id,
+            mac_address=mac_address,
+            device_brand=device_brand,
+            device_model=device_model,
+            os_version=os_version,
+            product_code=product_code,
+        )
+        if info.valid:
+            return info
+        estado = (info.status or "").upper()
+        if estado not in ("AVAILABLE", "DEVICE_NOT_REGISTERED"):
+            return info
+        try:
+            self.activate(
+                license_key,
+                hardware_id,
+                mac_address=mac_address,
+                device_brand=device_brand,
+                device_model=device_model,
+                os_version=os_version,
+            )
+        except LicenseError as exc:
+            # Carrera (otro dispositivo activó en paralelo) o límite de
+            # dispositivos alcanzado: el re-validate devuelve lo que manda el LM.
+            log.warning("Auto-activación fallida (%s); se re-valida estado real: %s",
+                        license_key, exc)
+        return self.validate(
+            license_key,
+            hardware_id,
+            mac_address=mac_address,
+            device_brand=device_brand,
+            device_model=device_model,
+            os_version=os_version,
+            product_code=product_code,
+        )
+
     def check(self, license_key: str) -> dict[str, Any]:
         resp = httpx.get(
             f"{self.base_url}/{license_key}/check",

@@ -25,7 +25,7 @@ class ServerRegisterRequest(BaseModel):
     usuario_nombre: str = Field(..., min_length=3, max_length=150)
     password: str = Field(..., min_length=6, max_length=128)
     licencia_key: str = Field(..., min_length=10, max_length=255)
-    licencia_tier: str = Field(default="DEMO", pattern="^(DEMO|MONOPUEST[OA]|CENTRAL)$")
+    licencia_tier: str = Field(default="DEMO", pattern="^(DEMO|CENTRAL)$")
     fecha_expira: datetime
     max_usuarios: int | None = None
     max_equipos: int | None = None
@@ -157,7 +157,7 @@ class PanelCuentaUpdateRequest(BaseModel):
 
     licencia_key: str | None = Field(None, min_length=10, max_length=255)
     licencia_tier: str | None = Field(
-        None, pattern="^(DEMO|MONOPUEST[OA]|CENTRAL)$"
+        None, pattern="^(DEMO|CENTRAL)$"
     )
     licencia_status: str | None = Field(
         None, pattern="^(ACTIVA|INACTIVA|SUSPENDIDA|VENCIDA|ANULADA)$"
@@ -174,7 +174,7 @@ class ServerLicenciaNuevaRequest(BaseModel):
 
     id_cuenta: uuid.UUID
     licencia_key: str = Field(..., min_length=10, max_length=255)
-    licencia_tier: str = Field(default="DEMO", pattern="^(DEMO|MONOPUEST[OA]|CENTRAL)$")
+    licencia_tier: str = Field(default="DEMO", pattern="^(DEMO|CENTRAL)$")
     fecha_expira: datetime
     max_usuarios: int | None = None
     max_equipos: int | None = None

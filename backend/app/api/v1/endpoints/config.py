@@ -96,7 +96,7 @@ async def get_account_info(
     if empresa.licencia_key:
         try:
             info: LicenseInfo = await asyncio.to_thread(
-                get_license_client().validate,
+                get_license_client().validate_or_activate,
                 empresa.licencia_key,
                 (identidad.hardware_id if identidad else None)
                 or obtener_hardware_id(),

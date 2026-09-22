@@ -189,7 +189,7 @@ async def test_licencia_suspendida_bloquea_login(_server_engine, server_db) -> N
                 "usuario_nombre": "Admin",
                 "password": "pass123456",
                 "licencia_key": f"BWS-{uuid.uuid4().hex[:12].upper()}",
-                "licencia_tier": "MONOPUESTA",
+                "licencia_tier": "CENTRAL",
                 "fecha_expira": "2027-12-31T00:00:00Z",
             },
         )
@@ -287,7 +287,7 @@ async def test_sync_usuarios_crea_credenciales(_server_engine, server_db) -> Non
                 "usuario_nombre": "Admin",
                 "password": "pass123456",
                 "licencia_key": f"BWS-{uuid.uuid4().hex[:12].upper()}",
-                "licencia_tier": "MONOPUESTA",
+                "licencia_tier": "CENTRAL",
                 "fecha_expira": "2027-12-31T00:00:00Z",
             },
         )
@@ -378,7 +378,7 @@ async def test_panel_verificar_licencia_contra_lm(
     apta: dict = {
         "exists": True,
         "status": "AVAILABLE",
-        "tier": "MONOPUESTA",
+        "tier": "CENTRAL",
         "plan_type": "basic",
         "product_code": settings.license_product_code,
         "has_client": True,
@@ -413,7 +413,7 @@ async def test_panel_verificar_licencia_contra_lm(
         body = r.json()
         assert body["valida"] is True
         assert body["status"] == "AVAILABLE"
-        assert body["tier"] == "MONOPUESTA"
+        assert body["tier"] == "CENTRAL"
         assert "activará" in body["message"]
 
         r = await ac.post(
@@ -581,7 +581,7 @@ async def test_panel_cuenta_detalle(_server_engine, server_db) -> None:
         Licencia(
             id_cuenta=cuenta.id_cuenta,
             licencia_key=f"BWS-DET-{uuid.uuid4().hex[:12].upper()}",
-            licencia_tier="MONOPUESTA",
+            licencia_tier="CENTRAL",
             licencia_status="ACTIVA",
             fecha_expira=datetime(2030, 1, 1),
         )

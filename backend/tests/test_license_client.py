@@ -17,12 +17,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from app.core.license_client import (
     SIGNED_FIELDS,
     LicenseError,
+    LicenseInfo,
     LicenseSignatureError,
     _verify_signature,
     canonical_json,
     check_freshness,
     check_nonce,
     check_signature_metadata,
+    get_license_client,
     validar_respuesta_firmada,
     validate_license_key_format,
 )
@@ -178,3 +180,103 @@ class TestMetadata:
             check_freshness((ahora_naive - timedelta(days=2)).isoformat())
         with pytest.raises(LicenseSignatureError):
             check_freshness("no-es-fecha")
+
+
+class TestValidarOAutoactivar:
+    """Pruebas de la lógica de auto-activación (validate_or_activate)."""
+
+    def test_autoactiva_cuando_licencia_disponible(self) -> None:
+        client = get_license_client()
+        seq = {"n": 0}
+
+        def fake_validate(key, hw, **kw):
+            if seq["n"] == 0:
+                seq["n"] = 1
+                return LicenseInfo(
+                    valid=False,
+                    status="AVAILABLE",
+                    tier="DEMO",
+                    message="Licencia no activada — debe activarse primero mediante /activate",
+                )
+            return LicenseInfo(valid=True, status="ACTIVE", tier="DEMO", message="ok")
+
+        def fake_activate(key, hw, **kw):
+            return {"ok": True}
+
+        client.validate = fake_validate  # type: ignore[method-assign]
+        client.activate = fake_activate  # type: ignore[method-assign]
+
+        info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
+        assert info.valid is True
+        assert info.status == "ACTIVE"
+
+    def test_autoactiva_dispositivo_central_no_registrado(self) -> None:
+        client = get_license_client()
+        seq = {"n": 0}
+
+        def fake_validate(key, hw, **kw):
+            if seq["n"] == 0:
+                seq["n"] = 1
+                return LicenseInfo(
+                    valid=False,
+                    status="DEVICE_NOT_REGISTERED",
+                    tier="CENTRAL",
+                    message="Dispositivo no registrado en esta licencia CENTRAL",
+                )
+            return LicenseInfo(valid=True, status="ACTIVE", tier="CENTRAL", message="ok")
+
+        def fake_activate(key, hw, **kw):
+            return {"ok": True}
+
+        client.validate = fake_validate  # type: ignore[method-assign]
+        client.activate = fake_activate  # type: ignore[method-assign]
+
+        info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
+        assert info.valid is True
+        assert info.tier == "CENTRAL"
+
+    def test_no_autoactiva_en_hardware_mismatch(self) -> None:
+        client = get_license_client()
+
+        info_original = LicenseInfo(
+            valid=False,
+            status="HARDWARE_MISMATCH",
+            tier="DEMO",
+            message="Hardware fingerprint no coincide",
+        )
+
+        client.validate = lambda *a, **k: info_original  # type: ignore[method-assign]
+        llamado = {"activado": False}
+
+        def fake_activate(key, hw, **kw):
+            llamado["activado"] = True
+            return {"ok": True}
+
+        client.activate = fake_activate  # type: ignore[method-assign]
+
+        info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-OTRO")
+        assert info is info_original  # debe devolver la info original sin activar
+        assert not llamado["activado"]
+
+    def test_no_autoactiva_en_estado_suspendida(self) -> None:
+        client = get_license_client()
+
+        info_original = LicenseInfo(
+            valid=False,
+            status="SUSPENDIDA",
+            tier="CENTRAL",
+            message="Licencia en estado SUSPENDIDA",
+        )
+
+        client.validate = lambda *a, **k: info_original  # type: ignore[method-assign]
+        llamado = {"activado": False}
+
+        def fake_activate(key, hw, **kw):
+            llamado["activado"] = True
+            return {"ok": True}
+
+        client.activate = fake_activate  # type: ignore[method-assign]
+
+        info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
+        assert info is info_original
+        assert not llamado["activado"]

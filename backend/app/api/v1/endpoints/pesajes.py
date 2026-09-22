@@ -102,7 +102,9 @@ async def create_weighing(
     _verificar_peso_manual(payload.es_peso_manual, current_user)
 
     # Validar licencia online (best-effort: si el LM no responde, se bloquea
-    # la creación para no operar sin licencia verificada).
+    # la creación para no operar sin licencia verificada). Si la licencia aún
+    # no está activada (AVAILABLE) o el dispositivo de una CENTRAL no está
+    # registrado, se auto-activa en el LM antes de validar.
     lic_info: LicenseInfo | None = None
     if empresa.licencia_key:
         identidad = (
@@ -114,7 +116,7 @@ async def create_weighing(
             identidad.hardware_id if identidad else None
         ) or obtener_hardware_id()
         try:
-            info = get_license_client().validate(
+            info = get_license_client().validate_or_activate(
                 empresa.licencia_key,
                 hardware_id,
                 product_code=settings.license_product_code,

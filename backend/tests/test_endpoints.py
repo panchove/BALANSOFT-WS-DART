@@ -34,6 +34,12 @@ class FakeLM:
     def validate(self, license_key: str, hardware_id: str, **kwargs):
         return LicenseInfo(valid=True, tier="ENTERPRISE", status="ACTIVE", message="ok")
 
+    def activate(self, license_key: str, hardware_id: str, **kwargs):
+        return {"ok": True, "status": "ACTIVE"}
+
+    def validate_or_activate(self, license_key: str, hardware_id: str, **kwargs):
+        return self.validate(license_key, hardware_id, **kwargs)
+
 
 class FakeHAL:
     """HAL de balanza falso para probar el endpoint de conexión."""

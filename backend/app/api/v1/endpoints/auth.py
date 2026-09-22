@@ -185,7 +185,7 @@ async def login(
         hardware_id = payload.hardware_id or obtener_hardware_id()
         try:
             info = await asyncio.to_thread(
-                lambda: get_license_client().validate(
+                lambda: get_license_client().validate_or_activate(
                     licencia_key,
                     hardware_id,
                     mac_address=payload.mac_address,
@@ -458,7 +458,7 @@ async def validate_license(
     hardware_id = payload.hardware_id or obtener_hardware_id()
     try:
         info = await asyncio.to_thread(
-            lambda: get_license_client().validate(
+            lambda: get_license_client().validate_or_activate(
                 licencia_key,
                 hardware_id,
                 product_code=settings.license_product_code,
@@ -493,12 +493,13 @@ async def licencia_empresa(
     conteo actual de boletos de la empresa (uso de registros en DEMO).
     """
     tier = (empresa.licencia_tier or "").upper()
+    max_registros = settings.demo_max_records if tier == "DEMO" else None
+    max_sesiones = None if tier == "CENTRAL" else (3 if tier == "DEMO" else 1)
     consumo = await db.scalar(
         select(func.count())
         .select_from(BoletoPesaje)
         .where(BoletoPesaje.id_empresa == empresa.id_empresa)
     )
-    max_registros = settings.demo_max_records if tier == "DEMO" else None
     key = empresa.licencia_key or ""
     key_masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else ("••••" if key else None)
     return {
@@ -510,7 +511,7 @@ async def licencia_empresa(
         else None,
         "features": {
             "max_registros": max_registros,
-            "max_sesiones": 1,
+            "max_sesiones": max_sesiones,
         },
         "licencia_key_masked": key_masked,
         "registros_actuales": consumo or 0,

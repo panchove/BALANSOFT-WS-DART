@@ -77,13 +77,12 @@ def _token_digest(token: str) -> str:
 def _max_sesiones_default(tier: str) -> int | None:
     """Sesiones concurrentes por defecto según tier de la licencia.
 
-    DEMO → 1, MONOPUESTA → 2, CENTRAL/AUTO → ilimitado (None).
+    Balansoft WS no ofrece MONOPUESTA: una estación de pesaje trae mínimo 3
+    tipos de trabajo (3 sesiones). DEMO → 3, CENTRAL/AUTO → ilimitado (None).
     """
     upper = (tier or "").strip().upper()
-    if upper.startswith("MONO"):
-        return 2
     if upper == "DEMO":
-        return 1
+        return 3
     return None
 
 
@@ -917,6 +916,13 @@ async def panel_verificar_licencia(
         return _devolver_no_valida(
             f"La licencia es del producto «{producto or 'desconocido'}», "
             f"no de «{settings.license_product_code}»"
+        )
+    tier = (info.get("tier") or "").strip().upper()
+    if tier not in ("DEMO", "CENTRAL"):
+        return _devolver_no_valida(
+            f"El tier «{info.get('tier') or 'desconocido'}» no es válido para "
+            "Balansoft WS: solo se admiten licencias DEMO o CENTRAL (una "
+            "estación de pesaje necesita mínimo 3 sesiones/tipos de trabajo)."
         )
     if not info.get("has_client"):
         return _devolver_no_valida(

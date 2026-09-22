@@ -18,7 +18,10 @@ class License {
   });
 
   bool get isDemo => (tier ?? '').toUpperCase() == 'DEMO';
-  bool get isMonopuesta => (tier ?? '').toUpperCase() == 'MONOPUESTA';
+  bool get isMonopuesta {
+    final t = (tier ?? '').toUpperCase();
+    return t == 'MONOPUESTA' || t == 'MONOPUESTO';
+  }
   bool get isCentral => (tier ?? '').toUpperCase() == 'CENTRAL';
 
   int get maxRecords => features['max_registros'] ?? 10;
