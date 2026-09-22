@@ -14,6 +14,7 @@ from app.models import (
     Almacen,
     Balanza,
     Camion,
+    Categoria,
     Conductor,
     Marca,
     ModeloCamion,
@@ -31,11 +32,16 @@ CATALOGS: dict[str, dict[str, Any]] = {
     "camiones": {"model": Camion, "empresa_col": "id_empresa", "id_col": "id"},
     "remolques": {"model": Remolque, "empresa_col": "id_empresa", "id_col": "id_remolque"},
     "marcas": {"model": Marca, "empresa_col": "id_empresa", "id_col": "id_marca"},
-    "modelos_camion": {"model": ModeloCamion, "empresa_col": "id_empresa", "id_col": "id_modelo_camion"},
+    "modelos_camion": {
+        "model": ModeloCamion,
+        "empresa_col": "id_empresa",
+        "id_col": "id_modelo_camion",
+    },
     "transportes": {"model": Transporte, "empresa_col": "id_empresa", "id_col": "id_transporte"},
     "conductores": {"model": Conductor, "empresa_col": "id_empresa", "id_col": "cedula_dni"},
     "productos": {"model": Producto, "empresa_col": "id_empresa", "id_col": "id_producto"},
     "almacenes": {"model": Almacen, "empresa_col": "id_empresa", "id_col": "id_almacen"},
+    "categorias": {"model": Categoria, "empresa_col": "id_empresa", "id_col": "id_categoria"},
     "balanzas": {"model": Balanza, "empresa_col": "id_empresa", "id_col": "id_balanza"},
     "terceros": {"model": Tercero, "empresa_col": "id_empresa", "id_col": "id_tercero"},
 }
@@ -51,9 +57,7 @@ class CatalogService:
             result[name] = [self._dump(r) for r in rows]
         return result
 
-    async def list_by_name(
-        self, db: AsyncSession, empresa_id: uuid.UUID, name: str
-    ) -> list:
+    async def list_by_name(self, db: AsyncSession, empresa_id: uuid.UUID, name: str) -> list:
         cfg = CATALOGS.get(name)
         if cfg is None:
             raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")

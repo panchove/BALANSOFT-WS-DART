@@ -75,6 +75,12 @@ class Empresa(Base):
     telefono: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    formato_ticket: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, default="PDF", server_default="PDF"
+    )
+    ruta_exportacion_reportes: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
     licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -101,9 +107,7 @@ class Usuario(Base):
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
     )
-    id_credencial: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    id_credencial: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     nombre: Mapped[str] = mapped_column(String(150))
     email: Mapped[str] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -127,9 +131,7 @@ class Usuario(Base):
 class Marca(Base):
     __tablename__ = "marcas"
 
-    id_marca: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
+    id_marca: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
     )
@@ -156,9 +158,7 @@ class ModeloCamion(Base):
         UUID(as_uuid=True), ForeignKey("marcas.id_marca"), nullable=True
     )
     nombre: Mapped[str] = mapped_column(String(100))
-    capacidad_carga_ton: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True
-    )
+    capacidad_carga_ton: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     foto_referencial_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ejes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -172,9 +172,7 @@ class ModeloCamion(Base):
 class Camion(Base):
     __tablename__ = "camiones"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
     )
@@ -262,6 +260,27 @@ class Conductor(Base):
     )
 
 
+class Categoria(Base):
+    __tablename__ = "categorias"
+
+    id_categoria: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    nombre: Mapped[str] = mapped_column(String(150))
+    descripcion: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
 class Producto(Base):
     __tablename__ = "productos"
 
@@ -270,6 +289,9 @@ class Producto(Base):
     )
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    id_categoria: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("categorias.id_categoria")
     )
     codigo: Mapped[str | None] = mapped_column(String(50), nullable=True)
     nombre: Mapped[str] = mapped_column(String(150))
@@ -374,6 +396,39 @@ class Tercero(Base):
 # ---------------------------------------------------------------------------
 
 
+class SerieNumeracion(Base):
+    """Modelo de numeración de documentos de una empresa (1..N por empresa).
+
+    La estación selecciona (desde el campo de trabajo) CUÁL serie usa cada
+    boleto; `activa` marca la que se usa por defecto. El contador `siguiente`
+    se avanza con ``FOR UPDATE`` al emitir el número (sin carreras y sin
+    reutilización). Modelado según fichas 015 y el patrón FOR UPDATE de
+    ``weighing_service._generar_numero``.
+    """
+
+    __tablename__ = "series_numeracion"
+
+    id_serie: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa"), nullable=False
+    )
+    nombre: Mapped[str] = mapped_column(String(80))
+    prefijo: Mapped[str] = mapped_column(String(20))
+    inicio: Mapped[int] = mapped_column(Integer, default=1)
+    siguiente: Mapped[int] = mapped_column(Integer)
+    digitos: Mapped[int] = mapped_column(Integer, default=8)
+    activa: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        default=lambda: _now_utc(),
+        onupdate=lambda: _now_utc(),
+    )
+
+
 class BoletoPesaje(Base):
     __tablename__ = "boletos_pesaje"
 
@@ -385,12 +440,13 @@ class BoletoPesaje(Base):
     ESTADO_ANULADO = "ANULADO"
     ESTADO_COMPLETADO = "CERRADO"  # alias legacy
 
-    boleto: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
+    boleto: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     numero_boleto: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True)
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    id_serie: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series_numeracion.id_serie"), nullable=True
     )
     id_vehiculo: Mapped[str | None] = mapped_column(String(20), nullable=True)
     remolque: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -476,9 +532,7 @@ class BoletoPesaje(Base):
 class SyncQueue(Base):
     __tablename__ = "sync_queue"
 
-    id_sync: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
+    id_sync: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     id_empresa: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
     )
@@ -500,12 +554,8 @@ class SyncQueue(Base):
 class SyncLog(Base):
     __tablename__ = "sync_logs"
 
-    id_log: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
-    id_empresa: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    id_log: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    id_empresa: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     tipo: Mapped[str] = mapped_column(String(30))
     entidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
     registros: Mapped[int] = mapped_column(Integer, default=0)
@@ -530,9 +580,7 @@ class Auditoria(Base):
     id_usuario: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id_usuario"), nullable=True
     )
-    id_empresa: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    id_empresa: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     accion: Mapped[str] = mapped_column(String(100))
     entidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
     entidad_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -548,9 +596,7 @@ class PasswordResetToken(Base):
 
     __tablename__ = "password_reset_tokens"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=_uuid
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     id_usuario: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id_usuario", ondelete="CASCADE")
     )
@@ -637,4 +683,30 @@ class Kardex(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Seguridad y Accesos: matriz rol → módulo
+# ---------------------------------------------------------------------------
+
+
+class PermisoAcceso(Base):
+    """Acceso de un rol a un módulo de la estación.
+
+    `acceso` admite: ``ver`` (solo lectura), ``editar`` (lectura y escritura),
+    ``ninguno`` (oculto). La matriz por defecto vive en
+    ``app/core/seguridad_matrix.py``.
+    """
+
+    __tablename__ = "permisos_acceso"
+
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa"), primary_key=True
+    )
+    rol: Mapped[str] = mapped_column(String(30), primary_key=True)
+    modulo: Mapped[str] = mapped_column(String(50), primary_key=True)
+    acceso: Mapped[str] = mapped_column(String(20), default="ver")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
     )

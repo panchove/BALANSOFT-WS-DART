@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -153,6 +154,11 @@ class SerialScaleHAL(ScaleHAL):
         """
         import serial  # import local, ya validado en read_weight
 
+        # Si el puerto es una ruta Unix (/dev/...) y no existe físicamente en el sistema,
+        # evitar lecturas y retries innecesarios.
+        if self.port.startswith("/") and not os.path.exists(self.port):
+            return None
+
         lock = self._lock_for(self.port)
         with lock:
             last_exc: Exception | None = None
@@ -171,6 +177,8 @@ class SerialScaleHAL(ScaleHAL):
                 except serial.SerialException as exc:
                     last_exc = exc
                     msg = str(exc).lower()
+                    if "no such file" in msg or "file not found" in msg or "errno 2" in msg:
+                        return None
                     if "readiness" in msg or "could not open" in msg:
                         # El pty quedó ocupado un instante; reintenta.
                         time.sleep(0.15)

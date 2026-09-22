@@ -7,6 +7,7 @@ import '../../domain/entities/user.dart';
 import '../../domain/repositories/i_auth_repository.dart';
 import '../../core/security/device_info.dart';
 import '../../core/security/secure_storage_service.dart';
+import '../../core/utils/save_file_utils.dart';
 import '../datasources/remote/api_client.dart';
 import '../datasources/local/local_storage.dart';
 import '../models/user_model.dart';
@@ -60,13 +61,37 @@ class AuthRepository implements IAuthRepository {
 
     Response response;
     var offline = false;
-    try {
-      response = await _apiClient.login(body);
-    } on DioException catch (e) {
-      if (!_esErrorSinConexion(e)) rethrow;
-      // Sin conexión al servidor de licencias: validar contra la DB local.
-      offline = true;
-      response = await _apiClient.loginLocal(body);
+
+    final serverUrl = AppConfig.serverApiUrl?.trim();
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      // 1) CENTRAL-first: el backend local valida la cuenta en el servidor
+      // central (DB del panel) y hace espejo local (empresa + admin) si existe.
+      try {
+        response = await _apiClient.loginCentral({
+          ...body,
+          'server_url': serverUrl,
+        });
+      } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        if (status == 403) {
+          // Límite de sesiones de la licencia alcanzado en el central: no debe
+          // sortearse con el login local.
+          rethrow;
+        }
+        if (_esErrorSinConexion(e) || status == 400 || status == 502) {
+          // Central caído/sin configurar: continuar offline con la DB local.
+          offline = true;
+          response = await _apiClient.loginLocal(body);
+        } else {
+          // 401: la credencial no existe en el panel → puede ser un usuario
+          // operativo local creado por el admin. Intentar login local.
+          response = await _intentarLoginLocalOOffline(body);
+        }
+      }
+    } else {
+      // Estación autónoma (sin servidor central): login local con LM primero,
+      // y respaldo offline si la red cae.
+      response = await _intentarLoginLocalOOffline(body);
     }
 
     final data = response.data;
@@ -76,6 +101,14 @@ class AuthRepository implements IAuthRepository {
     final user = UserModel.fromJson(data['user']);
     await _localStorage.saveUser(user);
     await AppConfig.setOffline(offline);
+
+    if (data['empresa'] is Map<String, dynamic>) {
+      final emp = data['empresa'] as Map<String, dynamic>;
+      final rutaExp = emp['ruta_exportacion_reportes'] as String?;
+      if (rutaExp != null && rutaExp.trim().isNotEmpty) {
+        await SaveFileUtils.setRutaPersonalizada(rutaExp);
+      }
+    }
 
     // Best-effort: registrar la identidad local y empujar la cola de usuarios.
     // Nunca debe hacer fallar el login: se captura cualquier error.
@@ -89,6 +122,21 @@ class AuthRepository implements IAuthRepository {
     ));
 
     return user;
+  }
+
+  /// Login local estándar (valida licencia con el LM) y, si la red cae, cae al
+  /// respaldo OFFLINE validando solo las credenciales de la DB local.
+  Future<Response> _intentarLoginLocalOOffline(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      return await _apiClient.login(body);
+    } on DioException catch (e) {
+      if (_esErrorSinConexion(e)) {
+        return await _apiClient.loginLocal(body);
+      }
+      rethrow;
+    }
   }
 
   /// Tras un login con sesión válida, persiste la identidad de la estación y
@@ -180,11 +228,15 @@ class AuthRepository implements IAuthRepository {
 
     if (email != null && email.isNotEmpty && password != null && password.isNotEmpty) {
       try {
-        final hw = hardwareId ?? (await DeviceInfo.getHardwareInfo()).hardwareId;
+        final hw = await DeviceInfo.getHardwareInfo();
         final resp = await _apiClient.serverLogin(
           email: email,
           password: password,
-          hardwareId: hw,
+          hardwareId: hardwareId ?? hw.hardwareId,
+          deviceBrand: hw.brand,
+          deviceModel: hw.model,
+          osVersion: hw.osVersion,
+          macAddress: hw.macAddress,
         );
         final acceso = resp.data['access_token'] as String?;
         final refresco = resp.data['refresh_token'] as String?;
@@ -282,7 +334,7 @@ class AuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<void> restoreSession() async {
+  Future<SesionRestaurada> restoreSession() async {
     final token = await _secureStorage.getAccessToken();
     if (token != null && token.isNotEmpty) {
       _apiClient.setToken(token);
@@ -291,6 +343,45 @@ class AuthRepository implements IAuthRepository {
     if (serverToken != null && serverToken.isNotEmpty) {
       _apiClient.setServerToken(serverToken);
     }
+
+    // Validar la sesión guardada intentando renovar el access token. Si el
+    // servidor rechaza con 401 (p.ej. BD recién vaciada/reinstalada) la sesión
+    // local no vale y se limpia para volver al login. Si es un problema de red,
+    // se conserva la sesión offline (offline-first) y el operador trabaja con
+    // la BD local.
+    final refresh = await _secureStorage.getRefreshToken();
+    if (refresh == null || refresh.isEmpty) {
+      await _limpiarSesionLocal();
+      return SesionRestaurada.invalida;
+    }
+    try {
+      await refreshToken(refresh);
+      try {
+        final perfil = await _apiClient.getEmpresaPerfil();
+        final rutaExp = perfil['ruta_exportacion_reportes'] as String?;
+        if (rutaExp != null && rutaExp.trim().isNotEmpty) {
+          await SaveFileUtils.setRutaPersonalizada(rutaExp);
+        }
+      } catch (_) {}
+      return SesionRestaurada.ok;
+    } on DioException catch (e) {
+      if (_esErrorSinConexion(e)) {
+        return SesionRestaurada.offline;
+      }
+      await _limpiarSesionLocal();
+      return SesionRestaurada.invalida;
+    }
+  }
+
+  /// Descarta la sesión local (tokens + usuario cacheado) tras detectar que el
+  /// refresh token fue rechazado por el servidor.
+  Future<void> _limpiarSesionLocal() async {
+    _apiClient.clearToken();
+    _apiClient.setServerToken(null);
+    await _secureStorage.clearAuth();
+    await _secureStorage.clearServerAuth();
+    await _localStorage.clearAuth();
+    await AppConfig.setOffline(false);
   }
 
   @override

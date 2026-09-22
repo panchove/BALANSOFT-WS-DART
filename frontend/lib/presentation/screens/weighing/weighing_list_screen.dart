@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
@@ -5,6 +6,7 @@ import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/weighing_repository.dart' show WeighingRepository;
+import '../../../domain/entities/weighing.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
@@ -33,6 +35,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
   DateTimeRange? _rango;
   String? _estado;
   bool _soloPendientes = false;
+  final String _formatoDefault = 'PDF';
   Product? _producto;
   ThirdParty? _cliente;
   CatalogData _catalogos = CatalogData.empty;
@@ -68,22 +71,33 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
     if (mounted) setState(() => _rango = picked);
   }
 
-  String _corto(String s) {
-    if (s.length > 8) {
-      return '${s.substring(0, 8)}...';
+  Future<void> _imprimirTicket(String boleto, String nombreBoleto,
+      {String? formato}) async {
+    final fmt = (formato ?? _formatoDefault).toUpperCase();
+    if (boleto.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Este pesaje aún no tiene número de boleto (pendiente de sincronizar).'),
+            backgroundColor: SwsColors.warning,
+          ),
+        );
+      }
+      return;
     }
-    return s;
-  }
-
-  Future<void> _imprimirTicket(String boleto, String nombreBoleto) async {
     try {
-      final response = await di.sl<WeighingRepository>().getTicketPdf(boleto);
-      final bytes = response.data;
-      if (bytes is! List<int> || bytes.isEmpty) {
-        throw Exception('El servidor no devolvió un PDF válido.');
+      final Response response = fmt == 'TXT'
+          ? await di.sl<WeighingRepository>().getTicketTxt(boleto)
+          : await di.sl<WeighingRepository>().getTicketPdf(boleto);
+      final dynamic datos = response.data;
+      final bytes = (datos is List<int>) ? datos : null;
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('El servidor no devolvió un ${fmt == 'TXT' ? 'TXT' : 'PDF'} válido.');
       }
       final ruta = await SaveFileUtils.save(
-          bytes, 'ticket_$nombreBoleto.pdf', subcarpeta: 'tickets');
+          bytes, 'ticket_$nombreBoleto.${fmt == 'TXT' ? 'txt' : 'pdf'}',
+          subcarpeta: 'tickets');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -178,22 +192,48 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                             size: 26,
                           ),
                           title: Text(
-                              '${w.idVehiculo ?? 'N/A'} — ${w.numeroBoleto ?? _corto(w.boleto)}'),
-                          subtitle: Text(
-                            '${w.estadoBoleto} · '
-                            '${w.fechaHoraEntrada.toLocal().toString().substring(0, 16)} · '
-                            '${NumberUtils.formatKg(w.pesoEntradaVehiculo)}',
+                              '${w.idVehiculo ?? 'N/A'} — ${w.numeroBoleto ?? 'Boleto #${i + 1}'}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  _TipoMovimientoChip(w: w),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      '${w.estadoBoleto} · '
+                                      '${w.fechaHoraEntrada.toLocal().toString().substring(0, 16)} · '
+                                      '${NumberUtils.formatKg(w.pesoEntradaVehiculo)}',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                           isThreeLine: !w.isClosed,
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                tooltip: 'Imprimir ticket',
-                                icon: const Icon(Icons.print_outlined),
-                                color: SwsColors.gray600,
-                                onPressed: () => _imprimirTicket(
-                                    w.boleto, w.numeroBoleto ?? w.boleto),
+                              PopupMenuButton<String>(
+                                tooltip: 'Imprimir ticket (PDF o TXT)',
+                                enabled: w.boleto.isNotEmpty,
+                                icon: const Icon(Icons.print_outlined,
+                                    color: SwsColors.gray600),
+                                onSelected: (formato) => _imprimirTicket(
+                                    w.boleto,
+                                    w.numeroBoleto ?? w.boleto,
+                                    formato: formato),
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                      value: 'PDF',
+                                      child: Text('Ticket PDF')),
+                                  const PopupMenuItem(
+                                      value: 'TXT',
+                                      child: Text('Ticket TXT')),
+                                ],
                               ),
                               const Icon(Icons.chevron_right),
                             ],
@@ -382,6 +422,42 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Etiqueta visual que distingue ENTRADA (boleto abierto/pendiente) de SALIDA
+/// (boleto cerrado). Un pesaje abierto aún no tiene peso de salida; uno cerrado
+/// ya completó ambas pesadas.
+class _TipoMovimientoChip extends StatelessWidget {
+  final Weighing w;
+  const _TipoMovimientoChip({required this.w});
+
+  @override
+  Widget build(BuildContext context) {
+    final esEntrada = w.isOpen;
+    final esAnulado = w.isAnulado;
+    final (label, color) = esAnulado
+        ? ('ANULADO', SwsColors.danger)
+        : esEntrada
+            ? ('ENTRADA', SwsColors.warning)
+            : ('SALIDA', SwsColors.success);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 }

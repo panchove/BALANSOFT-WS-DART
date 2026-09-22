@@ -29,6 +29,7 @@ class ServerRegisterRequest(BaseModel):
     fecha_expira: datetime
     max_usuarios: int | None = None
     max_equipos: int | None = None
+    max_sesiones: int | None = None
 
 
 class ServerLoginRequest(BaseModel):
@@ -74,6 +75,7 @@ class ServerLicenciaOut(BaseModel):
     fecha_expira: datetime
     max_usuarios: int | None = None
     max_equipos: int | None = None
+    max_sesiones: int | None = None
 
 
 class ServerLoginResponse(BaseModel):
@@ -163,6 +165,7 @@ class PanelCuentaUpdateRequest(BaseModel):
     fecha_expira: datetime | None = None
     max_usuarios: int | None = None
     max_equipos: int | None = None
+    max_sesiones: int | None = None
     password: str | None = Field(None, min_length=6, max_length=128)
 
 
@@ -175,6 +178,7 @@ class ServerLicenciaNuevaRequest(BaseModel):
     fecha_expira: datetime
     max_usuarios: int | None = None
     max_equipos: int | None = None
+    max_sesiones: int | None = None
 
 
 class ServerSyncItem(BaseModel):

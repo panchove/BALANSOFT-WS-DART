@@ -16,7 +16,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -46,6 +46,11 @@ class DatabaseHelper {
       await db.execute(
           'ALTER TABLE weighing_local ADD COLUMN fallido INTEGER DEFAULT 0');
     }
+    if (oldVersion < 5) {
+      try {
+        await db.execute('ALTER TABLE weighing_local ADD COLUMN id_serie TEXT');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -53,6 +58,7 @@ class DatabaseHelper {
       CREATE TABLE weighing_local (
         boleto TEXT PRIMARY KEY,
             numero_boleto TEXT,
+            id_serie TEXT,
             id_vehiculo TEXT,
             remolque INTEGER DEFAULT 0,
             id_remolque TEXT,

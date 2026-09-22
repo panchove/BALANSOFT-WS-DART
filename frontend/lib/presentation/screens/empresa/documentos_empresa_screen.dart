@@ -35,6 +35,18 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   String? _error;
   String? _logoUrl;
   List<PhotoCaptured> _logo = const [];
+  String _formatoTicket = 'PDF';
+
+  // Series de numeración (CRUD; el campo de trabajo elige cuál usar)
+  List<dynamic> _series = const [];
+  String? _idSerieActiva;
+  bool _seriesCargando = false;
+  bool _guardandoSerie = false;
+  String? _errorSeries;
+
+  final _serieNombreCtrl = TextEditingController();
+  final _seriePrefijoCtrl = TextEditingController();
+  final _serieDigitosCtrl = TextEditingController();
 
   bool get _esAdmin => _usuario?.isAdmin ?? false;
 
@@ -42,6 +54,7 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   void initState() {
     super.initState();
     _cargar();
+    _cargarSeries();
   }
 
   @override
@@ -67,6 +80,7 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
       setState(() {
         _usuario = u;
         _logoUrl = perfil['logo_url'] as String?;
+        _formatoTicket = '${perfil['formato_ticket'] ?? 'PDF'}';
         _logo = const [];
         _nombreFiscalCtrl.text = '${perfil['nombre_fiscal'] ?? ''}';
         _nombreComercialCtrl.text = '${perfil['nombre_comercial'] ?? ''}';
@@ -88,6 +102,116 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   String? _oNulo(String valor) {
     final v = valor.trim();
     return v.isEmpty ? null : v;
+  }
+
+  // ── CRUD Series de numeración (el boleto elige cuál usar) ──
+  Future<void> _cargarSeries() async {
+    setState(() {
+      _seriesCargando = true;
+      _errorSeries = null;
+    });
+    try {
+      final resp = await di.sl<ApiClient>().listSeries();
+      final data = resp.data;
+      final listado = (data is List)
+          ? data.cast<Map<String, dynamic>>()
+          : (data is Map && data['items'] is List)
+              ? (data['items'] as List).cast<Map<String, dynamic>>()
+              : const <Map<String, dynamic>>[];
+      if (!mounted) return;
+      setState(() {
+        _series = listado;
+        final activa = listado.where((s) => s['activa'] == true).firstOrNull;
+        final idActiva = activa != null
+            ? activa['id_serie']
+            : (listado.isNotEmpty ? listado.first['id_serie'] : null);
+        _idSerieActiva = idActiva?.toString();
+        _seriesCargando = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _seriesCargando = false;
+        _errorSeries = 'No se pudo cargar las series: $e';
+      });
+    }
+  }
+
+  Future<void> _guardarSerie() async {
+    if (!_esAdmin || _guardandoSerie) return;
+    final nombre = _serieNombreCtrl.text.trim();
+    final prefijo = _seriePrefijoCtrl.text.trim();
+    String? activarId;
+    if (nombre.isEmpty || prefijo.isEmpty) {
+      _snack('Nombre y prefijo son obligatorios', error: true);
+      return;
+    }
+    final digitosCtrl = _serieDigitosCtrl.text.trim();
+    final digitos = int.tryParse(digitosCtrl);
+    if (digitos == null || digitos < 4 || digitos > 12) {
+      _snack('Dígitos debe ser un número entre 4 y 12', error: true);
+      return;
+    }
+    setState(() => _guardandoSerie = true);
+    try {
+      final api = di.sl<ApiClient>();
+      final body = <String, dynamic>{
+        'nombre': nombre,
+        'prefijo': prefijo,
+        'digitos': digitos,
+      };
+      if (_idSerieActiva != null &&
+          _series.any((s) => '${s['id_serie']}' == _idSerieActiva)) {
+        await api.updateSeries(_idSerieActiva!, body);
+        activarId = _idSerieActiva;
+      } else {
+        final resp = await api.createSeries(body);
+        activarId = '${(resp.data as Map)['id_serie']}';
+        await api.marcarSerieActiva(activarId);
+      }
+      _serieNombreCtrl.clear();
+      _seriePrefijoCtrl.clear();
+      _serieDigitosCtrl.clear();
+      await _cargarSeries();
+      if (mounted && activarId != null) {
+        setState(() => _idSerieActiva = activarId);
+      }
+      _snack('Serie guardada');
+    } catch (e) {
+      _snack('Error al guardar la serie: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _guardandoSerie = false);
+    }
+  }
+
+  Future<void> _eliminarSerie() async {
+    if (!_esAdmin || _idSerieActiva == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar serie'),
+        content: const Text(
+          '¿Eliminar la serie activa? Los boletos existentes conservan su '
+          'número; solo deja de usarse para nuevos boletos.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await di.sl<ApiClient>().deleteSeries(_idSerieActiva!);
+      await _cargarSeries();
+      _snack('Serie eliminada');
+    } catch (e) {
+      _snack('Error al eliminar la serie: $e', error: true);
+    }
   }
 
   Future<void> _guardar() async {
@@ -116,6 +240,7 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
         'direccion': _oNulo(_direccionCtrl.text),
         'telefono': _oNulo(_telefonoCtrl.text),
         'email': _oNulo(_emailCtrl.text),
+        'formato_ticket': _formatoTicket,
         'logo_url': logoUrl,
       });
       if (!mounted) return;
@@ -286,6 +411,26 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
             _campo('Dirección', _direccionCtrl),
             _campo('Teléfono', _telefonoCtrl),
             _campo('Email', _emailCtrl, teclado: TextInputType.emailAddress),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: DropdownButtonFormField<String>(
+                initialValue: _formatoTicket,
+                items: const [
+                  DropdownMenuItem(value: 'PDF', child: Text('PDF')),
+                  DropdownMenuItem(value: 'TXT', child: Text('TXT')),
+                ],
+                onChanged: _esAdmin
+                    ? (v) {
+                        if (v != null) setState(() => _formatoTicket = v);
+                      }
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Formato al exportar',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
@@ -328,49 +473,175 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   }
 
   Widget _buildNumeracionCard() {
-    return const Card(
+    return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                CircleAvatar(
+                const CircleAvatar(
                   backgroundColor: SwsColors.blue100,
                   foregroundColor: SwsColors.primary,
                   child: Icon(Icons.tag_outlined, size: 20),
                 ),
-                SizedBox(width: 12),
-                Text(
-                  'Numeración de documentos',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Numeración de documentos',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
                 ),
+                if (_seriesCargando)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Recargar series',
+                    icon: const Icon(Icons.refresh_outlined),
+                    onPressed: _cargarSeries,
+                  ),
               ],
             ),
-            SizedBox(height: 10),
-            Text(
-              'Los boletos y tickets se numeran de forma correlativa '
-              'con el formato de serie configurado. Ejemplo: '
-              'SERIE-000000001, SERIE-000000002, …. '
-              'La numeración es única por empresa y la asigna el servidor.',
+            const SizedBox(height: 10),
+            const Text(
+              'Los boletos y tickets se numeran de forma correlativa con la '
+              'serie seleccionada. Ejemplo: TA-00000001, TA-00000002, …. '
+              'La numeración es única por empresa y el siguiente número se '
+              'reserva al instante (FOR UPDATE), sin salteos ni duplicados.',
               style: TextStyle(color: SwsColors.gray600, height: 1.4),
             ),
-            SizedBox(height: 10),
-            Text(
-              'Formato aplicado',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
-            ),
-            SizedBox(height: 6),
-            SelectableText(
-              'SERIE-000000001',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
+            if (_errorSeries != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _errorSeries!,
+                style: const TextStyle(color: SwsColors.danger, fontSize: 12.5),
               ),
+            ],
+            const SizedBox(height: 14),
+            // ── Dropdown: serie que usa el campo de trabajo ──
+            DropdownButtonFormField<String>(
+              key: const Key('dropdown_serie_activa'),
+              initialValue: _idSerieActiva,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Serie a usar en boletos',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                for (final s in _series)
+                  DropdownMenuItem(
+                    value: s['id_serie'].toString(),
+                    child: Text(
+                      '${s['nombre']} · ${s['prefijo']}${s['digitos']} '
+                      '(siguiente ${s['siguiente']})',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) async {
+                if (v == null) return;
+                setState(() => _idSerieActiva = v);
+                try {
+                  await di.sl<ApiClient>().marcarSerieActiva(v);
+                } catch (e) {
+                  _snack('No se pudo activar la serie: $e', error: true);
+                }
+              },
             ),
+            if (_series.isEmpty && !_seriesCargando) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Aún no hay series. Crea la primera abajo (solo ADMIN) para '
+                'que los boletos puedan numerarse.',
+                style: TextStyle(color: SwsColors.danger, fontSize: 12.5),
+              ),
+            ],
+            if (_esAdmin) ...[
+              const SizedBox(height: 18),
+              const Divider(),
+              const SizedBox(height: 6),
+              const Text(
+                'Series personalizadas',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Cada serie es un modelo: nombre, prefijo y cantidad de '
+                'dígitos. Al guardar, queda activa y pasa a numerar los '
+                'próximos boletos.',
+                style: TextStyle(color: SwsColors.gray600, fontSize: 12.5),
+              ),
+              const SizedBox(height: 12),
+              _campoSeria('Nombre de la serie', _serieNombreCtrl,
+                  hint: 'Ej. Facturación primaria'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _campoSeria('Prefijo', _seriePrefijoCtrl,
+                        hint: 'Ej. TA-'),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 110,
+                    child: _campoSeria('Dígitos', _serieDigitosCtrl,
+                        hint: '6', teclado: TextInputType.number),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: _guardandoSerie ? null : _guardarSerie,
+                    icon: _guardandoSerie
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_outlined, size: 18),
+                    label: const Text('Guardar serie'),
+                  ),
+                  const Spacer(),
+                  if (_idSerieActiva != null)
+                    OutlinedButton.icon(
+                      onPressed: _guardandoSerie ? null : _eliminarSerie,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Eliminar'),
+                    ),
+                ],
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _campoSeria(
+    String etiqueta,
+    TextEditingController controller, {
+    String? hint,
+    TextInputType? teclado,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: controller,
+        keyboardType: teclado,
+        decoration: InputDecoration(
+          labelText: etiqueta,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          isDense: true,
         ),
       ),
     );

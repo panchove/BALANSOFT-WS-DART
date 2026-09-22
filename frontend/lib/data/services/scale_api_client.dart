@@ -71,7 +71,7 @@ class ScaleApiClient extends ScaleTcpClient {
     if (_balanzaId == null) {
       // Sin balanza registrada seleccionada: se muestra el peso por TCP.
       _usandoTcp = true;
-      notifyListeners();
+      scheduleMicrotask(notifyListeners);
       return;
     }
     _pollTimer?.cancel();

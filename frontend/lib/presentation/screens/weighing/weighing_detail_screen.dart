@@ -15,13 +15,34 @@ import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 
-class WeighingDetailScreen extends StatelessWidget {
+class WeighingDetailScreen extends StatefulWidget {
   final String boleto;
   const WeighingDetailScreen({super.key, required this.boleto});
 
   @override
+  State<WeighingDetailScreen> createState() => _WeighingDetailScreenState();
+}
+
+class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.boleto.trim().isNotEmpty) {
+      context.read<WeighingBloc>().add(GetWeighingEvent(widget.boleto));
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant WeighingDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.boleto != widget.boleto && widget.boleto.trim().isNotEmpty) {
+      context.read<WeighingBloc>().add(GetWeighingEvent(widget.boleto));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (boleto.trim().isEmpty) {
+    if (widget.boleto.trim().isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Detalle del Pesaje')),
         body: const Center(
@@ -35,24 +56,60 @@ class WeighingDetailScreen extends StatelessWidget {
         ),
       );
     }
-    context.read<WeighingBloc>().add(GetWeighingEvent(boleto));
     final authState = context.watch<AuthBloc>().state;
     final puedeAnular = authState is AuthAuthenticated &&
         (authState.user.isAdmin || authState.user.isSupervisor);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle del Pesaje')),
-      body: BlocBuilder<WeighingBloc, WeighingState>(
+      body: BlocConsumer<WeighingBloc, WeighingState>(
+        listener: (context, state) {
+          if (state is WeighingClosed) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Pesaje cerrado exitosamente'),
+                backgroundColor: SwsColors.success,
+              ),
+            );
+          } else if (state is WeighingAnulado) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Pesaje anulado exitosamente'),
+                backgroundColor: SwsColors.danger,
+              ),
+            );
+          } else if (state is WeighingError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: SwsColors.danger,
+              ),
+            );
+          }
+        },
         builder: (context, state) {
+          Weighing? w;
           if (state is WeighingDetail) {
-            final w = state.weighing;
+            w = state.weighing;
+          } else if (state is WeighingClosed) {
+            w = state.weighing;
+          } else if (state is WeighingAnulado) {
+            w = state.weighing;
+          } else if (state is WeighingCreated &&
+              (state.weighing.boleto == widget.boleto ||
+                  state.weighing.numeroBoleto == widget.boleto)) {
+            w = state.weighing;
+          }
+
+          if (w != null) {
             return Column(
               children: [
                 _AccionBar(
                   boleto: w.boleto,
                   peso: w,
                   puedeAnular: puedeAnular,
-                  onImprimir: () => _reimprimirTicket(context, w),
+                  onImprimirPdf: () => _reimprimirTicket(context, w!, formato: 'PDF'),
+                  onImprimirTxt: () => _reimprimirTicket(context, w!, formato: 'TXT'),
                 ),
                 const Divider(height: 1),
                 Expanded(
@@ -65,7 +122,25 @@ class WeighingDetailScreen extends StatelessWidget {
             );
           }
           if (state is WeighingError) {
-            return Center(child: Text('Error: ${state.message}'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text('Error: ${state.message}', textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => context.read<WeighingBloc>().add(GetWeighingEvent(widget.boleto)),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
           return const Center(child: CircularProgressIndicator());
         },
@@ -82,21 +157,33 @@ class WeighingDetailScreen extends StatelessWidget {
           title: 'DATOS',
           icon: Icons.assignment,
           children: [
-            _InfoRow(label: 'Serie - Boleto', value: w.numeroBoleto ?? w.boleto),
+            _InfoRow(label: 'Serie - Boleto', value: w.numeroBoleto ?? 'Boleto s/n'),
             _InfoRow(
                 label: 'Fecha/Hora',
                 value: _fmt(w.fechaHoraEntrada.toLocal())),
             _InfoRow(label: 'Camión', value: w.idVehiculo ?? 'N/A'),
-            _InfoRow(label: 'Remolque', value: w.remolque ? (w.idRemolque ?? 'Sí') : 'No'),
-            _InfoRow(label: 'Transporte', value: w.idTransporte ?? 'N/A'),
-            _InfoRow(label: 'Conductor', value: w.idConductor ?? 'N/A'),
-            _InfoRow(label: 'Producto', value: w.idProducto ?? 'N/A'),
-            _InfoRow(label: 'Almacén', value: w.idAlmacen ?? 'N/A'),
-            _InfoRow(label: 'Balanza', value: w.idBalanza ?? 'N/A'),
+            if (w.remolque) _InfoRow(
+                label: 'Remolque',
+                value: w.remolquePlaca ?? 'Sí'),
+            _InfoRow(
+                label: 'Transporte',
+                value: w.transporteNombre ?? (w.idTransporte != null ? 'ID: ${w.idTransporte!.substring(0, 8)}…' : 'N/A')),
+            _InfoRow(
+                label: 'Conductor',
+                value: w.conductorNombre ?? w.idConductor ?? 'N/A'),
+            _InfoRow(
+                label: 'Producto',
+                value: w.productoNombre ?? (w.idProducto != null ? 'ID: ${w.idProducto!.substring(0, 8)}…' : 'N/A')),
+            _InfoRow(
+                label: 'Almacén',
+                value: w.almacenNombre ?? (w.idAlmacen != null ? 'ID: ${w.idAlmacen!.substring(0, 8)}…' : 'N/A')),
+            _InfoRow(
+                label: 'Balanza',
+                value: w.balanzaNombre ?? (w.idBalanza != null ? 'ID: ${w.idBalanza!.substring(0, 8)}…' : 'N/A')),
             if (w.tipoTercero != null || w.idTercero != null)
               _InfoRow(
-                  label: 'Selección',
-                  value: '${w.tipoTercero ?? ''} ${w.idTercero ?? ''}'.trim()),
+                  label: w.tipoTercero ?? 'Tercero',
+                  value: w.terceroNombre ?? (w.idTercero != null ? 'ID: ${w.idTercero!.substring(0, 8)}…' : 'N/A')),
           ],
         ),
         const SizedBox(height: 12),
@@ -207,21 +294,27 @@ class WeighingDetailScreen extends StatelessWidget {
     ];
   }
 
-  Future<void> _reimprimirTicket(BuildContext context, Weighing w) async {
+  Future<void> _reimprimirTicket(BuildContext context, Weighing w, {String formato = 'PDF'}) async {
     try {
-      final response =
-          await di.sl<WeighingRepository>().getTicketPdf(w.boleto);
+      final repo = di.sl<WeighingRepository>();
+      final response = formato == 'TXT'
+          ? await repo.getTicketTxt(w.boleto)
+          : await repo.getTicketPdf(w.boleto);
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
-        throw Exception('El servidor no devolvió un PDF válido.');
+        throw Exception('El servidor no devolvió un $formato válido.');
       }
+      final extension = formato == 'TXT' ? 'txt' : 'pdf';
+      final nombreBoleto = w.numeroBoleto ?? w.boleto;
       final ruta = await SaveFileUtils.save(
-          bytes, 'ticket_${w.numeroBoleto ?? w.boleto}.pdf',
-          subcarpeta: 'tickets');
+        bytes,
+        'ticket_$nombreBoleto.$extension',
+        subcarpeta: 'tickets',
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ticket guardado en: $ruta'),
+            content: Text('Ticket ($formato) guardado en: $ruta'),
             backgroundColor: SwsColors.success,
           ),
         );
@@ -230,7 +323,7 @@ class WeighingDetailScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al generar ticket: $e'),
+            content: Text('Error al generar ticket $formato: $e'),
             backgroundColor: SwsColors.danger,
           ),
         );
@@ -248,13 +341,15 @@ class _AccionBar extends StatelessWidget {
   final String boleto;
   final Weighing peso;
   final bool puedeAnular;
-  final VoidCallback onImprimir;
+  final VoidCallback onImprimirPdf;
+  final VoidCallback onImprimirTxt;
 
   const _AccionBar({
     required this.boleto,
     required this.peso,
     required this.puedeAnular,
-    required this.onImprimir,
+    required this.onImprimirPdf,
+    required this.onImprimirTxt,
   });
 
   @override
@@ -276,9 +371,16 @@ class _AccionBar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           _ToolbarButton(
-            icon: Icons.print,
-            label: 'Imprimir',
-            onTap: onImprimir,
+            icon: Icons.picture_as_pdf,
+            label: 'PDF',
+            onTap: onImprimirPdf,
+            color: SwsColors.accent,
+          ),
+          const SizedBox(width: 6),
+          _ToolbarButton(
+            icon: Icons.receipt_long,
+            label: 'Ticket TXT',
+            onTap: onImprimirTxt,
           ),
           if (puedeAnular && !peso.isAnulado) ...[
             const SizedBox(width: 6),

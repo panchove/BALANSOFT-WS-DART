@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -194,14 +195,17 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Usuarios y roles')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarFormulario(),
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Nuevo'),
+    return AtajoNuevo(
+      onNuevo: () => _mostrarFormulario(),
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Usuarios y roles')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _mostrarFormulario(),
+          icon: const Icon(Icons.person_add_alt_1),
+          label: const Text('Nuevo'),
+        ),
+        body: _buildBody(),
       ),
-      body: _buildBody(),
     );
   }
 

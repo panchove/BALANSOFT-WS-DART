@@ -18,6 +18,13 @@ class CrearCampoSpec {
   final String? initial;
   final bool precargarTexto;
 
+  /// Ruta API de la que se cargan las opciones de un [CrearCampoTipo.dropdown]
+  /// (catálogo enlazado, p. ej. categorías). Las opciones estáticas toman
+  /// prioridad si también se especifica [opciones].
+  final String? catalogoPath;
+  final String? catalogoIdKey;
+  final String? catalogoTituloKey;
+
   const CrearCampoSpec({
     required this.key,
     required this.label,
@@ -27,6 +34,9 @@ class CrearCampoSpec {
     this.opciones,
     this.initial,
     this.precargarTexto = false,
+    this.catalogoPath,
+    this.catalogoIdKey,
+    this.catalogoTituloKey,
   });
 
   CrearCampoSpec copyWith({String? initial}) => CrearCampoSpec(
@@ -38,6 +48,9 @@ class CrearCampoSpec {
         opciones: opciones,
         initial: initial ?? this.initial,
         precargarTexto: precargarTexto,
+        catalogoPath: catalogoPath,
+        catalogoIdKey: catalogoIdKey,
+        catalogoTituloKey: catalogoTituloKey,
       );
 }
 
@@ -83,6 +96,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
   final Map<String, String> _dropdownVals = {};
   final Map<String, bool> _boolVals = {};
   final Map<String, FocusNode> _focusNodes = {};
+  Map<String, List<Map<String, dynamic>>> _referencias = const {};
   bool _guardando = false;
 
   static bool _esCampoTexto(CrearCampoSpec campo) {
@@ -116,6 +130,34 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
                     : '');
       }
     }
+    _cargarReferencias();
+  }
+
+  Future<void> _cargarReferencias() async {
+    final paths = widget.campos
+        .map((c) => c.catalogoPath)
+        .whereType<String>()
+        .toSet();
+    if (paths.isEmpty) return;
+    final api = di.sl<ApiClient>();
+    final refs = <String, List<Map<String, dynamic>>>{};
+    for (final p in paths) {
+      try {
+        final r = await api.getList(p);
+        final data = r.data;
+        if (data is List) {
+          refs[p] = data
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        } else {
+          refs[p] = const [];
+        }
+      } catch (_) {
+        refs[p] = const [];
+      }
+    }
+    if (mounted) setState(() => _referencias = refs);
   }
 
   @override
@@ -275,6 +317,23 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
     }
     if (campo.tipo == CrearCampoTipo.dropdown) {
       final opciones = campo.opciones ?? const <String>[];
+      final refs = _referencias[campo.catalogoPath] ?? const [];
+      final items = <DropdownMenuItem<String>>[
+        if (opciones.isEmpty)
+          const DropdownMenuItem(
+            value: '',
+            child: Text('— Seleccionar —'),
+          ),
+        for (final op in opciones)
+          DropdownMenuItem(value: op, child: Text(op)),
+        for (final ref in refs)
+          DropdownMenuItem(
+            value: '${ref[campo.catalogoIdKey ?? 'id'] ?? ''}',
+            child: Text('${ref[campo.catalogoTituloKey ?? 'nombre'] ?? ''}'),
+          ),
+      ];
+      final valores = {for (final i in items) i.value};
+      final valor = _dropdownVals[campo.key];
       return InputDecorator(
         decoration: InputDecoration(
           labelText: campo.label + (campo.requerido ? ' *' : ''),
@@ -282,14 +341,12 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
         ),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            value: opciones.contains(_dropdownVals[campo.key])
-                ? _dropdownVals[campo.key]
-                : (opciones.isEmpty ? null : opciones.first),
+            value: (valor != null && valores.contains(valor))
+                ? valor
+                : (opciones.isEmpty && refs.isEmpty ? null : items.first.value),
             isExpanded: true,
-            items: [
-              for (final op in opciones)
-                DropdownMenuItem(value: op, child: Text(op)),
-            ],
+            hint: const Text('— Seleccionar —'),
+            items: items,
             onChanged: (v) => setState(() {
               if (v != null) _dropdownVals[campo.key] = v;
             }),

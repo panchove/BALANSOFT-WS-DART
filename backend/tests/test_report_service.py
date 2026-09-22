@@ -10,7 +10,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from app.models import BoletoPesaje, Kardex, Producto, Tercero, Transporte
+from app.models import BoletoPesaje, Categoria, Kardex, Producto, Tercero, Transporte
 from app.services.report_service import ReportService
 
 DAY = date(2026, 9, 8)
@@ -33,8 +33,15 @@ async def _crear_kardex_mov(db, empresa, *, movimiento, valor, producto=None,
 
 
 async def _crear_producto(db, empresa, nombre="Cemento") -> str:
+    categoria = Categoria(
+        id_empresa=empresa.id_empresa,
+        nombre=f"Categoría {nombre}",
+    )
+    db.add(categoria)
+    await db.flush()
     prod = Producto(
         id_empresa=empresa.id_empresa,
+        id_categoria=categoria.id_categoria,
         nombre=nombre,
         unidad_medida="TON",
     )

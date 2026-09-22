@@ -12,12 +12,15 @@ from app.api.v1.endpoints import (
     config,
     directorio,
     empresa,
+    entorno,
     exports,
     flota,
     identity,
     inventario,
     pesajes,
     reports,
+    seguridad,
+    series,
     servidor,
     sync,
     usuarios,
@@ -29,6 +32,7 @@ API_ROUTERS = [
     catalogo.router,
     config.router,
     empresa.router,
+    entorno.router,
     flota.router,
     inventario.router,
     directorio.router,
@@ -38,8 +42,11 @@ API_ROUTERS = [
     exports.router,
     identity.router,
     usuarios.router,
+    seguridad.router,
+    series.router,
 ]
 
 SERVER_ROUTERS = [
     servidor.router,
+    entorno.router,
 ]

@@ -13,6 +13,7 @@ import 'core/security/secure_storage_service.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/weighing_repository.dart';
 import 'data/repositories/catalog_repository.dart';
+import 'data/repositories/accesos_repository.dart';
 import 'data/repositories/kardex_repository.dart';
 import 'data/repositories/license_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
@@ -61,6 +62,10 @@ Future<void> init() async {
       ));
   sl.registerLazySingleton<KardexRepository>(
       () => KardexRepository(apiClient: sl<ApiClient>()));
+  sl.registerLazySingleton<AccesosRepository>(() => AccesosRepository(
+        apiClient: sl(),
+        localStorage: sl(),
+      ));
 
   // Use cases
   sl.registerLazySingleton<LoginUseCase>(

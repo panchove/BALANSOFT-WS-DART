@@ -24,10 +24,22 @@ class ApiConstants {
   static String weighingAnular(String boleto) => '$apiPrefix/weighing/$boleto/anular';
   static const String weighingPendientes = '$apiPrefix/weighing/pendientes';
   static String weighingPdf(String boleto) => '$apiPrefix/weighing/$boleto/pdf';
+  static String weighingTxt(String boleto) => '$apiPrefix/weighing/$boleto/txt';
   static String scaleLive(String balanzaId) => '$apiPrefix/weighing/scale/$balanzaId/live';
+  static const String seriesBase = '$apiPrefix/empresa/series';
+  static const String seriesCreate = '$apiPrefix/empresa/series';
+  static String seriesUpdate(String idSerie) =>
+      '$apiPrefix/empresa/series/$idSerie';
+  static String seriesActiva(String idSerie) =>
+      '$apiPrefix/empresa/series/$idSerie/activa';
+  static String seriesDelete(String idSerie) =>
+      '$apiPrefix/empresa/series/$idSerie';
 
   // Catalogos (sync combinado)
   static const String catalogsSync = '$apiPrefix/catalogo/sync';
+
+  // Seguridad y Accesos
+  static const String seguridadMatriz = '$apiPrefix/seguridad/matriz';
 
   // Flota
   static const String camiones = '$apiPrefix/camiones';
@@ -39,6 +51,8 @@ class ApiConstants {
   // Inventario
   static const String productos = '$apiPrefix/productos';
   static String producto(String id) => '$apiPrefix/productos/$id';
+  static const String categorias = '$apiPrefix/categorias';
+  static String categoria(String id) => '$apiPrefix/categorias/$id';
   static const String almacenes = '$apiPrefix/almacenes';
   static String almacen(String id) => '$apiPrefix/almacenes/$id';
   static const String balanzas = '$apiPrefix/balanzas';

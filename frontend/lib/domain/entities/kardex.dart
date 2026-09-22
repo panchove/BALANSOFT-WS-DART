@@ -6,9 +6,12 @@ class KardexMovimiento {
   final String fecha;
   final int idMovimiento;
   final String idProducto;
+  final String? nombreProducto;
+  final String? codigoProducto;
   final String idAlmacen;
   final String? documento;
   final String? boleto;
+  final String? numeroBoleto;
   final double valor;
   final double stock;
 
@@ -17,9 +20,12 @@ class KardexMovimiento {
     required this.fecha,
     required this.idMovimiento,
     required this.idProducto,
+    this.nombreProducto,
+    this.codigoProducto,
     required this.idAlmacen,
     this.documento,
     this.boleto,
+    this.numeroBoleto,
     required this.valor,
     required this.stock,
   });
@@ -30,9 +36,12 @@ class KardexMovimiento {
         fecha: json['fecha'] as String? ?? '',
         idMovimiento: (json['id_movimiento'] as num?)?.toInt() ?? 0,
         idProducto: json['id_producto'] as String? ?? 'SIN_PRODUCTO',
+        nombreProducto: json['nombre_producto'] as String?,
+        codigoProducto: json['codigo_producto'] as String?,
         idAlmacen: json['id_almacen'] as String? ?? 'SIN_ALMACEN',
         documento: json['documento'] as String?,
         boleto: json['boleto'] as String?,
+        numeroBoleto: json['numero_boleto'] as String?,
         valor: (json['valor'] as num?)?.toDouble() ?? 0,
         stock: (json['stock'] as num?)?.toDouble() ?? 0,
       );
@@ -40,6 +49,8 @@ class KardexMovimiento {
   bool get esIngreso => idMovimiento < 50;
   String get etiquetaMovimiento =>
       esIngreso ? '$idMovimiento INGRESO BASC' : '$idMovimiento DESPACHO BASC';
+  String get etiquetaProducto =>
+      nombreProducto ?? (codigoProducto != null ? 'Prod. $codigoProducto' : 'Producto');
 }
 
 class KardexDetalle {

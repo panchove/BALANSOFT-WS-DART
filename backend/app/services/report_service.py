@@ -8,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import BoletoPesaje, Empresa, Kardex, Tercero, Transporte
+from app.models import Almacen, BoletoPesaje, Empresa, Kardex, Producto, Tercero, Transporte
 
 
 class ReportService:
@@ -239,29 +239,43 @@ class ReportService:
             )
         ).scalar() or 0
 
-        rows = (
-            await db.execute(
-                select(Kardex)
-                .where(*filtros_rango)
-                .order_by(Kardex.fecha_kardex, Kardex.id_kardex)
+        query = (
+            select(
+                Kardex,
+                Producto.nombre.label("nombre_producto"),
+                Producto.codigo.label("codigo_producto"),
+                Almacen.nombre.label("nombre_almacen"),
+                BoletoPesaje.numero_boleto.label("numero_boleto"),
             )
-        ).scalars().all()
+            .outerjoin(Producto, Kardex.id_producto == Producto.id_producto)
+            .outerjoin(Almacen, Kardex.id_almacen == Almacen.id_almacen)
+            .outerjoin(BoletoPesaje, Kardex.boleto == BoletoPesaje.boleto)
+            .where(*filtros_rango)
+            .order_by(Kardex.fecha_kardex, Kardex.id_kardex)
+        )
+        res = await db.execute(query)
+        rows_with_details = res.all()
 
         movimientos: list[dict] = []
         acumulado = Decimal(saldo_inicial)
-        for k in rows:
+        for k, prod_nombre, prod_codigo, alm_nombre, num_bol in rows_with_details:
             signo = 1 if k.id_movimiento < Kardex.RANGO_NEGATIVO_DESDE else -1
             valor_saldo = Decimal(k.valor) * signo
             acumulado += valor_saldo
+            
             movimientos.append(
                 {
                     "id_kardex": str(k.id_kardex),
                     "fecha": k.fecha_kardex.isoformat(),
                     "id_movimiento": k.id_movimiento,
                     "id_producto": str(k.id_producto) if k.id_producto else "SIN_PRODUCTO",
+                    "nombre_producto": prod_nombre or "SIN_PRODUCTO",
+                    "codigo_producto": prod_codigo or "",
                     "id_almacen": str(k.id_almacen) if k.id_almacen else "SIN_ALMACEN",
+                    "nombre_almacen": alm_nombre or "SIN_ALMACEN",
                     "documento": k.documento,
-                    "boleto": str(k.boleto) if k.boleto else None,
+                    "boleto": num_bol,
+                    "numero_boleto": num_bol,
                     "valor": float(abs(Decimal(k.valor))),
                     "stock": float(acumulado),
                 }

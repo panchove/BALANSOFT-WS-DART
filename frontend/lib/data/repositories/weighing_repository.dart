@@ -26,6 +26,19 @@ class WeighingRepository implements IWeighingRepository {
     return result != ConnectivityResult.none;
   }
 
+  String _extractDioError(DioException e, String fallback) {
+    if (e.response != null) {
+      final data = e.response?.data;
+      if (data is Map && data['detail'] != null) {
+        return data['detail'].toString();
+      } else if (data is String && data.isNotEmpty) {
+        return data;
+      }
+      return 'Error en el servidor (${e.response?.statusCode})';
+    }
+    return fallback;
+  }
+
   @override
   Future<Weighing> createWeighing(
     Weighing weighing, {
@@ -39,9 +52,15 @@ class WeighingRepository implements IWeighingRepository {
         final created = Weighing.fromJson(response.data);
         await _saveLocal(created, synced: true);
         return created;
-      } catch (_) {
+      } on DioException catch (e) {
+        if (e.response != null) {
+          throw Exception(_extractDioError(e, 'Error al registrar pesaje'));
+        }
         await _saveLocal(weighing, synced: false, pending: true);
         return weighing;
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Error al registrar pesaje: $e');
       }
     } else {
       await _saveLocal(weighing, synced: false, pending: true);
@@ -52,28 +71,35 @@ class WeighingRepository implements IWeighingRepository {
   @override
   Future<Weighing> closeWeighing(String boleto, Map<String, dynamic> closeData) async {
     if (await _isConnected) {
-      final response = await _apiClient.closeWeighing(boleto, closeData);
-      final closed = Weighing.fromJson(response.data);
-      await _saveLocal(closed, synced: true);
-      return closed;
-    } else {
-      final local = await getWeighingByBoleto(boleto);
-      if (local == null) throw Exception('Pesaje no encontrado');
-      final updated = local.copyWith(
-        fechaHoraSalida: closeData['fecha_hora_salida'] != null
-            ? DateTime.parse(closeData['fecha_hora_salida'])
-            : DateTime.now(),
-        pesoSalidaVehiculo: closeData['peso_salida_vehiculo'],
-        pesoSalidaRemolque: closeData['peso_salida_remolque'],
-        densidad: closeData['densidad'],
-        unidades: closeData['unidades'],
-        costoFlete: closeData['costo_flete'],
-        observaciones: closeData['observaciones'],
-        estadoBoleto: 'CERRADO',
-      );
-      await _saveLocal(updated, synced: false, pending: true);
-      return updated;
+      try {
+        final response = await _apiClient.closeWeighing(boleto, closeData);
+        final closed = Weighing.fromJson(response.data);
+        await _saveLocal(closed, synced: true);
+        return closed;
+      } on DioException catch (e) {
+        if (e.response != null) {
+          throw Exception(_extractDioError(e, 'Error al cerrar pesaje'));
+        }
+      } catch (e) {
+        if (e is Exception) rethrow;
+      }
     }
+    final local = await getWeighingByBoleto(boleto);
+    if (local == null) throw Exception('Pesaje no encontrado');
+    final updated = local.copyWith(
+      fechaHoraSalida: closeData['fecha_hora_salida'] != null
+          ? DateTime.parse(closeData['fecha_hora_salida'])
+          : DateTime.now(),
+      pesoSalidaVehiculo: closeData['peso_salida_vehiculo'],
+      pesoSalidaRemolque: closeData['peso_salida_remolque'],
+      densidad: closeData['densidad'],
+      unidades: closeData['unidades'],
+      costoFlete: closeData['costo_flete'],
+      observaciones: closeData['observaciones'],
+      estadoBoleto: 'CERRADO',
+    );
+    await _saveLocal(updated, synced: false, pending: true);
+    return updated;
   }
 
   @override
@@ -116,7 +142,7 @@ class WeighingRepository implements IWeighingRepository {
         for (final w in list) {
           await _saveLocal(w, synced: true);
         }
-        return list;
+        return await _mergeLocalPendientes(list);
       } catch (_) {
         return _listLocal();
       }
@@ -146,28 +172,41 @@ class WeighingRepository implements IWeighingRepository {
   }
 
   @override
-  Future<Weighing> anularWeighing(String boleto, String motivo) async {    if (await _isConnected) {
-      final response = await _apiClient.anularWeighing(boleto, motivo);
-      final anulado = Weighing.fromJson(response.data);
-      await _saveLocal(anulado, synced: true);
-      return anulado;
-    } else {
-      final local = await getWeighingByBoleto(boleto);
-      if (local == null) throw Exception('Pesaje no encontrado');
-      final updated = local.copyWith(
-        estadoBoleto: 'ANULADO',
-        motivoAnulacion: motivo,
-        observaciones:
-            '${local.observaciones ?? ''}\n[ANULADO] Motivo: $motivo'.trim(),
-      );
-      await _saveLocal(updated, synced: false, pending: true);
-      return updated;
+  Future<Weighing> anularWeighing(String boleto, String motivo) async {
+    if (await _isConnected) {
+      try {
+        final response = await _apiClient.anularWeighing(boleto, motivo);
+        final anulado = Weighing.fromJson(response.data);
+        await _saveLocal(anulado, synced: true);
+        return anulado;
+      } on DioException catch (e) {
+        if (e.response != null) {
+          throw Exception(_extractDioError(e, 'Error al anular pesaje'));
+        }
+      } catch (e) {
+        if (e is Exception) rethrow;
+      }
     }
+    final local = await getWeighingByBoleto(boleto);
+    if (local == null) throw Exception('Pesaje no encontrado');
+    final updated = local.copyWith(
+      estadoBoleto: 'ANULADO',
+      motivoAnulacion: motivo,
+      observaciones:
+          '${local.observaciones ?? ''}\n[ANULADO] Motivo: $motivo'.trim(),
+    );
+    await _saveLocal(updated, synced: false, pending: true);
+    return updated;
   }
 
     @override
   Future<Response> getTicketPdf(String boleto) async {
     return _apiClient.getTicketPdf(boleto);
+  }
+
+  @override
+  Future<Response> getTicketTxt(String boleto) async {
+    return _apiClient.getTicketTxt(boleto);
   }
 
   @override
@@ -283,8 +322,8 @@ class WeighingRepository implements IWeighingRepository {
     final db = await _dbHelper.database;
     final result = await db.query(
       'weighing_local',
-      where: 'boleto = ?',
-      whereArgs: [boleto],
+      where: 'boleto = ? OR numero_boleto = ?',
+      whereArgs: [boleto, boleto],
     );
     if (result.isEmpty) return null;
     return WeighingModel.fromLocalDb(result.first);
@@ -297,5 +336,23 @@ class WeighingRepository implements IWeighingRepository {
       orderBy: 'fecha_hora_entrada DESC',
     );
     return result.map((row) => WeighingModel.fromLocalDb(row)).toList();
+  }
+
+  /// Fusiona los registros locales pendientes/fallidos con la lista del
+  /// backend: si un pesaje quedó local (403, sin conexión) todavía no figura
+  /// en el servidor, debe seguir apareciendo en la lista.
+  Future<List<Weighing>> _mergeLocalPendientes(List<Weighing> remotos) async {
+    final db = await _dbHelper.database;
+    final result = await db.query(
+      'weighing_local',
+      where: 'sincronizado = 0',
+      orderBy: 'fecha_hora_entrada DESC',
+    );
+    if (result.isEmpty) return remotos;
+    final pendientes = result
+        .map((row) => WeighingModel.fromLocalDb(row))
+        .where((w) => !remotos.any((r) => r.boleto == w.boleto))
+        .toList();
+    return [...pendientes, ...remotos];
   }
 }

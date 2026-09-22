@@ -1,6 +1,8 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/utils/mensaje_error.dart';
 import '../../../../domain/entities/user.dart';
+import '../../../../domain/repositories/i_auth_repository.dart';
 import '../../../../domain/usecases/auth_usecases.dart';
 import '../../../../core/security/device_info.dart';
 part 'auth_event.dart';
@@ -54,7 +56,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(mensajeDeError(e)));
     }
   }
 
@@ -71,7 +73,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(mensajeDeError(e)));
     }
   }
 
@@ -84,11 +86,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       CheckAuthStatusEvent event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     final user = await _getCachedUserUseCase.execute();
-    if (user != null) {
-      await _restoreSessionUseCase.execute();
-      emit(AuthAuthenticated(user));
-    } else {
+    if (user == null) {
       emit(AuthInitial());
+      return;
+    }
+    // Hay usuario cacheado: validar si la sesión sigue siendo válida.
+    final resultado = await _restoreSessionUseCase.execute();
+    if (resultado == SesionRestaurada.invalida) {
+      // Token inválido (BD recién instalada/vaciada): se limpió la sesión y
+      // el operador debe volver al login.
+      emit(AuthInitial());
+    } else {
+      // online (ok) o sin red (offline-first).
+      emit(AuthAuthenticated(user));
     }
   }
 
@@ -99,7 +109,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _forgotPasswordUseCase.execute(event.email);
       emit(AuthPasswordResetSent());
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(mensajeDeError(e)));
     }
   }
 
@@ -110,7 +120,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _resetPasswordUseCase.execute(event.token, event.newPassword);
       emit(AuthPasswordChanged());
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(mensajeDeError(e)));
     }
   }
 }

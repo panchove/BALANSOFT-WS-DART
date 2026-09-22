@@ -68,7 +68,7 @@ class TestGeneracionPDF:
         txt = _extract(_boleto())
         assert "TA-00000001" in txt
         assert "ABC123" in txt
-        assert "Boleto de Pesaje" in txt
+        assert "boleto de pesaje" in txt.lower()
 
     def test_observaciones_se_dibujan(self):
         txt = _extract(_boleto())
@@ -101,7 +101,7 @@ class TestFormato:
         assert _fmt(1234.5) == "1.234,50"
 
     def test_fmt_none(self):
-        assert _fmt(None) == "0.00"
+        assert _fmt(None) == "0,00"
 
     def test_fmt_str_passthrough(self):
         assert _fmt("abc") == "abc"

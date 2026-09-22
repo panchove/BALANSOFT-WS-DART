@@ -48,11 +48,13 @@ class ExportKardexPdfUseCase {
     required DateTime hasta,
     String? idProducto,
     String? idAlmacen,
+    String orientacion = 'V',
   }) =>
       _repo.exportPdf(
         desde: desde,
         hasta: hasta,
         idProducto: idProducto,
         idAlmacen: idAlmacen,
+        orientacion: orientacion,
       );
 }

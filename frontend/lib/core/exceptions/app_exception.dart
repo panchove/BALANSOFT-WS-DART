@@ -10,18 +10,18 @@ class AppException implements Exception {
 }
 
 class NetworkException extends AppException {
-  NetworkException([String message = 'Error de conexión'])
-      : super(message, code: 'NETWORK_ERROR');
+  NetworkException([super.message = 'Error de conexión'])
+      : super(code: 'NETWORK_ERROR');
 }
 
 class AuthException extends AppException {
-  AuthException([String message = 'No autenticado'])
-      : super(message, code: 'UNAUTHORIZED');
+  AuthException([super.message = 'No autenticado'])
+      : super(code: 'UNAUTHORIZED');
 }
 
 class LicenseException extends AppException {
-  LicenseException([String message = 'Licencia inválida'])
-      : super(message, code: 'LICENSE_INVALID');
+  LicenseException([super.message = 'Licencia inválida'])
+      : super(code: 'LICENSE_INVALID');
 }
 
 class LicenseLimitException extends AppException {
@@ -31,20 +31,20 @@ class LicenseLimitException extends AppException {
 }
 
 class ValidationException extends AppException {
-  ValidationException(String message) : super(message, code: 'VALIDATION_ERROR');
+  ValidationException(super.message) : super(code: 'VALIDATION_ERROR');
 }
 
 class OfflineException extends AppException {
-  OfflineException([String message = 'Sin conexión. Datos guardados localmente.'])
-      : super(message, code: 'OFFLINE_MODE');
+  OfflineException([super.message = 'Sin conexión. Datos guardados localmente.'])
+      : super(code: 'OFFLINE_MODE');
 }
 
 class SyncException extends AppException {
-  SyncException([String message = 'Error en sincronización'])
-      : super(message, code: 'SYNC_FAILED');
+  SyncException([super.message = 'Error en sincronización'])
+      : super(code: 'SYNC_FAILED');
 }
 
 class CacheException extends AppException {
-  CacheException([String message = 'Error de caché'])
-      : super(message, code: 'CACHE_ERROR');
+  CacheException([super.message = 'Error de caché'])
+      : super(code: 'CACHE_ERROR');
 }

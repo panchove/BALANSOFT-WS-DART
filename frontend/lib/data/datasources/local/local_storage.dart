@@ -10,6 +10,7 @@ class LocalStorage {
   static const _licenseKey = 'cached_license';
   static const _scaleHostKey = 'scale_host';
   static const _scalePortKey = 'scale_port';
+  static const _accesosKey = 'cached_matriz_accesos';
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -63,6 +64,35 @@ class LocalStorage {
     final host = prefs.getString(_scaleHostKey) ?? '127.0.0.1';
     final port = prefs.getInt(_scalePortKey) ?? 5555;
     return (host: host, port: port);
+  }
+
+  Future<void> cacheMatrizAccesos(Map<String, Map<String, String>> matriz) async {
+    final prefs = await _prefs;
+    await prefs.setString(_accesosKey, jsonEncode(matriz));
+  }
+
+  Future<Map<String, Map<String, String>>?> getCachedMatrizAccesos() async {
+    final prefs = await _prefs;
+    final raw = prefs.getString(_accesosKey);
+    if (raw == null) return null;
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return decoded.map(
+        (modulo, row) => MapEntry<String, Map<String, String>>(
+          modulo,
+          (row as Map).map(
+            (rol, acceso) => MapEntry(rol.toString(), acceso.toString()),
+          ),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearMatrizAccesos() async {
+    final prefs = await _prefs;
+    await prefs.remove(_accesosKey);
   }
 
   Future<String> getDescargasDir() async {

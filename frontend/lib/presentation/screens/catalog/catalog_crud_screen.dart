@@ -5,6 +5,7 @@ import '../../../core/constants/catalog_resources.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
+import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../providers/bloc/catalog_crud/catalog_crud_cubit.dart';
 import 'catalog_edit_screen.dart';
 
@@ -128,9 +129,11 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: _cubit,
-      child: Scaffold(
-        appBar: AppBar(title: Text(widget.recurso.plural)),
-        body: BlocBuilder<CatalogCrudCubit, CatalogCrudState>(
+      child: AtajoNuevo(
+        onNuevo: () => _abrirEditor(),
+        child: Scaffold(
+          appBar: AppBar(title: Text(widget.recurso.plural)),
+          body: BlocBuilder<CatalogCrudCubit, CatalogCrudState>(
           builder: (context, state) {
             final cubit = context.read<CatalogCrudCubit>();
             if (state.cargando) {
@@ -304,6 +307,7 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
           tooltip: 'Nuevo ${widget.recurso.singular}',
           onPressed: () => _abrirEditor(),
           child: const Icon(Icons.add),
+        ),
         ),
       ),
     );

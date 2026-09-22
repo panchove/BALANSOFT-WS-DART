@@ -14,6 +14,7 @@ import '../../../domain/entities/catalogs.dart';
 import 'license_admin_screen.dart';
 import 'connections_screen.dart';
 import 'usuarios_screen.dart';
+import '../../../core/utils/save_file_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeController themeController;
@@ -163,10 +164,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'Báscula del Sistema',
         children: [_buildBalanzasSelector()],
       ),
-      _SectionCard(
+const _SectionCard(
         icon: Icons.wifi_tethering_outlined,
         title: 'Conexiones',
-        children: const [_ConexionesTile()],
+        children: [_ConexionesTile()],
       ),
       _SectionCard(
         icon: Icons.sync_outlined,
@@ -380,7 +381,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    context.read<AuthBloc>().add(LogoutEvent());
+                    context.read<AuthBloc>().add(const LogoutEvent());
                     Navigator.pushReplacementNamed(context, '/login');
                   },
                   child: const Text(
@@ -904,6 +905,8 @@ class _DirectorioTile extends StatefulWidget {
 
 class _DirectorioTileState extends State<_DirectorioTile> {
   String? _ruta;
+  bool _esPersonalizada = false;
+  bool _guardando = false;
 
   @override
   void initState() {
@@ -912,8 +915,29 @@ class _DirectorioTileState extends State<_DirectorioTile> {
   }
 
   Future<void> _cargar() async {
+    try {
+      final perfil = await di.sl<ApiClient>().getEmpresaPerfil();
+      final personalizada = perfil['ruta_exportacion_reportes'] as String?;
+      if (personalizada != null && personalizada.trim().isNotEmpty) {
+        final rutaTrim = personalizada.trim();
+        await SaveFileUtils.setRutaPersonalizada(rutaTrim);
+        if (mounted) {
+          setState(() {
+            _ruta = rutaTrim;
+            _esPersonalizada = true;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+
     final base = await di.sl<LocalStorage>().getDescargasDir();
-    if (mounted) setState(() => _ruta = base);
+    if (mounted) {
+      setState(() {
+        _ruta = base;
+        _esPersonalizada = false;
+      });
+    }
   }
 
   Future<void> _copiar() async {
@@ -927,8 +951,94 @@ class _DirectorioTileState extends State<_DirectorioTile> {
     }
   }
 
+  Future<void> _editarRuta(bool esAdmin) async {
+    if (!esAdmin || _guardando) return;
+    final ctrl = TextEditingController(text: _esPersonalizada ? _ruta : '');
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ruta de exportación de reportes'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Esta carpeta se utilizará para almacenar las exportaciones de Excel, PDF y Kardex en todas las sesiones y estaciones de esta cuenta.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                labelText: 'Ruta absoluta de la carpeta',
+                hintText: 'Ej. /var/reportes o C:\\ReportesBalansoft',
+                border: OutlineInputBorder(),
+                isDense: true,
+                prefixIcon: Icon(Icons.folder_open_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (_esPersonalizada)
+            TextButton(
+              onPressed: () {
+                ctrl.text = '';
+                Navigator.of(ctx).pop(true);
+              },
+              child: const Text('Restablecer por defecto'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final nuevaRuta = ctrl.text.trim();
+    setState(() => _guardando = true);
+    try {
+      final valorAEnviar = nuevaRuta.isEmpty ? null : nuevaRuta;
+      await di.sl<ApiClient>().updateEmpresaPerfil({
+        'ruta_exportacion_reportes': valorAEnviar,
+      });
+      await SaveFileUtils.setRutaPersonalizada(valorAEnviar);
+      await _cargar();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            valorAEnviar != null
+                ? 'Ruta de exportación actualizada para toda la cuenta'
+                : 'Ruta de exportación restablecida a descargas predeterminadas',
+          ),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo guardar la ruta: $e'),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = context.read<AuthBloc>().state;
+    final esAdmin = authState is AuthAuthenticated && authState.user.isAdmin;
+
     return ListTile(
       dense: true,
       leading: const SizedBox(
@@ -936,19 +1046,44 @@ class _DirectorioTileState extends State<_DirectorioTile> {
         height: 24,
         child: Icon(Icons.folder_open_outlined),
       ),
-      title: const Text('Carpeta de guardado'),
-      subtitle: Text(
-        _ruta ?? 'Obteniendo...',
-        style: const TextStyle(fontSize: 12),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+      title: Text(
+        _esPersonalizada
+            ? 'Carpeta de reportes (Cuenta)'
+            : 'Carpeta de reportes (Predeterminada)',
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.copy, size: 20),
-        onPressed: _copiar,
-        tooltip: 'Copiar ruta',
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _ruta ?? 'Obteniendo...',
+            style: const TextStyle(fontSize: 12),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (_esPersonalizada)
+            const Text(
+              'Configurada por el administrador para todas las sesiones',
+              style: TextStyle(fontSize: 10.5, color: SwsColors.primary, fontWeight: FontWeight.w600),
+            ),
+        ],
       ),
-      onTap: _copiar,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (esAdmin)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              onPressed: () => _editarRuta(esAdmin),
+              tooltip: 'Configurar ruta para toda la empresa',
+            ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 20),
+            onPressed: _copiar,
+            tooltip: 'Copiar ruta',
+          ),
+        ],
+      ),
+      onTap: esAdmin ? () => _editarRuta(esAdmin) : _copiar,
     );
   }
 }

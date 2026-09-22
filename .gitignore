@@ -12,6 +12,9 @@ backend/media/
 backend/backups/
 backend/logs/
 backend/keys/
+backend/build/
+backend/dist/
+backend/WServer.spec.manifest
 *.pyc
 *.pyo
 

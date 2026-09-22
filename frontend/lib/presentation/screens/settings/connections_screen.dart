@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -21,6 +22,8 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
   late final TextEditingController _localCtrl;
   bool _probandoLocal = false;
   bool _probandoServer = false;
+  bool _wserverOnline = false;
+  bool _verificandoInicio = false;
   String? _resultadoLocal;
   String? _resultadoServer;
 
@@ -28,7 +31,19 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
   void initState() {
     super.initState();
     _serverCtrl = TextEditingController(text: AppConfig.serverApiUrl ?? '');
-    _localCtrl = TextEditingController(text: AppConfig.apiBaseUrl ?? '');
+    _localCtrl = TextEditingController(
+      text: AppConfig.apiBaseUrl ??
+          (widget.setupMode ? AppConfig.defaultApiBaseUrl : ''),
+    );
+    if (widget.setupMode) {
+      // Al abrir el modo instalación se comprueba automáticamente si el
+      // WServer (API local) ya está levantado y listo para probar/editar.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        setState(() => _verificandoInicio = true);
+        await _probarLocal();
+        if (mounted) setState(() => _verificandoInicio = false);
+      });
+    }
   }
 
   @override
@@ -69,6 +84,8 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     if (!mounted) return;
     setState(() {
       _probandoLocal = false;
+      final accesible = _localUrl.isNotEmpty && ok;
+      _wserverOnline = accesible;
       _resultadoLocal = _localUrl.isEmpty
           ? 'Indica primero la URL de la API local'
           : (ok ? 'API local accesible ✓' : 'No se pudo conectar a la API local');
@@ -97,6 +114,41 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     }
   }
 
+  Future<void> _reiniciarInstalacion() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reiniciar instalación'),
+        content: const Text(
+          'Se borrará la URL de la API local configurada y la app volverá al '
+          'modo instalación (verificación de entorno). '
+          '¿Deseas continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reiniciar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    await AppConfig.quitarApiBaseUrl();
+    di.sl<ApiClient>().setBaseUrl(AppConfig.defaultApiBaseUrl);
+    WServerManager.reset();
+
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/setup',
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final esSetup = widget.setupMode;
@@ -115,7 +167,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (esSetup) const _SetupBanner(),
+          if (esSetup) _SetupBanner(
+            wserverOnline: _wserverOnline,
+            verificando: _verificandoInicio,
+          ),
           const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,6 +192,16 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
               ),
             ),
           ),
+          if (!esSetup) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton.icon(
+                onPressed: _reiniciarInstalacion,
+                icon: const Icon(Icons.settings_backup_restore, size: 18),
+                label: const Text('Volver al inicio de instalación'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -146,7 +211,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (esSetup) const _SetupBanner(),
+        if (esSetup) _SetupBanner(
+          wserverOnline: _wserverOnline,
+          verificando: _verificandoInicio,
+        ),
         const SizedBox(height: 8),
         _serverCard(context),
         const SizedBox(height: 12),
@@ -160,6 +228,14 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
             label: Text(esSetup ? 'Guardar y continuar' : 'Guardar conexiones'),
           ),
         ),
+        if (!esSetup) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _reiniciarInstalacion,
+            icon: const Icon(Icons.settings_backup_restore, size: 18),
+            label: const Text('Volver al inicio de instalación'),
+          ),
+        ],
       ],
     );
   }
@@ -294,25 +370,69 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
 }
 
 class _SetupBanner extends StatelessWidget {
-  const _SetupBanner();
+  const _SetupBanner({this.wserverOnline = false, this.verificando = false});
+
+  /// ¿La API local (WServer) está accesible?
+  final bool wserverOnline;
+
+  /// ¿Se está comprobando el estado del WServer al abrir?
+  final bool verificando;
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    final Widget estado;
+    if (verificando) {
+      estado = const Row(
+        children: [
+          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 8),
+          Text('Comprobando WServer local…', style: TextStyle(fontSize: 12)),
+        ],
+      );
+    } else {
+      estado = Row(
+        children: [
+          Icon(
+            wserverOnline ? Icons.check_circle : Icons.error_outline,
+            size: 16,
+            color: wserverOnline ? SwsColors.success : SwsColors.warning,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              wserverOnline
+                  ? 'WServer local activo: la API responde y la conexión es editable.'
+                  : 'WServer local no detectado: indica la URL de una API local '
+                      'alcanzable (o arranca el servicio WServer).',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Card(
       color: SwsColors.blue100,
       child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.settings_remote_outlined, color: SwsColors.accent),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Primera configuración: indica la URL de la API local de '
-                'esta estación. El servidor central ya viene predefinido.',
-                style: TextStyle(fontSize: 13),
-              ),
+            const Row(
+              children: [
+                Icon(Icons.settings_remote_outlined, color: SwsColors.accent),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Primera configuración: indica la URL de la API local de '
+                    'esta estación. El servidor central ya viene predefinido.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            estado,
           ],
         ),
       ),

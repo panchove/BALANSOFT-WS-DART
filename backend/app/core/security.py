@@ -5,21 +5,21 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Genera un hash bcrypt de la contraseña."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica una contraseña contra su hash bcrypt."""
     try:
-        return pwd_context.verify(plain, hashed)
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
     except Exception:
         return False
 

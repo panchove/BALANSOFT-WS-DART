@@ -108,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             title: Text(w.idVehiculo ?? 'Sin vehículo'),
                             subtitle: Text(
-                              '${w.numeroBoleto ?? _corto(w.boleto)} | ${w.pesoEntradaVehiculo.toStringAsFixed(1)} kg',
+                              '${w.numeroBoleto ?? 'Boleto s/n'} | ${w.pesoEntradaVehiculo.toStringAsFixed(1)} kg',
                             ),
                             trailing: Text(w.estadoBoleto),
                           ),
@@ -130,19 +130,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  String _corto(String s) {
-    if (s.length > 8) {
-      return '${s.substring(0, 8)}...';
-    }
-    return s;
-  }
-
   Widget _buildKeyboardShortcutsGrid(BuildContext context, bool isWide) {
     final authState = context.read<AuthBloc>().state;
     final esAdmin = authState is AuthAuthenticated && authState.user.isAdmin;
 
     final comandos = <_AtajoTeclado>[
-      // Control Global
+      // ── Control global ─────────────────────────────────────────────
       const _AtajoTeclado(
         tecla: 'Ctrl + K',
         comando: '',
@@ -153,35 +146,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _AtajoTeclado(
         tecla: 'Ctrl + B',
         comando: '',
-        etiqueta: 'Sidebar / Menú',
+        etiqueta: 'Mostrar / Ocultar Sidebar',
         icono: Icons.menu,
         categoria: 'Global',
       ),
-      // Navegación
+      const _AtajoTeclado(
+        tecla: 'Ctrl + H',
+        comando: '',
+        etiqueta: 'Ir a Inicio / Dashboard',
+        icono: Icons.home_outlined,
+        categoria: 'Global',
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + ,',
+        comando: 'go:configuracion',
+        etiqueta: 'Abrir Configuración',
+        icono: Icons.settings_outlined,
+        categoria: 'Global',
+        soloAdmin: true,
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + Q',
+        comando: 'cfg:exit',
+        etiqueta: 'Salir del Sistema',
+        icono: Icons.logout,
+        categoria: 'Global',
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + L',
+        comando: '',
+        etiqueta: 'Cerrar Sesión / Bloquear',
+        icono: Icons.lock_outline,
+        categoria: 'Global',
+      ),
+      const _AtajoTeclado(
+        tecla: 'F9',
+        comando: '',
+        etiqueta: 'Maximizar / Restaurar',
+        icono: Icons.crop_square_outlined,
+        categoria: 'Global',
+      ),
+      const _AtajoTeclado(
+        tecla: 'F11',
+        comando: '',
+        etiqueta: 'Pantalla Completa',
+        icono: Icons.fullscreen,
+        categoria: 'Global',
+      ),
+      // ── Crear (nuevos registros) ───────────────────────────────────
       _AtajoTeclado(
-        tecla: 'Alt + 1',
-        comando: 'go:wm',
-        etiqueta: 'Pesaje Manual',
-        icono: Icons.balance,
-        categoria: 'Módulos',
+        tecla: 'Ctrl + N',
+        comando: 'new:ticket',
+        etiqueta: 'Nuevo Pesaje (Entrada)',
+        icono: Icons.add_card,
+        categoria: 'Crear',
         destino: (_) => const WeighingFormScreen(),
       ),
       _AtajoTeclado(
-        tecla: 'Alt + 3',
+        tecla: 'Ctrl + Shift + N',
+        comando: 'go:wm',
+        etiqueta: 'Nuevo Pesaje Manual',
+        icono: Icons.balance,
+        categoria: 'Crear',
+        destino: (_) => const WeighingFormScreen(),
+      ),
+      // ── Navegación rápida ──────────────────────────────────────────
+      const _AtajoTeclado(
+        tecla: 'Ctrl + 1',
+        comando: '',
+        etiqueta: 'Inicio',
+        icono: Icons.home_outlined,
+        categoria: 'Módulos',
+      ),
+      _AtajoTeclado(
+        tecla: 'Ctrl + 2',
         comando: 'go:in',
-        etiqueta: 'Consultas: Entradas',
+        etiqueta: 'Entradas',
         icono: Icons.login,
         categoria: 'Módulos',
         destino: (_) => const WeighingListScreen(titulo: 'Entradas'),
       ),
       _AtajoTeclado(
-        tecla: 'Alt + 4',
+        tecla: 'Ctrl + 3',
         comando: 'go:out',
-        etiqueta: 'Consultas: Salidas',
+        etiqueta: 'Salidas',
         icono: Icons.logout,
         categoria: 'Módulos',
         destino: (_) => const WeighingListScreen(titulo: 'Salidas'),
       ),
+      _AtajoTeclado(
+        tecla: 'Ctrl + 4',
+        comando: 'reportes',
+        etiqueta: 'Reportes',
+        icono: Icons.assessment_outlined,
+        categoria: 'Módulos',
+        destino: (_) => const ReportsScreen(),
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + 5 / Alt + K',
+        comando: 'go:kardex',
+        etiqueta: 'Kardex',
+        icono: Icons.table_rows_outlined,
+        categoria: 'Módulos',
+      ),
+      // ── Catálogos (Alt mnemónico) ──────────────────────────────────
       _AtajoTeclado(
         tecla: 'Alt + C',
         comando: 'clientes',
@@ -203,31 +271,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
           seccion: AppCatalogos.vehiculosYChutos,
         ),
       ),
-      _AtajoTeclado(
-        tecla: 'Alt + R',
-        comando: 'reportes',
-        etiqueta: 'Reportes',
-        icono: Icons.assessment_outlined,
-        categoria: 'Módulos',
-        destino: (_) => const ReportsScreen(),
+      const _AtajoTeclado(
+        tecla: 'Alt + P',
+        comando: 'productos',
+        etiqueta: 'Productos',
+        icono: Icons.inventory_outlined,
+        categoria: 'Catálogos',
       ),
-      _AtajoTeclado(
-        tecla: 'Ctrl + Shift + S',
-        comando: 'cfg:dev',
-        etiqueta: 'Configuración / Dispositivos',
-        icono: Icons.settings_outlined,
+      const _AtajoTeclado(
+        tecla: 'Alt + A',
+        comando: 'almacenes',
+        etiqueta: 'Almacenes',
+        icono: Icons.warehouse_outlined,
+        categoria: 'Catálogos',
+      ),
+      const _AtajoTeclado(
+        tecla: 'Alt + U',
+        comando: 'usuarios',
+        etiqueta: 'Usuarios',
+        icono: Icons.admin_panel_settings_outlined,
         categoria: 'Sistema',
         soloAdmin: true,
-        destino: (_) => const DispositivosScreen(),
       ),
-      // Acciones
-      _AtajoTeclado(
-        tecla: 'Ctrl + Shift + N',
-        comando: 'new:ticket',
-        etiqueta: 'Nuevo Ticket',
-        icono: Icons.add_card,
+      const _AtajoTeclado(
+        tecla: 'Alt + D',
+        comando: 'cfg:dev',
+        etiqueta: 'Dispositivos',
+        icono: Icons.sensors_outlined,
+        categoria: 'Sistema',
+        soloAdmin: true,
+      ),
+      const _AtajoTeclado(
+        tecla: 'Alt + S',
+        comando: 'seguridad',
+        etiqueta: 'Seguridad',
+        icono: Icons.lock_outline,
+        categoria: 'Sistema',
+        soloAdmin: true,
+      ),
+      // ── Acciones operativas ────────────────────────────────────────
+      const _AtajoTeclado(
+        tecla: 'F2',
+        comando: '',
+        etiqueta: 'Nuevo Pesaje Rápido',
+        icono: Icons.bolt,
         categoria: 'Acciones',
-        destino: (_) => const WeighingFormScreen(),
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + A',
+        comando: 'go:ajustes',
+        etiqueta: 'Ajustes de Inventario',
+        icono: Icons.tune,
+        categoria: 'Acciones',
+      ),
+      const _AtajoTeclado(
+        tecla: 'Ctrl + R',
+        comando: '',
+        etiqueta: 'Sincronizar Ahora',
+        icono: Icons.sync,
+        categoria: 'Acciones',
       ),
     ];
 
@@ -383,7 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                  'Configuración: disponible en el menú lateral (Ctrl+Shift+S)',
+                  'Configuración: disponible en el menú lateral (Ctrl+,)',
                 ),
               ),
             );

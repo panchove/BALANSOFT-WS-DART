@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS licencias (
     fecha_expira     TIMESTAMP NOT NULL,
     max_usuarios     INTEGER,                        -- según tier
     max_equipos      INTEGER,                        -- equipos autorizados a sincronizar
+    max_sesiones     INTEGER,                        -- sesiones concurrentes permitidas (NULL = ilimitado)
     -- Huella de la máquina autorizada (para MONOPUESTA)
     hardware_id      VARCHAR(255),
     -- Observaciones del proveedor
@@ -181,5 +182,18 @@ CREATE TABLE IF NOT EXISTS proveedores_usuarios (
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- =====================================================================
+-- Idempotente: agrega max_sesiones a tablas que pudieron crearse antes
+-- =====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'licencias' AND column_name = 'max_sesiones'
+    ) THEN
+        ALTER TABLE licencias ADD COLUMN max_sesiones INTEGER;
+    END IF;
+END $$;
 
 COMMIT;

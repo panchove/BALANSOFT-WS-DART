@@ -18,6 +18,11 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   final Future<bool> Function()? _healthCheck;
   final Duration _autoSyncInterval;
 
+  /// Cantidad de fallos de health consecutivos: se marca OFFICIALMENTE offline
+  /// solo después de 2 fallos seguidos, para no parpadear con un timeout suelto
+  /// (p.ej. mientras el backend procesa el sync al refrescar).
+  int _healthFallas = 0;
+
   Timer? _timer;
   Timer? _healthTimer;
 
@@ -79,7 +84,15 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   Future<void> _onHealth(
       HealthCheckEvent event, Emitter<SyncState> emit) async {
     final ok = await _healthCheck?.call() ?? true;
-    emit(ok ? HealthOnline(DateTime.now()) : HealthOffline(DateTime.now()));
+    if (ok) {
+      _healthFallas = 0;
+      emit(HealthOnline(DateTime.now()));
+    } else {
+      _healthFallas++;
+      if (_healthFallas >= 2) {
+        emit(HealthOffline(DateTime.now()));
+      }
+    }
   }
 
   @override

@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS identidad_local (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS empresas (
     id_empresa       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_cuenta        UUID NOT NULL UNIQUE,       -- 1:1 con la cuenta del servidor
+    id_cuenta        UUID,                          -- vínculo 1:1 con la cuenta del servidor
     nombre_fiscal    VARCHAR(255) NOT NULL,
     nombre_comercial VARCHAR(255),
     rif_nit          VARCHAR(20) NOT NULL UNIQUE,
@@ -46,10 +46,26 @@ CREATE TABLE IF NOT EXISTS empresas (
     telefono         VARCHAR(50),
     email            VARCHAR(255),
     logo_url         VARCHAR(500),
+    formato_ticket   VARCHAR(10) DEFAULT 'PDF',
+    ruta_exportacion_reportes VARCHAR(500),
+    -- Snapshot de la licencia (validada contra el servidor central en login)
+    licencia_key     VARCHAR(255),
+    licencia_tier    VARCHAR(20),
+    licencia_status  VARCHAR(20),
+    licencia_expira  TIMESTAMP,
     activa           BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Alineación idempotente para BDs creadas antes del snapshot de licencia.
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_key VARCHAR(255);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_tier VARCHAR(20);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_status VARCHAR(20);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_expira TIMESTAMP;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_ticket VARCHAR(10);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ruta_exportacion_reportes VARCHAR(500);
+ALTER TABLE empresas ALTER COLUMN id_cuenta DROP NOT NULL;
 
 -- ============================================================
 -- 2. USUARIOS LOCALES (creados por el ADMIN local)
@@ -180,9 +196,21 @@ CREATE TABLE IF NOT EXISTS terceros (
 -- ============================================================
 -- 6. INVENTARIO
 -- ============================================================
+CREATE TABLE IF NOT EXISTS categorias (
+    id_categoria      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo            VARCHAR(50),
+    nombre            VARCHAR(150) NOT NULL,
+    descripcion       VARCHAR(200),
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS productos (
     id_producto       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
+    id_categoria      UUID NOT NULL REFERENCES categorias(id_categoria),
     codigo            VARCHAR(50),
     nombre            VARCHAR(150) NOT NULL,
     descripcion       VARCHAR(200),
@@ -390,6 +418,18 @@ CREATE TABLE IF NOT EXISTS parametros_sistema (
     grupo         VARCHAR(50),
     descripcion   TEXT,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- 12. SEGURIDAD Y ACCESOS (matriz rol × módulo)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS permisos_acceso (
+    id_empresa    UUID NOT NULL REFERENCES empresas(id_empresa),
+    rol           VARCHAR(30) NOT NULL,
+    modulo        VARCHAR(50) NOT NULL,
+    acceso        VARCHAR(20) NOT NULL DEFAULT 'ver',
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_empresa, rol, modulo)
 );
 
 -- ============================================================

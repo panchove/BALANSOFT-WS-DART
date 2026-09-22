@@ -15,7 +15,7 @@ log = logging.getLogger("balansoft_ws.audit")
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Rutas que se excluyen de auditoría (health, docs, etc.)
-EXCLUDED_PATHS = {"/api/v1/health", "/docs", "/redoc", "/openapi.json"}
+EXCLUDED_PATHS = {"/api/v1/health", "/api/v1/environment", "/docs", "/redoc", "/openapi.json"}
 
 
 class AuditMiddleware(BaseHTTPMiddleware):

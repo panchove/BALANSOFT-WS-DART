@@ -13,6 +13,7 @@ from app.schemas import (
     BalanzaOut,
     CamionOut,
     CatalogSyncResponse,
+    CategoriaOut,
     ConductorOut,
     MarcaOut,
     ModeloCamionOut,
@@ -43,6 +44,7 @@ async def sync_catalogos(
         conductores=[ConductorOut(**c) for c in data["conductores"]],
         productos=[ProductoOut(**p) for p in data["productos"]],
         almacenes=[AlmacenOut(**a) for a in data["almacenes"]],
+        categorias=[CategoriaOut(**c) for c in data.get("categorias", [])],
         balanzas=[BalanzaOut(**b) for b in data["balanzas"]],
         terceros=[TerceroOut(**t) for t in data["terceros"]],
     )

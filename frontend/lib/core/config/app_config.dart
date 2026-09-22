@@ -38,6 +38,13 @@ class AppConfig {
     await _prefs.setString('api_base_url', url);
   }
 
+  /// Borra la URL local configurada: devuelve la app al modo instalación
+  /// (verificación de entorno + pantalla de conexiones).
+  static Future<void> quitarApiBaseUrl() async {
+    apiBaseUrl = null;
+    await _prefs.remove('api_base_url');
+  }
+
   /// URL del servidor central (cuenta y licencia). Siempre disponible.
   static Future<void> setServerApiUrl(String url) async {
     serverApiUrl = url;

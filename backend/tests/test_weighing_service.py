@@ -14,7 +14,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models import BoletoPesaje, Camion, Kardex, Producto
+from app.models import BoletoPesaje, Camion, Categoria, Kardex, Producto
 from app.schemas import WeighingAnular, WeighingClose, WeighingCreate
 from app.services.weighing_service import WeighingService
 
@@ -177,8 +177,14 @@ class TestAnulacion:
     async def test_anula_cerrado_registra_inverso_kardex(self, db, empresa):
         svc = WeighingService()
         # Producto con ES_KARDEX: al cerrar genera INGRESO (10) por PNT > 0
+        categoria = Categoria(
+            id_empresa=empresa.id_empresa, nombre="Categoría Cemento"
+        )
+        db.add(categoria)
+        await db.flush()
         producto = Producto(
             id_empresa=empresa.id_empresa,
+            id_categoria=categoria.id_categoria,
             nombre="Cemento Kardex",
             es_kardex=True,
         )
@@ -220,8 +226,14 @@ class TestAnulacion:
 
     async def test_anula_pendiente_no_genera_kardex(self, db, empresa):
         svc = WeighingService()
+        categoria = Categoria(
+            id_empresa=empresa.id_empresa, nombre="Categoría Cemento 2"
+        )
+        db.add(categoria)
+        await db.flush()
         producto = Producto(
             id_empresa=empresa.id_empresa,
+            id_categoria=categoria.id_categoria,
             nombre="Cemento Kardex 2",
             es_kardex=True,
         )

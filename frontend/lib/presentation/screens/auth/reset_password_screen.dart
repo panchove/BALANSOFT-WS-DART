@@ -82,8 +82,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               });
             } else if (state is AuthPasswordChanged) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Contraseña actualizada, inicia sesión'),
+                const SnackBar(
+                  content: Text('Contraseña actualizada, inicia sesión'),
                   backgroundColor: SwsColors.success,
                 ),
               );

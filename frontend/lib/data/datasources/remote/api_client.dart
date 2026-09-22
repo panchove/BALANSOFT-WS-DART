@@ -7,6 +7,7 @@ class ApiClient {
   String _baseUrl;
   String? _serverToken;
   Future<String?> Function()? _refreshTokenHandler;
+  bool _refrescando = false;
 
   String get baseUrl => _baseUrl;
 
@@ -39,7 +40,19 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (error, handler) async {
-          if (error.response?.statusCode == 401 && _refreshTokenHandler != null) {
+          // No reintentar refresh sobre el propio endpoint de refresh ni en
+          // cascada: evita bucles infinitos cuando el refresh token es
+          // inválido (p.ej. tras reinstalar/vaciar la BD del backend).
+          final esEndpointRefresh =
+              error.requestOptions.path.contains('refresh-token');
+          if (error.response?.statusCode != 401 ||
+              _refreshTokenHandler == null ||
+              _refrescando ||
+              esEndpointRefresh) {
+            return handler.next(error);
+          }
+          _refrescando = true;
+          try {
             final newToken = await _refreshTokenHandler!();
             if (newToken != null && newToken.isNotEmpty) {
               setToken(newToken);
@@ -50,6 +63,8 @@ class ApiClient {
                 return handler.resolve(response);
               } catch (_) {}
             }
+          } finally {
+            _refrescando = false;
           }
           return handler.next(error);
         },
@@ -86,6 +101,13 @@ class ApiClient {
     required String password,
     required String hardwareId,
     String? serverUrl,
+    String? deviceBrand,
+    String? deviceModel,
+    String? osVersion,
+    String? macAddress,
+    String? nombreEquipo,
+    String? sistemaOperativo,
+    String? versionApp,
   }) async {
     final url = _serverBase(serverUrl);
     if (url.isEmpty) {
@@ -97,6 +119,13 @@ class ApiClient {
         'email': email,
         'password': password,
         'hardware_id': hardwareId,
+        'device_brand': deviceBrand,
+        'device_model': deviceModel,
+        'os_version': osVersion,
+        'mac_address': macAddress,
+        'nombre_equipo': nombreEquipo,
+        'sistema_operativo': sistemaOperativo,
+        'version_app': versionApp,
       },
       options: Options(receiveTimeout: const Duration(seconds: 10)),
     );
@@ -124,6 +153,15 @@ class ApiClient {
     return response;
   }
 
+  /// Login CENTRAL-first contra el backend LOCAL (`/api/v1/auth/login-central`).
+  /// El backend valida la cuenta en el servidor central (DB del panel) y, si
+  /// existe, hace espejo local (empresa + admin) para poder operar offline.
+  Future<Response> loginCentral(Map<String, dynamic> body) async {
+    final response =
+        await _dio.post('$_baseUrl/api/v1/auth/login-central', data: body);
+    return response;
+  }
+
   /// Comprueba si el servidor central (cuenta/licencia) responde.
   Future<bool> serverHealth({String? serverUrl}) async {
     final url = (serverUrl ?? AppConfig.serverApiUrl)
@@ -136,6 +174,24 @@ class ApiClient {
     } on DioException {
       return false;
     }
+  }
+
+  /// Consulta el estado del entorno de la API local (verificación de
+  /// instalación). Devuelve el mapa completo del endpoint /environment.
+  Future<Map<String, dynamic>?> environment({String? baseUrl}) async {
+    final base = (baseUrl ?? _baseUrl).replaceAll(RegExp(r'/$'), '');
+    try {
+      final response = await _dio.get(
+        '$base/api/v1/environment',
+        options: Options(receiveTimeout: const Duration(seconds: 10)),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+    } on DioException {
+      // Entorno no accesible (p. ej. WServer aún arrancando): se reporta abajo como null.
+    }
+    return null;
   }
 
   Future<Response> register(Map<String, dynamic> body) async {
@@ -328,6 +384,38 @@ class ApiClient {
     return response;
   }
 
+  Future<Response> getTicketTxt(String boleto) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.weighingTxt(boleto)}',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response;
+  }
+
+  // ── Series de numeración (CRUD; el campo de trabajo elige cuál usar) ──
+  Future<Response> listSeries() async {
+    return _dio.get('$_baseUrl${ApiConstants.seriesBase}');
+  }
+
+  Future<Response> createSeries(Map<String, dynamic> body) async {
+    return _dio.post('$_baseUrl${ApiConstants.seriesCreate}', data: body);
+  }
+
+  Future<Response> updateSeries(
+      String idSerie, Map<String, dynamic> body) async {
+    return _dio.put(
+        '$_baseUrl${ApiConstants.seriesUpdate(idSerie)}', data: body);
+  }
+
+  Future<Response> marcarSerieActiva(String idSerie) async {
+    return _dio.put(
+        '$_baseUrl${ApiConstants.seriesActiva(idSerie)}');
+  }
+
+  Future<Response> deleteSeries(String idSerie) async {
+    return _dio.delete('$_baseUrl${ApiConstants.seriesDelete(idSerie)}');
+  }
+
   Future<Response> updateWeighing(
       String boleto, Map<String, dynamic> body) async {
     final response = await _dio.put(
@@ -341,6 +429,23 @@ class ApiClient {
     final response =
         await _dio.get('$_baseUrl${ApiConstants.catalogsSync}');
     return response;
+  }
+
+  /// Matriz de accesos (Seguridad y Accesos): `{modulos: [{clave, titulo, accesos}]}`.
+  Future<Response> getMatrizSeguridad() async {
+    return _dio.get('$_baseUrl${ApiConstants.seguridadMatriz}');
+  }
+
+  /// Actualiza el acceso de un (rol, módulo). Devuelve el módulo actualizado.
+  Future<Response> putMatrizSeguridad(
+    String rol,
+    String modulo,
+    String acceso,
+  ) async {
+    return _dio.put(
+      '$_baseUrl${ApiConstants.seguridadMatriz}',
+      data: {'rol': rol, 'modulo': modulo, 'acceso': acceso},
+    );
   }
 
   /// Lee el peso en vivo de una balanza vía el HAL del backend (B7).
@@ -522,6 +627,32 @@ Future<Response> getMonthlyReport(int year, int month) async {
       data: formData,
     );
     return '${response.data['url']}';
+  }
+
+
+  /// Registra un ajuste manual de inventario (movimiento de kardex).
+  ///
+  /// [idMovimiento]: 10 = INGRESO, 60 = DESPACHO.
+  /// [valorKg]: peso ajustado en kilogramos (positivo).
+  /// [documento]: justificación obligatoria.
+  Future<Response> crearAjusteInventario({
+    required int idMovimiento,
+    required String idProducto,
+    required String idAlmacen,
+    required double valorKg,
+    required String documento,
+  }) async {
+    final response = await _dio.post(
+      '$_baseUrl/api/v1/inventario/ajustes',
+      data: {
+        'id_movimiento': idMovimiento,
+        'id_producto': idProducto,
+        'id_almacen': idAlmacen,
+        'valor_kg': valorKg,
+        'documento': documento,
+      },
+    );
+    return response;
   }
 
   /// Resuelve una URL relativa del servidor (`/media/...`) a una URL completa

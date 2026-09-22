@@ -67,7 +67,7 @@ class RestoreSessionUseCase {
   final IAuthRepository _repo;
   RestoreSessionUseCase(this._repo);
 
-  Future<void> execute() => _repo.restoreSession();
+  Future<SesionRestaurada> execute() => _repo.restoreSession();
 }
 
 class ForgotPasswordUseCase {

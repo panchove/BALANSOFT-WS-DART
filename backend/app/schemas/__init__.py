@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -32,6 +32,23 @@ class LoginRequest(BaseModel):
     device_model: str | None = None
     os_version: str | None = None
     mac_address: str | None = None
+
+
+class LoginCentralRequest(BaseModel):
+    """Login CENTRAL-first: valida la cuenta en el servidor central y si es
+    válida hace espejo local (empresa + usuario admin) para seguir offline."""
+
+    email: EmailStr
+    password: str
+    server_url: str | None = None
+    hardware_id: str | None = None
+    mac_address: str | None = None
+    device_brand: str | None = None
+    device_model: str | None = None
+    os_version: str | None = None
+    nombre_equipo: str | None = None
+    sistema_operativo: str | None = None
+    version_app: str | None = None
 
 
 class ValidateLicenseRequest(BaseModel):
@@ -72,6 +89,8 @@ class CompanyOut(BaseModel):
     licencia_tier: str | None
     licencia_status: str | None
     licencia_expira: datetime | None
+    formato_ticket: str | None = "PDF"
+    ruta_exportacion_reportes: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -199,8 +218,25 @@ class ConductorCreate(BaseModel):
     foto_url: str | None = None
 
 
+class CategoriaOut(CatalogItemOut):
+    id_categoria: uuid.UUID
+    codigo: str | None = None
+    nombre: str
+    descripcion: str | None = None
+    activo: bool = True
+
+
+class CategoriaCreate(BaseModel):
+    codigo: str | None = None
+    nombre: str = Field(..., min_length=2)
+    descripcion: str | None = None
+    activo: bool = True
+
+
 class ProductoOut(CatalogItemOut):
     id_producto: uuid.UUID
+    id_categoria: uuid.UUID
+    categoria_nombre: str | None = None
     codigo: str | None = None
     nombre: str
     descripcion: str | None = None
@@ -213,6 +249,9 @@ class ProductoOut(CatalogItemOut):
 
 
 class ProductoCreate(BaseModel):
+    id_categoria: uuid.UUID = Field(
+        ..., description="Categoría a la que pertenece el producto (obligatoria)"
+    )
     codigo: str | None = None
     nombre: str = Field(..., min_length=2)
     descripcion: str | None = None
@@ -325,6 +364,7 @@ class CatalogSyncResponse(BaseModel):
     conductores: list[ConductorOut] = Field(default_factory=list)
     productos: list[ProductoOut] = Field(default_factory=list)
     almacenes: list[AlmacenOut] = Field(default_factory=list)
+    categorias: list[CategoriaOut] = Field(default_factory=list)
     balanzas: list[BalanzaOut] = Field(default_factory=list)
     terceros: list[TerceroOut] = Field(default_factory=list)
     server_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -347,6 +387,7 @@ class WeighingCreate(BaseModel):
     id_balanza: uuid.UUID | None = None
     tipo_tercero: str | None = None
     id_tercero: uuid.UUID | None = None
+    id_serie: uuid.UUID | None = None
     multi_despacho_recepcion: bool = False
 
     # Creación inline (get-or-create): si no se envía id, se busca o crea por nombre/placa
@@ -407,6 +448,8 @@ class WeighingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     boleto: uuid.UUID
     numero_boleto: str | None = None
+    id_serie: uuid.UUID | None = None
+    serie_nombre: str | None = None
     id_vehiculo: str | None = None
     remolque: bool = False
     id_remolque: uuid.UUID | None = None
@@ -451,11 +494,21 @@ class WeighingOut(BaseModel):
     advertencia_tolerancia: str | None = None
     created_at: datetime
     updated_at: datetime
+    # Nombres legibles (enriquecidos por el servidor, no almacenados en DB)
+    transporte_nombre: str | None = None
+    conductor_nombre: str | None = None
+    producto_nombre: str | None = None
+    almacen_nombre: str | None = None
+    balanza_nombre: str | None = None
+    tercero_nombre: str | None = None
+    remolque_placa: str | None = None
 
 
 class WeighingSyncItem(BaseModel):
     boleto: str
     numero_boleto: str | None = None
+    id_serie: uuid.UUID | None = None
+    nombre_serie: str | None = None
     id_vehiculo: str
     remolque: bool = False
     id_remolque: uuid.UUID | None = None
@@ -607,6 +660,8 @@ class EmpresaPerfilOut(BaseModel):
     telefono: str | None = None
     email: str | None = None
     logo_url: str | None = None
+    formato_ticket: str | None = "PDF"
+    ruta_exportacion_reportes: str | None = None
     updated_at: datetime
 
 
@@ -618,3 +673,97 @@ class EmpresaPerfilUpdate(BaseModel):
     telefono: str | None = Field(None, max_length=50)
     email: EmailStr | None = None
     logo_url: str | None = Field(None, max_length=500)
+    formato_ticket: Literal["PDF", "TXT"] | None = Field(None)
+    ruta_exportacion_reportes: str | None = Field(None, max_length=500)
+
+
+# ---------------------------------------------------------------------------
+# Seguridad y Accesos – matriz de módulos por rol
+# ---------------------------------------------------------------------------
+
+
+class AccesoModuloOut(BaseModel):
+    clave: str
+    titulo: str
+    accesos: dict[str, str]
+
+
+class MatrizAccesosOut(BaseModel):
+    modulos: list[AccesoModuloOut] = Field(default_factory=list)
+
+
+class AccesoUpdate(BaseModel):
+    rol: str = Field(..., min_length=1)
+    modulo: str = Field(..., min_length=1)
+    acceso: str = Field(..., pattern=r"^(ver|editar|ninguno)$")
+
+
+class SerieNumeracionCreate(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=80)
+    prefijo: str = Field(..., min_length=1, max_length=20)
+    inicio: int = Field(1, ge=1)
+    digitos: int = Field(8, ge=1, le=20)
+    activa: bool = False
+
+
+class SerieNumeracionUpdate(BaseModel):
+    nombre: str | None = Field(None, min_length=1, max_length=80)
+    prefijo: str | None = Field(None, min_length=1, max_length=20)
+    digitos: int | None = Field(None, ge=1, le=20)
+
+
+class SerieNumeracionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id_serie: uuid.UUID
+    id_empresa: uuid.UUID
+    nombre: str
+    prefijo: str
+    inicio: int
+    siguiente: int
+    digitos: int
+    activa: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Ajustes de inventario (movimiento kardex manual)
+# ---------------------------------------------------------------------------
+
+
+class AjusteInventarioCreate(BaseModel):
+    """Movimiento de ajuste manual de inventario (kardex).
+
+    Tipos de movimiento (MODEL.md §kardex):
+      - ``10`` = INGRESO por ajuste (positivo, incrementa saldo)
+      - ``60`` = DESPACHO por ajuste (negativo, reduce saldo)
+
+    Solo se aceptan productos con ``es_kardex=true`` y almacenes
+    de la misma empresa. La justificación es obligatoria.
+    """
+
+    id_movimiento: Literal[10, 60] = Field(
+        ..., description="10 = INGRESO / 60 = DESPACHO"
+    )
+    id_producto: uuid.UUID
+    id_almacen: uuid.UUID
+    valor_kg: Decimal = Field(..., gt=0, description="Peso ajustado en kilogramos")
+    documento: str = Field(
+        ..., min_length=3, max_length=100, description="Justificación obligatoria del ajuste"
+    )
+    fecha_documento: datetime | None = None
+
+
+class AjusteInventarioOut(BaseModel):
+    """Registro de kardex generado por el ajuste."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id_kardex: uuid.UUID
+    id_empresa: uuid.UUID
+    id_movimiento: int
+    id_producto: uuid.UUID | None
+    id_almacen: uuid.UUID | None
+    valor: Decimal
+    documento: str | None
+    fecha_kardex: datetime
+    created_at: datetime

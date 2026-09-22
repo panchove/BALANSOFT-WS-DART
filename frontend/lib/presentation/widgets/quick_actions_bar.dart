@@ -43,19 +43,19 @@ class QuickActionsBar extends StatelessWidget {
             _QuickActionCard(
               icon: Icons.edit_note,
               label: 'Pesaje Manual',
-              shortcut: 'Alt+1',
+              shortcut: 'Ctrl+Shift+N',
               onTap: () => _handleTap(context, 'Pesaje Manual', onPesajeManual),
             ),
             _QuickActionCard(
               icon: Icons.smart_toy_outlined,
               label: 'Pesaje Auto',
-              shortcut: 'Alt+2',
+              shortcut: 'Ctrl+N',
               onTap: () => _handleTap(context, 'Pesaje Auto', onPesajeAuto),
             ),
             _QuickActionCard(
               icon: Icons.tune,
               label: 'Ajustes Inv.',
-              shortcut: 'Alt+5',
+              shortcut: 'Ctrl+A',
               onTap: () => _handleTap(context, 'Ajustes Inv.', onAjustesInventario),
             ),
             _QuickActionCard(
@@ -66,7 +66,6 @@ class QuickActionsBar extends StatelessWidget {
             _QuickActionCard(
               icon: Icons.fact_check_outlined,
               label: 'Auditoría',
-              shortcut: 'Alt+A',
               onTap: () => _handleTap(context, 'Auditoría', onAuditoria),
             ),
             _QuickActionCard(
@@ -97,6 +96,25 @@ class _QuickActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final oscuro = theme.brightness == Brightness.dark;
+    final icono = oscuro
+        ? Colors.white.withValues(alpha: 0.9)
+        : theme.colorScheme.onSurface;
+    final fondo = oscuro
+        ? Colors.white.withValues(alpha: 0.05)
+        : theme.colorScheme.surfaceContainerHighest;
+    final borde = oscuro
+        ? Colors.white.withValues(alpha: 0.1)
+        : theme.colorScheme.outlineVariant;
+    final sombra = oscuro
+        ? Colors.black.withValues(alpha: 0.15)
+        : theme.colorScheme.shadow.withValues(alpha: 0.08);
+    final badgeFondo = oscuro
+        ? Colors.white.withValues(alpha: 0.12)
+        : theme.colorScheme.primary.withValues(alpha: 0.1);
+    final badgeTexto = oscuro
+        ? Colors.white.withValues(alpha: 0.7)
+        : theme.colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
@@ -112,15 +130,15 @@ class _QuickActionCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: fondo,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: borde,
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
+                    color: sombra,
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -131,7 +149,7 @@ class _QuickActionCard extends StatelessWidget {
                 children: [
                   Icon(
                     icon,
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: icono,
                     size: 20,
                   ),
                   if (shortcut != null) ...[
@@ -142,13 +160,13 @@ class _QuickActionCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
+                        color: badgeFondo,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         shortcut!,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: badgeTexto,
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                         ),

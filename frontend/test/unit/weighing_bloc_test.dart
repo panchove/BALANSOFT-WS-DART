@@ -73,6 +73,9 @@ class _FakeRepo implements IWeighingRepository {
   Future<Response> getTicketPdf(String boleto) async => Response(requestOptions: RequestOptions(path: ''));
 
   @override
+  Future<Response> getTicketTxt(String boleto) async => Response(requestOptions: RequestOptions(path: ''));
+
+  @override
   Future<int> countWeighingsToday() async => 1;
 
   @override

@@ -74,6 +74,19 @@ def _token_digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _max_sesiones_default(tier: str) -> int | None:
+    """Sesiones concurrentes por defecto según tier de la licencia.
+
+    DEMO → 1, MONOPUESTA → 2, CENTRAL/AUTO → ilimitado (None).
+    """
+    upper = (tier or "").strip().upper()
+    if upper.startswith("MONO"):
+        return 2
+    if upper == "DEMO":
+        return 1
+    return None
+
+
 async def _auditar(
     db: AsyncSession,
     accion: str,
@@ -151,6 +164,40 @@ async def _dispositivo(
         disp.version_app = payload.version_app or disp.version_app
     await db.flush()
     return disp
+
+
+async def _verificar_limite_sync(db: AsyncSession, cred: Credencial) -> None:
+    """Blinda la sincronización contra cuentas que estén sobre su límite de
+    sesiones.
+
+    Cuando una cuenta supera las sesiones concurrentes autorizadas por su
+    licencia (``max_sesiones``), las estaciones ya abiertas se mantienen
+    operando en local pero NO pueden compartir información entre sí: cualquier
+    push/pull de sync se rechaza con 403 hasta liberar una sesión.
+    """
+    licencia = await _licencia_activa(db, cred.id_cuenta)
+    if licencia.max_sesiones is None:
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    activas = (
+        await db.execute(
+            select(Sesion.id_sesion)
+            .join(Credencial, Sesion.id_credencial == Credencial.id_credencial)
+            .where(
+                Credencial.id_cuenta == cred.id_cuenta,
+                Sesion.revocada.is_(False),
+                Sesion.expira > now,
+            )
+        )
+    ).scalars().all()
+    if len(activas) > licencia.max_sesiones:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "La cuenta supera el límite de sesiones de la licencia "
+                f"({licencia.max_sesiones}); cierre sesiones para sincronizar"
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +312,11 @@ async def server_register(
         fecha_expira=_naive_utc(payload.fecha_expira) or datetime.now(UTC),
         max_usuarios=payload.max_usuarios,
         max_equipos=payload.max_equipos,
+        max_sesiones=(
+            payload.max_sesiones
+            if payload.max_sesiones is not None
+            else _max_sesiones_default(payload.licencia_tier)
+        ),
     )
     db.add(licencia)
 
@@ -337,7 +389,49 @@ async def server_login(
             )
     disp.id_licencia = licencia.id_licencia
 
-    cred.ultimo_login = datetime.now(UTC).replace(tzinfo=None)
+    # Rotación por dispositivo: quien vuelve a entrar aquí cierra sus sesiones
+    # anteriores para no auto-bloquearse con su propio límite.
+    now = datetime.now(UTC).replace(tzinfo=None)
+    sesiones_previas = (
+        await db.execute(
+            select(Sesion).where(
+                Sesion.id_credencial == cred.id_credencial,
+                Sesion.id_dispositivo == disp.id_dispositivo,
+                Sesion.revocada.is_(False),
+                Sesion.expira > now,
+            )
+        )
+    ).scalars().all()
+    for sen_prev in sesiones_previas:
+        sen_prev.revocada = True
+    # La sesión del servidor no usa autoflush: materializar la rotación antes
+    # de contar las sesiones activas para evitar auto-bloqueos.
+    await db.flush()
+
+    # Límite de sesiones concurrentes de la licencia, contadas a nivel de
+    # cuenta (todas las credenciales y dispositivos de la misma empresa).
+    if licencia.max_sesiones is not None:
+        activas = (
+            await db.execute(
+                select(Sesion.id_sesion)
+                .join(Credencial, Sesion.id_credencial == Credencial.id_credencial)
+                .where(
+                    Credencial.id_cuenta == cuenta.id_cuenta,
+                    Sesion.revocada.is_(False),
+                    Sesion.expira > now,
+                )
+            )
+        ).scalars().all()
+        if len(activas) >= licencia.max_sesiones:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Límite de sesiones de la licencia alcanzado "
+                    f"({licencia.max_sesiones} simultáneas)"
+                ),
+            )
+
+    cred.ultimo_login = now
     access = create_access_token(str(cred.id_credencial), extra={"rol": cred.rol_global})
     refresh = create_refresh_token(str(cred.id_credencial))
     db.add(
@@ -345,8 +439,7 @@ async def server_login(
             id_credencial=cred.id_credencial,
             id_dispositivo=disp.id_dispositivo,
             token_hash=_token_digest(refresh),
-            expira=datetime.now(UTC).replace(tzinfo=None)
-            + timedelta(days=7),
+            expira=now + timedelta(days=7),
         )
     )
     await _auditar(
@@ -469,6 +562,11 @@ async def alta_licencia(
         fecha_expira=_naive_utc(payload.fecha_expira) or datetime.now(UTC),
         max_usuarios=payload.max_usuarios,
         max_equipos=payload.max_equipos,
+        max_sesiones=(
+            payload.max_sesiones
+            if payload.max_sesiones is not None
+            else _max_sesiones_default(payload.licencia_tier)
+        ),
     )
     db.add(lic)
     await _auditar(
@@ -649,6 +747,7 @@ async def panel_cuenta_actualizar(
         "fecha_expira": _naive_utc(payload.fecha_expira),
         "max_usuarios": payload.max_usuarios,
         "max_equipos": payload.max_equipos,
+        "max_sesiones": payload.max_sesiones,
     }
     lic_toca = {k for k, v in lic_campos.items() if v is not None}
     if lic_toca:
@@ -861,6 +960,7 @@ async def server_sync_push(
     db: AsyncSession = Depends(get_server_db),
 ) -> ServerSyncPushResponse:
     """Recibe y encola un lote sincrónico de una estación local."""
+    await _verificar_limite_sync(db, cred)
     disp = (
         await db.execute(
             select(Dispositivo)
@@ -920,6 +1020,7 @@ async def server_sync_users(
     en `credenciales` acotado a SU cuenta. El resto de credenciales globales no
     se toca.
     """
+    await _verificar_limite_sync(db, cred)
     procesados = 0
     errores = 0
     detalle: list[str] = []

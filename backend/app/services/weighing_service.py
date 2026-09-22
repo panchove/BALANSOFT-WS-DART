@@ -30,12 +30,14 @@ from app.models import (
     Balanza,
     BoletoPesaje,
     Camion,
+    Categoria,
     Conductor,
     Empresa,
     Kardex,
     LogSistema,
     Producto,
     Remolque,
+    SerieNumeracion,
     Tercero,
     Transporte,
 )
@@ -111,18 +113,67 @@ class WeighingService:
     # Utilidades
     # ------------------------------------------------------------------
 
-    async def generar_numero_boleto(self, db: AsyncSession) -> str:
-        """Genera número de boleto secuencial (TA-00000001). Nunca se reutiliza."""
+    async def generar_numero_boleto(
+        self,
+        db: AsyncSession,
+        id_empresa: uuid.UUID | None = None,
+        id_serie: uuid.UUID | None = None,
+    ) -> tuple[str, uuid.UUID | None, str | None]:
+        """Genera número de boleto con la serie activa de la empresa.
+
+        Si la empresa definió al menos una SerieNumeracion y una está ACTIVA,
+        usa su (prefijo, digitos, siguiente) y avanza ``siguiente`` con
+        ``FOR UPDATE`` para que el número jamás se reutilice ni se salte.
+        Si no hay serie configurada (instalaciones legacy), cae al patrón
+        ``TA-`` canónico histórico.
+
+        Devuelve ``(numero_boleto, id_serie, nombre_serie)``.
+        """
+        if id_empresa is not None:
+            if id_serie is not None:
+                serie_especifica = (
+                    await db.execute(
+                        select(SerieNumeracion)
+                        .where(
+                            SerieNumeracion.id_empresa == id_empresa,
+                            SerieNumeracion.id_serie == id_serie,
+                        )
+                        .with_for_update()
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if serie_especifica is not None:
+                    numero = f"{serie_especifica.prefijo}{serie_especifica.siguiente:0{serie_especifica.digitos}d}"
+                    serie_especifica.siguiente = serie_especifica.siguiente + 1
+                    return numero, serie_especifica.id_serie, serie_especifica.nombre
+
+            serie = (
+                await db.execute(
+                    select(SerieNumeracion)
+                    .where(
+                        SerieNumeracion.id_empresa == id_empresa,
+                        SerieNumeracion.activa.is_(True),
+                    )
+                    .with_for_update()
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if serie is not None:
+                numero = f"{serie.prefijo}{serie.siguiente:0{serie.digitos}d}"
+                serie.siguiente = serie.siguiente + 1
+                return numero, serie.id_serie, serie.nombre
+
         rows = (await db.execute(select(BoletoPesaje.numero_boleto))).scalars().all()
         max_numero = 0
-        for numero in rows:
-            if numero and "-" in numero:
+        for num_item in rows:
+            if num_item and "-" in str(num_item):
                 try:
-                    max_numero = max(max_numero, int(numero.rsplit("-", 1)[1]))
+                    max_numero = max(max_numero, int(str(num_item).rsplit("-", 1)[1]))
                 except (ValueError, IndexError):
                     continue
         digitos = max(settings.boleto_digitos, len(str(max_numero + 1)))
-        return f"{settings.boleto_prefix}{max_numero + 1:0{digitos}d}"
+        legacy = f"{settings.boleto_prefix}{max_numero + 1:0{digitos}d}"
+        return legacy, None, None
 
     async def _get_or_create(
         self,
@@ -171,6 +222,26 @@ class WeighingService:
         create.update(extra_create or {})
         obj = await self._get_or_create(db, empresa_id, model, search, create)
         return getattr(obj, id_col)
+
+    async def _categoria_productos_default(
+        self, db: AsyncSession, empresa_id: uuid.UUID
+    ) -> uuid.UUID:
+        """Categoría por defecto para productos creados inline durante el pesaje.
+
+        Regla: todo producto debe pertenecer a una categoría. Los productos que
+        se crean sobre la marcha (por nombre, sin detalle de categoría) se
+        asignan a una categoría "General" por empresa, creada si no existe.
+        """
+        NOMBRE = "General"
+        stmt = select(Categoria).where(
+            Categoria.id_empresa == empresa_id, Categoria.nombre == NOMBRE
+        )
+        categoria = (await db.execute(stmt)).scalars().first()
+        if categoria is None:
+            categoria = Categoria(id_empresa=empresa_id, nombre=NOMBRE)
+            db.add(categoria)
+            await db.flush()
+        return categoria.id_categoria
 
     async def _resolver_vehiculo(self, db: AsyncSession, empresa_id: uuid.UUID, placa: str) -> str:
         """Creación inline del vehículo (camiones) por placa."""
@@ -512,6 +583,9 @@ class WeighingService:
             id_col="id_producto",
             search_name_cols=["nombre"],
             create_name_col="nombre",
+            extra_create={"id_categoria": await self._categoria_productos_default(
+                db, empresa.id_empresa
+            )} if data.producto_nombre else None,
         )
         id_almacen = await self._resolver_catalogo(
             db, empresa.id_empresa,
@@ -544,10 +618,13 @@ class WeighingService:
             extra_create={"tipo": tipo_tercero} if data.tercero_nombre else None,
         )
 
-        numero_boleto = await self.generar_numero_boleto(db)
+        numero_boleto, id_serie_boleto, _nombre_serie = await self.generar_numero_boleto(
+            db, id_empresa=empresa.id_empresa, id_serie=data.id_serie
+        )
         pesaje = BoletoPesaje(
             id_empresa=empresa.id_empresa,
             numero_boleto=numero_boleto,
+            id_serie=id_serie_boleto,
             id_vehiculo=placa,
             remolque=data.remolque,
             id_remolque=id_remolque,

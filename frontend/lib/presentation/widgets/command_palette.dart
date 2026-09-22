@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Paleta de comandos global (Ctrl+K / F2).
+/// Paleta de comandos global (Ctrl+K).
 /// Permite navegar y ejecutar acciones escribiendo términos, prefijos cortos
 /// o atajos (según docs/NAV.md).
 class CommandPalette extends StatefulWidget {
@@ -27,130 +27,133 @@ class _CommandPaletteState extends State<CommandPalette> {
 
   late final List<_Command> _commands = [
     // Navegación por nombre
-    _Command(
+    const _Command(
       label: 'Dashboard / Inicio',
       icon: Icons.dashboard_outlined,
       shortcut: 'Ctrl+H',
       action: 'go:inicio',
     ),
-    _Command(
+    const _Command(
       label: 'Pesaje Manual',
       icon: Icons.edit_note,
-      shortcut: 'Alt+1',
+      shortcut: 'Ctrl+Shift+N',
       action: 'go:pesaje_manual',
     ),
-    _Command(
+    const _Command(
       label: 'Pesaje Automático',
       icon: Icons.smart_toy_outlined,
-      shortcut: 'Alt+2',
+      shortcut: 'Ctrl+N',
       action: 'go:pesaje_automatico',
     ),
-    _Command(
+    const _Command(
       label: 'Entradas',
       icon: Icons.arrow_downward_outlined,
-      shortcut: 'Alt+3',
+      shortcut: 'Ctrl+2',
       action: 'go:entradas',
     ),
-    _Command(
+    const _Command(
       label: 'Salidas',
       icon: Icons.arrow_upward_outlined,
-      shortcut: 'Alt+4',
+      shortcut: 'Ctrl+3',
       action: 'go:salidas',
     ),
-    _Command(
+    const _Command(
       label: 'Ajustes de Inventario',
       icon: Icons.tune,
-      shortcut: 'Alt+5',
+      shortcut: 'Ctrl+A',
       action: 'go:ajustes',
     ),
-    _Command(
+    const _Command(
       label: 'Terceros (Clientes / Proveedores / Ambos)',
       icon: Icons.people_outline,
       shortcut: 'Alt+C',
       action: 'go:terceros',
     ),
-    _Command(
+    const _Command(
       label: 'Flota y Transporte',
       icon: Icons.local_shipping_outlined,
       shortcut: 'Alt+F',
       action: 'go:flota',
     ),
-    _Command(
+    const _Command(
       label: 'Inventario Base',
       icon: Icons.inventory_2_outlined,
-      shortcut: 'Alt+I',
+      shortcut: 'Alt+P',
       action: 'go:inventario_base',
     ),
-    _Command(
+    const _Command(
       label: 'Kardex',
       icon: Icons.table_rows_outlined,
+      shortcut: 'Alt+K',
       action: 'go:kardex',
     ),
-    _Command(
+    const _Command(
       label: 'Reportes',
       icon: Icons.analytics_outlined,
       shortcut: 'Alt+R',
       action: 'go:reportes',
     ),
-    _Command(
+    const _Command(
       label: 'Auditoría',
       icon: Icons.fact_check_outlined,
-      shortcut: 'Alt+A',
       action: 'go:auditoria',
     ),
-    _Command(
+    const _Command(
       label: 'Dispositivos de Campo',
       icon: Icons.sensors_outlined,
+      shortcut: 'Alt+D',
       action: 'go:dispositivos',
     ),
-    _Command(
+    const _Command(
       label: 'Seguridad y Accesos',
       icon: Icons.lock_outline,
+      shortcut: 'Alt+S',
       action: 'go:seguridad',
     ),
-    _Command(
+    const _Command(
       label: 'Empresa y Documentos',
       icon: Icons.business_outlined,
       action: 'go:empresa',
     ),
-    _Command(
+    const _Command(
       label: 'Configuración General',
       icon: Icons.settings_outlined,
-      shortcut: 'Ctrl+Shift+S',
+      shortcut: 'Ctrl+,',
       action: 'go:configuracion',
     ),
-    _Command(
+    const _Command(
       label: 'Usuarios del Sistema',
       icon: Icons.admin_panel_settings_outlined,
+      shortcut: 'Alt+U',
       action: 'go:usuarios',
     ),
     // Acciones rápidas
-    _Command(
+    const _Command(
       label: 'Nuevo Ticket de Pesaje',
       icon: Icons.add_circle_outline,
-      shortcut: 'Ctrl+Shift+N',
+      shortcut: 'Ctrl+N',
       action: 'new:ticket',
     ),
-    _Command(
+    const _Command(
       label: 'Nuevo Vehículo / Chuto',
       icon: Icons.directions_car_outlined,
-      shortcut: 'Ctrl+Shift+T',
+      shortcut: 'Ctrl+Shift+V',
       action: 'new:truck',
     ),
-    _Command(
+    const _Command(
       label: 'Nuevo Conductor',
       icon: Icons.person_add_outlined,
       shortcut: 'Ctrl+Shift+D',
       action: 'new:driver',
     ),
     // Configuración
-    _Command(
+    const _Command(
       label: 'Cambiar Tema (Claro/Oscuro)',
       icon: Icons.dark_mode_outlined,
       shortcut: 'Ctrl+Shift+L',
       action: 'cfg:theme',
     ),
-    _Command(
+    const _Command(
       label: 'Pantalla Completa',
       icon: Icons.fullscreen,
       shortcut: 'F11',
@@ -165,7 +168,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Salir del sistema',
       icon: Icons.power_settings_new_outlined,
-      shortcut: 'Ctrl+Shift+Q',
+      shortcut: 'Ctrl+Q',
       action: 'cfg:exit',
     ),
   ];
@@ -240,6 +243,7 @@ class _CommandPaletteState extends State<CommandPalette> {
             child: GestureDetector(
               onTap: () {},
               child: Material(
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 elevation: 8,
                 child: Container(
@@ -248,7 +252,6 @@ class _CommandPaletteState extends State<CommandPalette> {
                     maxHeight: MediaQuery.of(context).size.height * 0.6,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: Theme.of(context).dividerColor,

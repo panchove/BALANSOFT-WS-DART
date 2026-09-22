@@ -254,9 +254,7 @@ class TestDispositivosEndpoints:
     """Módulo de dispositivos: configuración y prueba de conexión de balanzas."""
 
     async def _crear_balanza(self, client, descripcion="B1", **extra):
-        r = await client.post(
-            "/api/v1/balanzas", json={"descripcion": descripcion, **extra}
-        )
+        r = await client.post("/api/v1/balanzas", json={"descripcion": descripcion, **extra})
         assert r.status_code == 200, r.text
         return r.json()
 
@@ -335,16 +333,11 @@ class TestDispositivosEndpoints:
                 return 100.0
 
         monkeypatch.setattr(inventario_module, "TcpScaleHAL", FakeTcp)
-        await self._crear_balanza(
-            client, ip_address="127.0.0.1", puerto_tcp=5555, protocolo="tcp"
-        )
+        await self._crear_balanza(client, ip_address="127.0.0.1", puerto_tcp=5555, protocolo="tcp")
         r = await client.get("/api/v1/balanzas/descubrir")
         assert r.status_code == 200, r.text
         assert isinstance(r.json(), list)
-        assert not any(
-            d["protocolo"] == "tcp" and d["ip_address"] == "127.0.0.1"
-            for d in r.json()
-        )
+        assert not any(d["protocolo"] == "tcp" and d["ip_address"] == "127.0.0.1" for d in r.json())
 
     async def test_descubrir_tcp_disponible(self, client, monkeypatch):
         class FakeTcp:  # noqa: D106
@@ -359,20 +352,13 @@ class TestDispositivosEndpoints:
         r = await client.get("/api/v1/balanzas/descubrir")
         assert r.status_code == 200, r.text
         assert any(
-            d["ip_address"] == "127.0.0.1"
-            and d["puerto_tcp"] == 5555
-            and d["peso_kg"] == 321.5
+            d["ip_address"] == "127.0.0.1" and d["puerto_tcp"] == 5555 and d["peso_kg"] == 321.5
             for d in r.json()
         )
 
     async def test_catalogo_sync_incluye_hardware(self, client):
-        await self._crear_balanza(
-            client, ip_address="10.0.0.7", puerto_tcp=5556, protocolo="tcp"
-        )
+        await self._crear_balanza(client, ip_address="10.0.0.7", puerto_tcp=5556, protocolo="tcp")
         r = await client.get("/api/v1/catalogo/sync")
         assert r.status_code == 200
         balanzas = r.json()["balanzas"]
-        assert any(
-            b["ip_address"] == "10.0.0.7" and b["puerto_tcp"] == 5556
-            for b in balanzas
-        )
+        assert any(b["ip_address"] == "10.0.0.7" and b["puerto_tcp"] == 5556 for b in balanzas)

@@ -409,6 +409,48 @@ El alta de cuentas de las estaciones se hace desde un **panel web separado**
   fue creada desde el panel con una licencia válida en el LM. Referencia de uso:
   `BALASOFT-UI/README.md`.
 
+### 9.6 WServer y Modo Instalación de la app
+
+El **WServer** es el backend local de la estación compilado con PyInstaller
+(one-file) como un binario único llamado `WServer`. Es quien levanta la API
+FastAPI local (`APP_ROLE=local`) de la máquina del cliente, sin necesidad de
+Python ni de clonar el repo (los fuentes quedan compilados embebidos).
+
+**Comportamiento en la primera instalación:**
+
+1. Al arrancar el WServer por primera vez genera su runtime
+   (`WSERVER_HOME` → por defecto `~/.balansoft-ws/wserver`), crea `.env` desde
+   `.env.plantilla` (SECRET_KEY aleatoria por máquina), **crea la BD local**
+   (`balansoft_ws_local`) si no existe y aplica el esquema canónico +
+   migraciones de forma idempotente. Luego levanta la API en `127.0.0.1:8000`.
+2. La app Flutter arranca sin `api_base_url` → entra en **modo instalación**:
+   `WServerManager` localiza el binario (junto a la app instalada o vía
+   `WSERVER_PATH`), lo lanza en detached y espera a que `/api/v1/health`
+   responda. Solo entonces muestra `Conexiones` (`setupMode: true`) con la
+   URL local prefijada (`http://localhost:8000`), **editable** y comprobada
+   automáticamente (badge "WServer local activo").
+3. El usuario guarda la URL local + servidor central y continúa al login.
+
+**Piezas:**
+
+| Pieza | Dónde | Estado |
+|-------|-------|:------:|
+| Entrada WServer (bootstrap BD + uvicorn) | `backend/wserver.py` | ✅ |
+| Plantilla de configuración del cliente | `backend/.env.plantilla` | ✅ |
+| Spec PyInstaller one-file | `backend/WServer.spec` | ✅ |
+| Script de build (salida `dist/WServer/WServer`) | `backend/scripts/build_wserver.sh` | ✅ |
+| Vaciado total de BDs (local + server) | `backend/scripts/reset_db.sh` | ✅ |
+| Orquestador WServer (lanzar/esperar health) | `frontend/lib/core/services/wserver_manager.dart` | ✅ |
+| Asegurado de WServer en primer arranque | `frontend/lib/main.dart` | ✅ |
+| Modo instalación en Conexiones (URL por defecto + badge WServer) | `frontend/.../connections_screen.dart` | ✅ |
+
+**Construir el binario:** `cd backend && uv run pyinstaller WServer.spec --noconfirm`
+(o `./scripts/build_wserver.sh`). Probarlo: `WSERVER_HOME=/tmp/demo dist/WServer/WServer`.
+
+> Requisito asociado: **REQ-NF-ARQ-013** — el servicio `WServer` debe estar
+> elevado al iniciar el sistema por primera vez para que la conexión sea
+> editable en la primera instalación (app lo arranca y espera `/health`).
+
 ---
 
 ## 10. Plan de Implementación

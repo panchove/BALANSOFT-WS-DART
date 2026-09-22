@@ -115,6 +115,10 @@ class _CountingRepo implements IWeighingRepository {
       Response(requestOptions: RequestOptions(path: ''));
 
   @override
+  Future<Response> getTicketTxt(String boleto) async =>
+      Response(requestOptions: RequestOptions(path: ''));
+
+  @override
   Future<int> countWeighingsToday() async => 0;
 
   @override

@@ -53,7 +53,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
   InputDecoration _buildInputDecoration(String label, IconData icon, {String? hintText, Widget? suffixIcon}) {
     return InputDecoration(
       filled: true,
-      fillColor: Colors.white.withOpacity(0.06),
+      fillColor: Colors.white.withValues(alpha: 0.06),
       labelText: label,
       hintText: hintText,
       hintStyle: const TextStyle(color: Colors.white38),

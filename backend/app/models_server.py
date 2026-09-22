@@ -81,6 +81,7 @@ class Licencia(ServerBase):
     fecha_expira: Mapped[datetime] = mapped_column(DateTime)
     max_usuarios: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_equipos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_sesiones: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hardware_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_utc)

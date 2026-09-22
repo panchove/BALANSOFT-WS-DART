@@ -6,7 +6,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../core/constants/catalog_resources.dart';
 import '../../../core/theme/theme_controller.dart';
-import '../../../core/widgets/proxima_fase.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import '../../widgets/app_sidebar.dart';
@@ -51,7 +50,7 @@ class _HomeShellState extends State<HomeShell> {
     (_) => CatalogCrudScreen(recurso: AppCatalogos.camionResource),
     (_) => CatalogCrudScreen(recurso: AppCatalogos.conductorResource),
     (_) => CatalogCrudScreen(recurso: AppCatalogos.transporteResource),
-    (_) => _PaginaCategorias(),
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.categoriaResource),
     (_) => CatalogCrudScreen(recurso: AppCatalogos.productoResource),
     (_) => CatalogCrudScreen(recurso: AppCatalogos.almacenResource),
     (_) => const KardexScreen(),
@@ -127,140 +126,191 @@ class _HomeShellState extends State<HomeShell> {
     final shift = kb.isShiftPressed;
     final alt = kb.isAltPressed;
 
-    if (event is KeyDownEvent) {
-      if (!ctrl &&
-          !alt &&
-          (key == LogicalKeyboardKey.backspace ||
-              key == LogicalKeyboardKey.delete) &&
-          !_hayTextoEnFoco()) {
-        _volverAtras();
-        return true;
-      }
+    // ── Teclas de función (sin modificadores) ───────────────────────────────
+    if (event is KeyDownEvent && !ctrl && !alt) {
       if (event.physicalKey == LogicalKeyboardKey.f2) {
         _abrirNuevoPesaje();
-        return true;
-      }
-      if (event.physicalKey == LogicalKeyboardKey.f10) {
-        _toggleSidebar();
         return true;
       }
       if (event.physicalKey == LogicalKeyboardKey.f9) {
         _alternarMaximizado();
         return true;
       }
+      if (event.physicalKey == LogicalKeyboardKey.f10) {
+        _toggleSidebar();
+        return true;
+      }
       if (event.physicalKey == LogicalKeyboardKey.f11) {
         _alternarPantallaCompleta();
         return true;
       }
+      if (key == LogicalKeyboardKey.escape) {
+        // Esc: si hay un modal abierto, lo cierra el propio modal. Aquí solo
+        // evitamos interferir con el foco de inputs.
+        return false;
+      }
+      // Backspace/Delete para volver atrás si no hay input en foco
+      if ((key == LogicalKeyboardKey.backspace ||
+              key == LogicalKeyboardKey.delete) &&
+          !_hayTextoEnFoco()) {
+        _volverAtras();
+        return true;
+      }
     }
 
+    // Alternativas a F9/F11 para teclados donde la fila F actúa como teclas de
+    // medios (FnLock activo) y el SO nunca entrega F9/F11 a la app:
+    //   Ctrl+Alt+Enter → maximizar/restaurar   (equivalente a F9)
+    //   Ctrl+Enter      → pantalla completa    (equivalente a F11)
+    if (event is KeyDownEvent && ctrl && key == LogicalKeyboardKey.enter) {
+      if (alt) {
+        _alternarMaximizado();
+      } else {
+        _alternarPantallaCompleta();
+      }
+      return true;
+    }
+
+    // ── Ctrl + tecla ────────────────────────────────────────────────────────
     if (ctrl && !alt) {
-      if (event is KeyDownEvent && key == LogicalKeyboardKey.keyK) {
-        _toggleCommandPalette();
+      // Ctrl+Q → salir
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyQ) {
+        _salirDelSistema();
         return true;
       }
-      if (event is KeyDownEvent && key == LogicalKeyboardKey.keyB) {
-        _toggleSidebar();
+      // Ctrl+N → nuevo pesaje
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyN) {
+        _abrirNuevoPesaje();
         return true;
       }
-      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyL) {
-        _alternarTema();
-        return true;
-      }
-      if (event is KeyDownEvent && key == LogicalKeyboardKey.keyH) {
-        _irA('inicio');
-        return true;
-      }
+      // Ctrl+Shift+N → nuevo pesaje manual (mismo form por ahora)
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyN) {
         _abrirNuevoPesaje();
         return true;
       }
-      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyT) {
+      // Ctrl+Shift+V → nuevo vehículo
+      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyV) {
         _abrirNuevoVehiculo();
         return true;
       }
+      // Ctrl+Shift+D → nuevo conductor
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyD) {
         _abrirNuevoConductor();
         return true;
       }
-      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyS) {
+      // Ctrl+Shift+T → módulo de transportes
+      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyT) {
+        _irA('transportes');
+        return true;
+      }
+      // Ctrl+Shift+L → cambiar tema
+      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyL) {
+        _alternarTema();
+        return true;
+      }
+      // Ctrl+B → toggle sidebar
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyB) {
+        _toggleSidebar();
+        return true;
+      }
+      // Ctrl+K → paleta de comandos
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyK) {
+        _toggleCommandPalette();
+        return true;
+      }
+      // Ctrl+H → inicio
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyH) {
+        _irA('inicio');
+        return true;
+      }
+      // Ctrl+L → cerrar sesión / bloquear
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyL) {
+        _cerrarSesion();
+        return true;
+      }
+      // Ctrl+A → ajustes de inventario
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyA) {
+        _abrirAjustesInventario();
+        return true;
+      }
+      // Ctrl+, → configuración
+      if (event is KeyDownEvent && key == LogicalKeyboardKey.comma) {
         _abrirConfiguracion();
         return true;
       }
-      if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyQ) {
-        _salirDelSistema();
+      // Ctrl+R → sincronizar ahora
+      if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyR) {
+        context.read<WeighingBloc>().add(SyncWeighingsEvent());
         return true;
+      }
+      // Ctrl+1..5 → navegación rápida
+      if (event is KeyDownEvent) {
+        final idx = _numeroCtrl(key);
+        if (idx != null) {
+          _cambiarIndice(idx);
+          return true;
+        }
       }
     }
 
-    if (alt && !ctrl) {
+    // ── Alt + tecla (navegación mnemónica) ──────────────────────────────────
+    if (alt && !ctrl && event is KeyDownEvent) {
       final destino = _destinoPorAlt(key);
       if (destino != null) {
-        if (event is KeyDownEvent) _irA(destino);
-        return true;
-      }
-      final apertura = _aperturaPorAlt(key);
-      if (apertura != null) {
-        if (event is KeyDownEvent) apertura();
+        _irA(destino);
         return true;
       }
     }
 
-    return _manejarCtrlNumero(key);
-  }
-
-  bool _manejarCtrlNumero(LogicalKeyboardKey key) {
-    if (!HardwareKeyboard.instance.isControlPressed) return false;
-    final digito = key.keyLabel;
-    if (digito.isEmpty || digito.length != 1) return false;
-    final numero = int.tryParse(digito);
-    if (numero == null) return false;
-    if (numero >= 0 && numero <= 9) {
-      final paginas = [
-        _claveAIndice('inicio'),
-        _claveAIndice('entradas'),
-        _claveAIndice('salidas'),
-        _claveAIndice('reportes'),
-      ];
-      if (numero < paginas.length) _cambiarIndice(paginas[numero]);
-      return true;
-    }
     return false;
   }
 
-  String? _destinoPorAlt(LogicalKeyboardKey key) {
-    switch (key) {
-      case LogicalKeyboardKey.keyC:
-        return 'terceros';
-      case LogicalKeyboardKey.keyF:
-        return 'camiones';
-      case LogicalKeyboardKey.keyI:
-        return 'categorias';
-      case LogicalKeyboardKey.keyR:
-        return 'reportes';
-      case LogicalKeyboardKey.keyA:
-        _abrirAuditoria();
-        return null;
+  /// Mapea Ctrl+1..5 a índices de página.
+  ///   1 → Inicio (0)
+  ///   2 → Entradas (10)
+  ///   3 → Salidas (11)
+  ///   4 → Reportes (12)
+  ///   5 → Kardex (9)
+  int? _numeroCtrl(LogicalKeyboardKey key) {
+    final d = key.keyLabel;
+    if (d.isEmpty || d.length != 1) return null;
+    switch (d) {
+      case '1':
+        return _claveAIndice('inicio');
+      case '2':
+        return _claveAIndice('entradas');
+      case '3':
+        return _claveAIndice('salidas');
+      case '4':
+        return _claveAIndice('reportes');
+      case '5':
+        return _claveAIndice('kardex');
       default:
         return null;
     }
   }
 
-  VoidCallback? _aperturaPorAlt(LogicalKeyboardKey key) {
-    final digito = key.keyLabel;
-    if (digito.isEmpty || digito.length != 1) return null;
-    final numero = int.tryParse(digito);
-    if (numero == null) return null;
-    switch (numero) {
-      case 1:
-      case 2:
-        return _abrirNuevoPesaje;
-      case 3:
-        return () => _irA('entradas');
-      case 4:
-        return () => _irA('salidas');
-      case 5:
-        return _abrirAjustesInventario;
+  /// Alt + letra → módulo destino (mnemónico).
+  String? _destinoPorAlt(LogicalKeyboardKey key) {
+    switch (key) {
+      case LogicalKeyboardKey.keyC:
+        return 'terceros'; // Clientes / Proveedores
+      case LogicalKeyboardKey.keyF:
+        return 'camiones'; // Flota
+      case LogicalKeyboardKey.keyP:
+        return 'productos'; // Productos
+      case LogicalKeyboardKey.keyA:
+        return 'almacenes'; // Almacenes
+      case LogicalKeyboardKey.keyK:
+        return 'kardex'; // Kardex
+      case LogicalKeyboardKey.keyU:
+        return 'usuarios'; // Usuarios
+      case LogicalKeyboardKey.keyD:
+        return 'dispositivos'; // Dispositivos
+      case LogicalKeyboardKey.keyS:
+        return 'seguridad'; // Seguridad
+      case LogicalKeyboardKey.keyR:
+        return 'reportes'; // Reportes
       default:
         return null;
     }
@@ -361,7 +411,7 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {}
   }
 
-  /// Cierra la aplicación tras confirmación (Ctrl+Shift+Q).
+  /// Cierra la aplicación tras confirmación (Ctrl+Q).
   Future<void> _salirDelSistema() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -445,8 +495,27 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  void _cerrarSesion() {
-    context.read<AuthBloc>().add(const LogoutEvent());
+  Future<void> _cerrarSesion() async {
+    final authBloc = context.read<AuthBloc>();
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Deseas cerrar la sesión actual?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    authBloc.add(const LogoutEvent());
   }
 
   void _onCommandPaletteCommand(String command) {
@@ -632,34 +701,6 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 // ── BottomNavBar (móvil) ──────────────────────────────────────────────
-
-/// Página placeholder para el catálogo de Categorías (aún sin backend).
-class _PaginaCategorias extends StatelessWidget {
-  const _PaginaCategorias();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Categorías')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ProximaFase(
-          titulo: 'Categorías',
-          icono: Icons.category_outlined,
-          descripcion:
-              'Módulo para clasificar productos por categorías. Aún no cuenta '
-              'con persistencia en el backend, por lo que no se muestra '
-              'información inventada.',
-          alcance: const [
-            'CRUD de categorías (crear, editar, eliminar)',
-            'Requisición del PRD para la clasificación de inventario',
-            'Integración con Productos',
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({

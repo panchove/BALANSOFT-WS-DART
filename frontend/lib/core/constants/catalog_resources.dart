@@ -213,8 +213,25 @@ class AppCatalogos {
     itemPath: ApiConstants.producto,
     idKey: 'id_producto',
     tituloFila: (f) => '${f['nombre'] ?? ''}',
-    subtituloFila: (f) => f['codigo'] as String?,
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['categoria_nombre'] != null) f['categoria_nombre'] as String,
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
     campos: [
+      const CatalogField(
+        key: 'id_categoria',
+        label: 'Categoría',
+        icono: Icons.category_outlined,
+        tipo: CatalogFieldType.dropdown,
+        requerido: true,
+        catalogoPath: ApiConstants.categorias,
+        catalogoIdKey: 'id_categoria',
+        catalogoTituloKey: 'nombre',
+        hint: 'Seleccionar la categoría del producto',
+      ),
       const CatalogField(
         key: 'codigo',
         label: 'Código',
@@ -292,6 +309,43 @@ class AppCatalogos {
         label: 'Stock actual (ton)',
         icono: Icons.inventory_outlined,
         tipo: CatalogFieldType.numero,
+      ),
+    ],
+  );
+
+  static final _categorias = CatalogResource(
+    clave: 'categorias',
+    plural: 'Categorías',
+    singular: 'Categoría',
+    icono: Icons.category_outlined,
+    listaPath: ApiConstants.categorias,
+    itemPath: ApiConstants.categoria,
+    idKey: 'id_categoria',
+    tituloFila: (f) => '${f['nombre'] ?? ''}',
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['descripcion'] != null) f['descripcion'] as String,
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: [
+      const CatalogField(
+        key: 'codigo',
+        label: 'Código',
+        icono: Icons.numbers_outlined,
+      ),
+      const CatalogField(
+        key: 'nombre',
+        label: 'Nombre',
+        icono: Icons.badge_outlined,
+        requerido: true,
+      ),
+      const CatalogField(
+        key: 'descripcion',
+        label: 'Descripción',
+        icono: Icons.notes_outlined,
+        tipo: CatalogFieldType.multilinea,
       ),
     ],
   );
@@ -611,7 +665,7 @@ class AppCatalogos {
   static final CatalogSection inventarioBase = CatalogSection(
     titulo: 'Inventario Base',
     icono: Icons.inventory_2_outlined,
-    recursos: [_productos, _almacenes, _balanzas],
+    recursos: [_productos, _categorias, _almacenes, _balanzas],
   );
 
   static final CatalogSection flota = CatalogSection(
@@ -629,7 +683,7 @@ class AppCatalogos {
   static final CatalogSection inventario = CatalogSection(
     titulo: 'Inventario',
     icono: Icons.inventory_2_outlined,
-    recursos: [_productos, _almacenes, _balanzas],
+    recursos: [_productos, _categorias, _almacenes, _balanzas],
   );
 
   static final CatalogSection directorio = CatalogSection(
@@ -646,6 +700,7 @@ class AppCatalogos {
   static CatalogResource get conductorResource => _conductores;
   static CatalogResource get transporteResource => _transportes;
   static CatalogResource get productoResource => _productos;
+  static CatalogResource get categoriaResource => _categorias;
   static CatalogResource get almacenResource => _almacenes;
   static CatalogResource get tercerosResource => _clientesYProveedores;
 }

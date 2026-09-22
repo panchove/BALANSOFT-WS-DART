@@ -27,7 +27,7 @@ from fastapi import (
     UploadFile,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa, get_current_user
@@ -38,11 +38,17 @@ from app.core.license_client import LicenseError, LicenseInfo, get_license_clien
 from app.core.monitoring import inc_pesaje_anulado, inc_pesaje_cerrado, inc_pesaje_creado
 from app.core.scale_session import get_scale_session_manager
 from app.models import (
+    Almacen,
     Balanza,
     BoletoPesaje,
+    Conductor,
     Empresa,
     IdentidadLocal,
     ImagenPesaje,
+    Producto,
+    Remolque,
+    Tercero,
+    Transporte,
     Usuario,
 )
 from app.schemas import (
@@ -52,7 +58,7 @@ from app.schemas import (
     WeighingOut,
     WeighingUpdate,
 )
-from app.services.ticket_service import generar_ticket_pdf
+from app.services.ticket_service import generar_ticket_pdf, generar_ticket_txt
 from app.services.weighing_service import WeighingService
 
 router = APIRouter(prefix="/api/v1/weighing", tags=["Weighing"])
@@ -137,12 +143,38 @@ async def create_weighing(
     )
     tier = (empresa.licencia_tier or "DEMO").upper()
     inc_pesaje_creado(tier)
+    pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
     return _resolve_to_weighing_out(pesaje)
+
+
+def _es_uuid(val: str) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(val).strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+async def _buscar_pesaje(
+    db: AsyncSession, id_empresa: uuid.UUID, identificador: str
+) -> BoletoPesaje | None:
+    identificador = str(identificador).strip()
+    u = _es_uuid(identificador)
+    if u is not None:
+        stmt = select(BoletoPesaje).where(
+            BoletoPesaje.id_empresa == id_empresa,
+            or_(BoletoPesaje.boleto == u, BoletoPesaje.numero_boleto == identificador),
+        )
+    else:
+        stmt = select(BoletoPesaje).where(
+            BoletoPesaje.id_empresa == id_empresa,
+            BoletoPesaje.numero_boleto == identificador,
+        )
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 @router.post("/close/{boleto}", response_model=WeighingOut)
 async def close_weighing(
-    boleto: uuid.UUID,
+    boleto: str,
     payload: WeighingClose,
     request: Request,
     current_user: Usuario = Depends(get_current_user),
@@ -150,10 +182,13 @@ async def close_weighing(
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
     _verificar_peso_manual(payload.es_peso_manual, current_user)
-    pesaje = await _SERVICE.close(
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje_cerrado = await _SERVICE.close(
         db,
         empresa,
-        boleto,
+        pesaje.boleto,
         payload,
         salida_por=current_user.nombre,
         id_usuario=current_user.id_usuario,
@@ -161,8 +196,9 @@ async def close_weighing(
     )
     tier = (empresa.licencia_tier or "DEMO").upper()
     inc_pesaje_cerrado(tier)
-    out = _resolve_to_weighing_out(pesaje)
-    advertencia = getattr(pesaje, "_advertencia_tolerancia", None)
+    pesaje_cerrado = await _enriquecer_pesaje_ticket(db, pesaje_cerrado)
+    out = _resolve_to_weighing_out(pesaje_cerrado)
+    advertencia = getattr(pesaje_cerrado, "_advertencia_tolerancia", None)
     if advertencia:
         out.advertencia_tolerancia = advertencia
     return out
@@ -170,7 +206,7 @@ async def close_weighing(
 
 @router.put("/{boleto}/anular", response_model=WeighingOut)
 async def anular_weighing(
-    boleto: uuid.UUID,
+    boleto: str,
     payload: WeighingAnular,
     request: Request,
     current_user: Usuario = Depends(get_current_user),
@@ -178,10 +214,13 @@ async def anular_weighing(
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
     _verificar_anulacion(current_user)
-    pesaje = await _SERVICE.anular(
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje_anulado = await _SERVICE.anular(
         db,
         empresa,
-        boleto,
+        pesaje.boleto,
         payload,
         anulado_por=current_user.nombre,
         id_usuario=current_user.id_usuario,
@@ -189,7 +228,8 @@ async def anular_weighing(
     )
     tier = (empresa.licencia_tier or "DEMO").upper()
     inc_pesaje_anulado(tier)
-    return _resolve_to_weighing_out(pesaje)
+    pesaje_anulado = await _enriquecer_pesaje_ticket(db, pesaje_anulado)
+    return _resolve_to_weighing_out(pesaje_anulado)
 
 
 @router.get("/pendientes", response_model=list[WeighingOut])
@@ -224,62 +264,121 @@ async def list_weighings(
         vehicle_id=vehicle_id,
         estado=estado,
     )
-    return [_resolve_to_weighing_out(r) for r in rows]
+    result = []
+    for r in rows:
+        r = await _enriquecer_pesaje_ticket(db, r)
+        result.append(_resolve_to_weighing_out(r))
+    return result
 
 
 @router.get("/boleto/{boleto}", response_model=WeighingOut)
 async def get_weighing_by_boleto(
-    boleto: uuid.UUID,
+    boleto: str,
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
-    result = await db.execute(
-        select(BoletoPesaje).where(
-            BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
-        )
-    )
-    pesaje = result.scalar_one_or_none()
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
     return _resolve_to_weighing_out(pesaje)
+
+
+async def _enriquecer_pesaje_ticket(db: AsyncSession, pesaje: BoletoPesaje) -> BoletoPesaje:
+    """Resuelve entidades relacionadas con nombres y códigos legibles para evitar imprimir UUIDs.
+
+    Popula atributos dinámicos en el objeto para que ``WeighingOut`` los serialice
+    en los campos ``*_nombre`` / ``remolque_placa`` que el frontend usa en la UI.
+    """
+    if pesaje.id_remolque and not getattr(pesaje, "placa_remolque", None):
+        r = (await db.execute(select(Remolque.placa).where(Remolque.id_remolque == pesaje.id_remolque))).scalar_one_or_none()
+        if r:
+            pesaje.placa_remolque = r  # type: ignore[attr-defined]
+            pesaje.remolque_placa = r  # type: ignore[attr-defined]
+    if pesaje.id_producto and not getattr(pesaje, "producto", None):
+        prod = (await db.execute(select(Producto.nombre).where(Producto.id_producto == pesaje.id_producto))).scalar_one_or_none()
+        if prod:
+            pesaje.producto = prod  # type: ignore[attr-defined]
+            pesaje.producto_nombre = prod  # type: ignore[attr-defined]
+    if pesaje.id_conductor and not getattr(pesaje, "conductor", None):
+        cond = (await db.execute(select(Conductor).where(Conductor.cedula_dni == pesaje.id_conductor))).scalar_one_or_none()
+        if cond:
+            nom = (cond.nombre_completo or "").strip()
+            display = f"{nom} ({cond.cedula_dni})" if nom else cond.cedula_dni
+            pesaje.conductor = display  # type: ignore[attr-defined]
+            pesaje.conductor_nombre = display  # type: ignore[attr-defined]
+    if pesaje.id_transporte and not getattr(pesaje, "transporte", None):
+        t = (await db.execute(select(Transporte.razon_social).where(Transporte.id_transporte == pesaje.id_transporte))).scalar_one_or_none()
+        if t:
+            pesaje.transporte = t  # type: ignore[attr-defined]
+            pesaje.transporte_nombre = t  # type: ignore[attr-defined]
+    if pesaje.id_tercero and not getattr(pesaje, "razon_social", None):
+        terc = (await db.execute(select(Tercero.razon_social).where(Tercero.id_tercero == pesaje.id_tercero))).scalar_one_or_none()
+        if terc:
+            pesaje.razon_social = terc  # type: ignore[attr-defined]
+            pesaje.tercero_nombre = terc  # type: ignore[attr-defined]
+    if pesaje.id_almacen and not getattr(pesaje, "almacen", None):
+        alm = (await db.execute(select(Almacen.nombre).where(Almacen.id_almacen == pesaje.id_almacen))).scalar_one_or_none()
+        if alm:
+            pesaje.almacen = alm  # type: ignore[attr-defined]
+            pesaje.almacen_nombre = alm  # type: ignore[attr-defined]
+    if pesaje.id_balanza and not getattr(pesaje, "balanza_desc", None):
+        bal = (await db.execute(select(Balanza.descripcion).where(Balanza.id_balanza == pesaje.id_balanza))).scalar_one_or_none()
+        if bal:
+            pesaje.balanza_desc = bal  # type: ignore[attr-defined]
+            pesaje.balanza_nombre = bal  # type: ignore[attr-defined]
+    return pesaje
 
 
 @router.get("/{boleto}/pdf")
 async def get_weighing_pdf(
-    boleto: uuid.UUID,
+    boleto: str,
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    result = await db.execute(
-        select(BoletoPesaje).where(
-            BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
-        )
-    )
-    pesaje = result.scalar_one_or_none()
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
-    return generar_ticket_pdf(pesaje)
+    pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
+    return generar_ticket_pdf(pesaje, empresa=empresa)
+
+
+@router.get("/{boleto}/txt")
+async def get_weighing_txt(
+    boleto: str,
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
+    return generar_ticket_txt(pesaje, empresa=empresa)
 
 
 @router.put("/{boleto}", response_model=WeighingOut)
 async def update_weighing(
-    boleto: uuid.UUID,
+    boleto: str,
     payload: WeighingUpdate,
     request: Request,
     current_user: Usuario = Depends(get_current_user),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
-    pesaje = await _SERVICE.update(
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje_actualizado = await _SERVICE.update(
         db,
         empresa,
-        boleto,
+        pesaje.boleto,
         payload,
         modificado_por=current_user.nombre,
         id_usuario=current_user.id_usuario,
         ip=request.client.host if request.client else None,
     )
-    return _resolve_to_weighing_out(pesaje)
+    pesaje_actualizado = await _enriquecer_pesaje_ticket(db, pesaje_actualizado)
+    return _resolve_to_weighing_out(pesaje_actualizado)
 
 
 # ---------------------------------------------------------------------------
@@ -301,12 +400,15 @@ class ImagenPesajeOut(BaseModel):
 
 @router.get("/{boleto}/imagenes", response_model=list[ImagenPesajeOut])
 async def list_imagenes(
-    boleto: uuid.UUID,
+    boleto: str,
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[ImagenPesajeOut]:
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        return []
     result = await db.execute(
-        select(ImagenPesaje).where(ImagenPesaje.boleto == boleto)
+        select(ImagenPesaje).where(ImagenPesaje.boleto == pesaje.boleto)
     )
     return [
         ImagenPesajeOut.model_validate(img) for img in result.scalars().all()
@@ -315,21 +417,16 @@ async def list_imagenes(
 
 @router.post("/{boleto}/imagenes", response_model=ImagenPesajeOut, status_code=201)
 async def add_imagen(
-    boleto: uuid.UUID,
+    boleto: str,
     payload: ImagenPesajeCreate,
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> ImagenPesajeOut:
-    # Verificar que el pesaje existe y pertenece a la empresa
-    result = await db.execute(
-        select(BoletoPesaje).where(
-            BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
 
-    img = ImagenPesaje(boleto=boleto, tipo=payload.tipo, url=payload.url)
+    img = ImagenPesaje(boleto=pesaje.boleto, tipo=payload.tipo, url=payload.url)
     db.add(img)
     await db.commit()
     await db.refresh(img)
@@ -338,19 +435,14 @@ async def add_imagen(
 
 @router.post("/{boleto}/imagenes/archivo", response_model=ImagenPesajeOut, status_code=201)
 async def upload_imagen(
-    boleto: uuid.UUID,
+    boleto: str,
     file: UploadFile = File(...),
     tipo: str = Form(..., pattern="^(placa|vehiculo|documento|entrada|salida|otros)$"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> ImagenPesajeOut:
-    # Verificar que el pesaje existe y pertenece a la empresa
-    result = await db.execute(
-        select(BoletoPesaje).where(
-            BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
 
     if file.content_type not in settings.allowed_image_types:
@@ -363,7 +455,7 @@ async def upload_imagen(
     if len(raw) > settings.max_image_bytes:
         raise HTTPException(status_code=400, detail="El archivo supera el tamaño máximo de 10 MB")
 
-    dest_dir = os.path.join(settings.media_dir, str(boleto))
+    dest_dir = os.path.join(settings.media_dir, str(pesaje.boleto))
     os.makedirs(dest_dir, exist_ok=True)
     ext = os.path.splitext(file.filename or "image.jpg")[1] or ".jpg"
     filename = f"{tipo}_{uuid.uuid4().hex[:12]}{ext}"
@@ -371,8 +463,8 @@ async def upload_imagen(
     with open(filepath, "wb") as f:
         f.write(raw)
 
-    url = f"/media/{boleto}/{filename}"
-    img = ImagenPesaje(boleto=boleto, tipo=tipo, url=url)
+    url = f"/media/{pesaje.boleto}/{filename}"
+    img = ImagenPesaje(boleto=pesaje.boleto, tipo=tipo, url=url)
     db.add(img)
     await db.commit()
     await db.refresh(img)
@@ -381,24 +473,19 @@ async def upload_imagen(
 
 @router.delete("/{boleto}/imagenes/{id_imagen}", status_code=204)
 async def delete_imagen(
-    boleto: uuid.UUID,
+    boleto: str,
     id_imagen: uuid.UUID,
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    # Verificar que el pesaje pertenece a la empresa
-    result = await db.execute(
-        select(BoletoPesaje).where(
-            BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
 
     img_result = await db.execute(
         select(ImagenPesaje).where(
             ImagenPesaje.id_imagen == id_imagen,
-            ImagenPesaje.boleto == boleto,
+            ImagenPesaje.boleto == pesaje.boleto,
         )
     )
     img = img_result.scalar_one_or_none()

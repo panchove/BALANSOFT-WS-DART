@@ -38,7 +38,7 @@ class DeviceInfo {
               '${windowsInfo.productName} ${windowsInfo.displayVersion}',
         );
       } else {
-        _cachedInfo = HardwareInfo(
+        _cachedInfo = const HardwareInfo(
           hardwareId: 'unknown',
           macAddress: '',
           brand: 'unknown',
@@ -47,7 +47,7 @@ class DeviceInfo {
         );
       }
     } catch (_) {
-      _cachedInfo = HardwareInfo(
+      _cachedInfo = const HardwareInfo(
         hardwareId: 'fallback',
         macAddress: '',
         brand: 'unknown',

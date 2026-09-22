@@ -24,6 +24,7 @@ from app.api.v1.endpoints import auth as auth_module
 from app.core.database import get_db
 from app.core.license_client import LicenseInfo
 from app.models import (
+    Categoria,
     Empresa,
     IdentidadLocal,
     LogSistema,
@@ -213,8 +214,14 @@ class TestEmpresaPerfil:
 
 class TestToleranciaComercial:
     async def test_advertencia_tolerancia_en_cierre(self, client, db, empresa):
+        categoria = Categoria(
+            id_empresa=empresa.id_empresa, nombre="Categoría Cemento"
+        )
+        db.add(categoria)
+        await db.flush()
         producto = Producto(
             id_empresa=empresa.id_empresa,
+            id_categoria=categoria.id_categoria,
             nombre="Cemento Tolerancia",
             tolerancia=Decimal("1.00"),  # 1% de tolerancia
             es_kardex=False,
@@ -254,8 +261,14 @@ class TestToleranciaComercial:
         assert log.nivel == "WARN"
 
     async def test_sin_advertencia_dentro_tolerancia(self, client, db, empresa):
+        categoria = Categoria(
+            id_empresa=empresa.id_empresa, nombre="Categoría Arena"
+        )
+        db.add(categoria)
+        await db.flush()
         producto = Producto(
             id_empresa=empresa.id_empresa,
+            id_categoria=categoria.id_categoria,
             nombre="Arena Tolerancia",
             tolerancia=Decimal("5.00"),
             es_kardex=False,

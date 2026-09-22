@@ -35,11 +35,20 @@ class Weighing {
   final double? costoFlete;
   final String? observaciones;
   final String? numeroBoleto;
+  final String? idSerie;
   final String? motivoAnulacion;
   final String estadoBoleto;
   final bool sincronizado;
   final DateTime createdAt;
   final DateTime updatedAt;
+  // Nombres legibles (resueltos por el servidor)
+  final String? transporteNombre;
+  final String? conductorNombre;
+  final String? productoNombre;
+  final String? almacenNombre;
+  final String? balanzaNombre;
+  final String? terceroNombre;
+  final String? remolquePlaca;
 
   const Weighing({
     required this.boleto,
@@ -53,6 +62,7 @@ class Weighing {
     this.idBalanza,
     this.tipoTercero,
     this.idTercero,
+    this.idSerie,
     this.multiDespachoRecepcion = false,
     required this.fechaHoraEntrada,
     required this.pesoEntradaVehiculo,
@@ -81,6 +91,13 @@ class Weighing {
     this.sincronizado = false,
     required this.createdAt,
     required this.updatedAt,
+    this.transporteNombre,
+    this.conductorNombre,
+    this.productoNombre,
+    this.almacenNombre,
+    this.balanzaNombre,
+    this.terceroNombre,
+    this.remolquePlaca,
   });
 
   bool get isOpen =>
@@ -134,11 +151,19 @@ class Weighing {
         costoFlete: NumParser.toDoubleOrNull(json['costo_flete']),
         observaciones: json['observaciones'],
         numeroBoleto: json['numero_boleto'],
+        idSerie: json['id_serie']?.toString(),
         motivoAnulacion: json['motivo_anulacion'],
         estadoBoleto: json['estado_boleto'] ?? 'PENDIENTE',
         sincronizado: json['sincronizado'] ?? false,
         createdAt: DateTime.parse(json['created_at']),
         updatedAt: DateTime.parse(json['updated_at']),
+        transporteNombre: json['transporte_nombre'],
+        conductorNombre: json['conductor_nombre'],
+        productoNombre: json['producto_nombre'],
+        almacenNombre: json['almacen_nombre'],
+        balanzaNombre: json['balanza_nombre'],
+        terceroNombre: json['tercero_nombre'],
+        remolquePlaca: json['remolque_placa'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -153,6 +178,7 @@ class Weighing {
         'id_balanza': idBalanza,
         'tipo_tercero': tipoTercero,
         'id_tercero': idTercero,
+        'id_serie': idSerie,
         'multi_despacho_recepcion': multiDespachoRecepcion,
         'fecha_hora_entrada': fechaHoraEntrada.toIso8601String(),
         'peso_entrada_vehiculo': pesoEntradaVehiculo,
@@ -195,6 +221,7 @@ class Weighing {
     String? idBalanza,
     String? tipoTercero,
     String? idTercero,
+    String? idSerie,
     bool? multiDespachoRecepcion,
     DateTime? fechaHoraEntrada,
     double? pesoEntradaVehiculo,
@@ -221,6 +248,13 @@ class Weighing {
     String? motivoAnulacion,
     String? estadoBoleto,
     bool? sincronizado,
+    String? transporteNombre,
+    String? conductorNombre,
+    String? productoNombre,
+    String? almacenNombre,
+    String? balanzaNombre,
+    String? terceroNombre,
+    String? remolquePlaca,
   }) =>
       Weighing(
         boleto: boleto ?? this.boleto,
@@ -234,6 +268,7 @@ class Weighing {
         idBalanza: idBalanza ?? this.idBalanza,
         tipoTercero: tipoTercero ?? this.tipoTercero,
         idTercero: idTercero ?? this.idTercero,
+        idSerie: idSerie ?? this.idSerie,
         multiDespachoRecepcion:
             multiDespachoRecepcion ?? this.multiDespachoRecepcion,
         fechaHoraEntrada: fechaHoraEntrada ?? this.fechaHoraEntrada,
@@ -265,5 +300,12 @@ class Weighing {
         sincronizado: sincronizado ?? this.sincronizado,
         createdAt: createdAt,
         updatedAt: updatedAt,
+        transporteNombre: transporteNombre ?? this.transporteNombre,
+        conductorNombre: conductorNombre ?? this.conductorNombre,
+        productoNombre: productoNombre ?? this.productoNombre,
+        almacenNombre: almacenNombre ?? this.almacenNombre,
+        balanzaNombre: balanzaNombre ?? this.balanzaNombre,
+        terceroNombre: terceroNombre ?? this.terceroNombre,
+        remolquePlaca: remolquePlaca ?? this.remolquePlaca,
       );
 }

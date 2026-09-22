@@ -22,5 +22,6 @@ abstract class IKardexRepository {
     required DateTime hasta,
     String? idProducto,
     String? idAlmacen,
+    String orientacion = 'V',
   });
 }

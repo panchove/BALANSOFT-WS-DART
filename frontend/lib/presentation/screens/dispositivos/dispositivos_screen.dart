@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/scale_monitor_widget.dart';
@@ -371,9 +372,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
         ],
       ),
     );
-    descCtrl.dispose();
-    ipCtrl.dispose();
-    puertoCtrl.dispose();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      descCtrl.dispose();
+      ipCtrl.dispose();
+      puertoCtrl.dispose();
+    });
     if (creada == null || !mounted) return;
     try {
       await _api.createItem(ApiConstants.balanzas, creada);
@@ -461,7 +464,9 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AtajoNuevo(
+      onNuevo: () => _agregarBalanza(),
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Dispositivos'),
         actions: [
@@ -505,6 +510,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
                           itemBuilder: (context, i) => _tarjeta(_balanzas[i]),
                         ),
                 ),
+      ),
     );
   }
 

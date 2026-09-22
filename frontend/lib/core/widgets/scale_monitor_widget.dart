@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../theme/app_theme.dart';
 import '../../data/services/scale_api_client.dart';
@@ -40,7 +41,11 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     super.initState();
     _configurarCliente();
     widget.client.addListener(_onCambioPeso);
-    widget.client.conectar();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.client.conectar();
+      }
+    });
   }
 
   @override
@@ -49,7 +54,11 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     if (oldWidget.balanzaId != widget.balanzaId ||
         oldWidget.balanzaDescripcion != widget.balanzaDescripcion) {
       _configurarCliente();
-      widget.client.conectar();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.client.conectar();
+        }
+      });
     }
   }
 
@@ -71,13 +80,21 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
 
   void _onCambioPeso() {
     if (!mounted) return;
-    setState(() {
-      final peso = widget.client.pesoActual;
-      if (peso != null) {
-        _peso = peso;
-        widget.onPesoLeido?.call(peso);
-      }
-    });
+    final peso = widget.client.pesoActual;
+    if (peso != null) {
+      _peso = peso;
+      widget.onPesoLeido?.call(peso);
+    }
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   @override

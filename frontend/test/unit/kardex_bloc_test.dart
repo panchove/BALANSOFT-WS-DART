@@ -44,8 +44,13 @@ class _FakeRepo implements IKardexRepository {
     required DateTime hasta,
     String? idProducto,
     String? idAlmacen,
-  }) async =>
-      Response(requestOptions: RequestOptions(path: ''));
+    String orientacion = 'V',
+  }) async {
+    return Response(
+      requestOptions: RequestOptions(path: ''),
+      data: <int>[1, 2, 3], // Mocked PDF bytes
+    );
+  }
 }
 
 KardexBloc _bloc(Object? error) {

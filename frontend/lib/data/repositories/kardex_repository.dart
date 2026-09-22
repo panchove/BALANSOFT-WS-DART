@@ -46,6 +46,7 @@ class KardexRepository implements IKardexRepository {
     required DateTime hasta,
     String? idProducto,
     String? idAlmacen,
+    String orientacion = 'V',
   }) =>
       _api.kardexExportPdf(<String, dynamic>{
         'fecha_desde': _fecha(desde),
@@ -53,6 +54,7 @@ class KardexRepository implements IKardexRepository {
         if (idProducto != null && idProducto.isNotEmpty)
           'id_producto': idProducto,
         if (idAlmacen != null && idAlmacen.isNotEmpty) 'id_almacen': idAlmacen,
+        'orientacion': orientacion,
       });
 
   String _iso(DateTime d) =>

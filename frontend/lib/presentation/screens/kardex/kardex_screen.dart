@@ -109,7 +109,7 @@ class _KardexScreenState extends State<KardexScreen> {
     }
   }
 
-  Future<void> _exportarPdf() async {
+  Future<void> _exportarPdf({String orientacion = 'V'}) async {
     setState(() => _exportandoPdf = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -118,6 +118,7 @@ class _KardexScreenState extends State<KardexScreen> {
             hasta: _hasta,
             idProducto: _idProducto,
             idAlmacen: _idAlmacen,
+            orientacion: orientacion,
           );
       final nombre =
           'kardex_${_fmt(_desde)}_${_fmt(_hasta)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
@@ -148,10 +149,22 @@ class _KardexScreenState extends State<KardexScreen> {
             onPressed: _exportandoExcel ? null : _exportarExcel,
             icon: Icon(_exportandoExcel ? Icons.hourglass_empty : Icons.table_chart_outlined),
           ),
-          IconButton(
+          PopupMenuButton<String>(
             tooltip: 'Export PDF',
-            onPressed: _exportandoPdf ? null : _exportarPdf,
             icon: Icon(_exportandoPdf ? Icons.hourglass_empty : Icons.picture_as_pdf_outlined),
+            onSelected: (String result) {
+              if (!_exportandoPdf) _exportarPdf(orientacion: result);
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'V',
+                child: Text('PDF (Vertical)'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'H',
+                child: Text('PDF (Horizontal)'),
+              ),
+            ],
           ),
         ],
       ),
@@ -306,12 +319,12 @@ class _KardexScreenState extends State<KardexScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   )),
-                  DataCell(Text(_corto(m.idProducto))),
+                  DataCell(Text(m.etiquetaProducto)),
                   DataCell(Text(
                     '${m.esIngreso ? '+' : '-'}${NumberUtils.formatKg(m.valor)}',
                   )),
                   DataCell(Text(NumberUtils.formatKg(m.stock))),
-                  DataCell(Text(_corto(m.boleto ?? m.documento ?? '—'))),
+                  DataCell(Text(m.numeroBoleto ?? m.documento ?? '—')),
                 ]),
             ],
           )
@@ -345,14 +358,14 @@ class _KardexScreenState extends State<KardexScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Producto: ${_corto(m.idProducto)}',
+                      Text('Producto: ${m.etiquetaProducto}',
                           style: const TextStyle(fontSize: 13)),
                       Text('Saldo: ${NumberUtils.formatKg(m.stock)}',
                           style: const TextStyle(fontSize: 13)),
                       Text('Fecha: ${m.fecha}',
                           style: const TextStyle(fontSize: 12, color: SwsColors.gray600)),
-                      if (m.boleto != null || m.documento != null)
-                        Text('Ref: ${_corto(m.boleto ?? m.documento ?? '—')}',
+                      if (m.numeroBoleto != null || m.boleto != null || m.documento != null)
+                        Text('Ref: ${m.numeroBoleto ?? m.documento ?? m.boleto ?? '—'}',
                             style: const TextStyle(fontSize: 12, color: SwsColors.gray600)),
                     ],
                   ),
@@ -371,6 +384,4 @@ class _KardexScreenState extends State<KardexScreen> {
           Text(label, style: const TextStyle(color: SwsColors.gray600)),
         ],
       );
-
-  String _corto(String s) => s.length > 10 ? '${s.substring(0, 10)}…' : s;
 }

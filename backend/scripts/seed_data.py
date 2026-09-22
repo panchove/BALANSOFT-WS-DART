@@ -19,6 +19,7 @@ from app.models import (
     Almacen,
     Balanza,
     Camion,
+    Categoria,
     Conductor,
     Empresa,
     Producto,
@@ -87,8 +88,14 @@ async def main() -> None:
 
         # Catálogos demo (si no existen)
         if not await _existe(db, empresa.id_empresa):
+            _cat_cemento = Categoria(
+                id_empresa=empresa.id_empresa,
+                codigo="CAT-CEM",
+                nombre="Cemento y agregados",
+            )
             db.add_all(
                 [
+                    _cat_cemento,
                     Camion(
                         placa="ABC123",
                         id_empresa=empresa.id_empresa,
@@ -118,11 +125,13 @@ async def main() -> None:
                         id_empresa=empresa.id_empresa,
                         nombre="Cemento", descripcion="Cemento gris tipo I",
                         codigo="CEM", densidad_estandar="3.15",
+                        id_categoria=_cat_cemento.id_categoria,
                     ),
                     Producto(
                         id_empresa=empresa.id_empresa,
                         nombre="Arena", descripcion="Arena lavada",
                         codigo="ARN", densidad_estandar="1.60",
+                        id_categoria=_cat_cemento.id_categoria,
                     ),
                     Almacen(
                         id_empresa=empresa.id_empresa, nombre="Planta Principal",

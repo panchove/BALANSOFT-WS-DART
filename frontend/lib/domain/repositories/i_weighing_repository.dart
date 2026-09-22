@@ -22,6 +22,7 @@ abstract class IWeighingRepository {
   Future<Weighing> anularWeighing(String boleto, String motivo);
   Future<List<Weighing>> listPendientes();
   Future<Response> getTicketPdf(String boleto);
+  Future<Response> getTicketTxt(String boleto);
   Future<int> countWeighingsToday();
   Future<List<Weighing>> getPendingWeighings();
   Future<int> markAsSynced(String boleto);

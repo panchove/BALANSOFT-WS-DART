@@ -36,11 +36,19 @@ class WeighingModel extends Weighing {
     super.costoFlete,
     super.observaciones,
     super.numeroBoleto,
+    super.idSerie,
     super.motivoAnulacion,
     super.estadoBoleto,
     super.sincronizado,
     required super.createdAt,
     required super.updatedAt,
+    super.transporteNombre,
+    super.conductorNombre,
+    super.productoNombre,
+    super.almacenNombre,
+    super.balanzaNombre,
+    super.terceroNombre,
+    super.remolquePlaca,
   });
 
   factory WeighingModel.fromEntity(Weighing w) => WeighingModel(
@@ -55,6 +63,7 @@ class WeighingModel extends Weighing {
         idBalanza: w.idBalanza,
         tipoTercero: w.tipoTercero,
         idTercero: w.idTercero,
+        idSerie: w.idSerie,
         multiDespachoRecepcion: w.multiDespachoRecepcion,
         fechaHoraEntrada: w.fechaHoraEntrada,
         pesoEntradaVehiculo: w.pesoEntradaVehiculo,
@@ -83,6 +92,13 @@ class WeighingModel extends Weighing {
         sincronizado: w.sincronizado,
         createdAt: w.createdAt,
         updatedAt: w.updatedAt,
+        transporteNombre: w.transporteNombre,
+        conductorNombre: w.conductorNombre,
+        productoNombre: w.productoNombre,
+        almacenNombre: w.almacenNombre,
+        balanzaNombre: w.balanzaNombre,
+        terceroNombre: w.terceroNombre,
+        remolquePlaca: w.remolquePlaca,
       );
 
   /// Desde SQLite local
@@ -123,11 +139,20 @@ class WeighingModel extends Weighing {
         costoFlete: map['costo_flete'],
         observaciones: map['observaciones'],
         numeroBoleto: map['numero_boleto'],
+        idSerie: map['id_serie']?.toString(),
         motivoAnulacion: map['motivo_anulacion'],
         estadoBoleto: _normalizarEstado(map['estado_boleto']),
         sincronizado: map['sincronizado'] == 1,
         createdAt: DateTime.parse(map['created_at']),
         updatedAt: DateTime.parse(map['updated_at']),
+        // Nombres no se persisten en SQLite local; quedan nulos en modo offline
+        transporteNombre: map['transporte_nombre'],
+        conductorNombre: map['conductor_nombre'],
+        productoNombre: map['producto_nombre'],
+        almacenNombre: map['almacen_nombre'],
+        balanzaNombre: map['balanza_nombre'],
+        terceroNombre: map['tercero_nombre'],
+        remolquePlaca: map['remolque_placa'],
       );
 
   static String _normalizarEstado(dynamic valor) {
@@ -150,6 +175,7 @@ class WeighingModel extends Weighing {
         'id_balanza': idBalanza,
         'tipo_tercero': tipoTercero,
         'id_tercero': idTercero,
+        'id_serie': idSerie,
         'multi_despacho_recepcion': multiDespachoRecepcion ? 1 : 0,
         'fecha_hora_entrada': fechaHoraEntrada.toIso8601String(),
         'peso_entrada_vehiculo': pesoEntradaVehiculo,

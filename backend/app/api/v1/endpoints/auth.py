@@ -31,6 +31,7 @@ from app.models import BoletoPesaje, Empresa, IdentidadLocal, Usuario
 from app.schemas import (
     CompanyOut,
     ForgotPasswordRequest,
+    LoginCentralRequest,
     LoginRequest,
     LoginResponse,
     RegisterRequest,
@@ -55,6 +56,8 @@ def _company_out(e: Empresa) -> CompanyOut:
         licencia_tier=e.licencia_tier,
         licencia_status=e.licencia_status,
         licencia_expira=e.licencia_expira,
+        formato_ticket=getattr(e, "formato_ticket", "PDF"),
+        ruta_exportacion_reportes=getattr(e, "ruta_exportacion_reportes", None),
     )
 
 
@@ -226,6 +229,170 @@ async def login(
         user=to_user_out(usuario),
         empresa=_company_out(empresa),
         license=licencia,
+    )
+
+
+@router.post("/login-central", response_model=LoginResponse)
+async def login_central(
+    payload: LoginCentralRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """Login CENTRAL-first.
+
+    Valida la cuenta+credencial contra el serVIDOR central (la DB del panel
+    que mantiene la licencia). Si la cuenta existe y la licencia lo permite,
+    hace **espejo local** (empresa + usuario admin + identidad_local) para que
+    la estación pueda seguir operando offline y emite los tokens locales.
+
+    Errores de red se propagan como 502 para que el cliente caiga al modo
+    offline; 401/403 del central (credencial inválida o límite de sesiones de
+    la licencia) se devuelven tal cual.
+    """
+    server_url = (payload.server_url or settings.server_api_url or "").strip().rstrip("/")
+    if not server_url:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay URL del servidor central configurada",
+        )
+
+    import socket
+
+    import httpx
+
+    # 1) Validar la cuenta en el panel (DB del servidor central).
+    cuerpo = {
+        "email": payload.email,
+        "password": payload.password,
+        "hardware_id": payload.hardware_id or obtener_hardware_id(),
+        "nombre_equipo": payload.nombre_equipo or socket.gethostname(),
+        "sistema_operativo": payload.sistema_operativo,
+        "version_app": payload.version_app,
+        "mac_address": payload.mac_address,
+        "device_brand": payload.device_brand,
+        "device_model": payload.device_model,
+    }
+    try:
+        resp = await httpx.AsyncClient(timeout=10).post(
+            f"{server_url}/api/v1/auth/login", json=cuerpo
+        )
+    except httpx.TransportError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo conectar con el servidor central: {exc}",
+        ) from exc
+
+    if resp.status_code != 200:
+        detalle = "Error al validar la cuenta en el servidor central"
+        try:
+            datos = resp.json()
+            detalle = datos.get("detail") or detalle
+        except Exception:  # noqa: BLE001 - respuesta no JSON del central
+            pass
+        codigo = resp.status_code if resp.status_code in (400, 401, 403) else 502
+        raise HTTPException(status_code=codigo, detail=detalle)
+
+    central = resp.json()
+    usuario_central = central.get("user") or {}
+    cuenta = central.get("cuenta") or {}
+    licencia = central.get("licencia") or {}
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    # 2) Espejo local: empresa única por RIF/NIT.
+    rif = (cuenta.get("rif_nit") or "").upper()
+    if not rif:
+        raise HTTPException(status_code=502, detail="El central no devolvió los datos de la cuenta")
+    empresa = (
+        await db.execute(select(Empresa).where(Empresa.rif_nit == rif))
+    ).scalar_one_or_none()
+    if empresa is None:
+        empresa = Empresa(rif_nit=rif, activa=True)
+        db.add(empresa)
+    empresa.nombre_fiscal = cuenta.get("nombre_fiscal") or empresa.nombre_fiscal or rif
+    empresa.nombre_comercial = cuenta.get("nombre_comercial") or empresa.nombre_fiscal
+    empresa.licencia_key = licencia.get("licencia_key") or empresa.licencia_key
+    empresa.licencia_tier = licencia.get("licencia_tier") or empresa.licencia_tier
+    empresa.licencia_status = licencia.get("licencia_status") or empresa.licencia_status
+    fecha_expira = licencia.get("fecha_expira")
+    if fecha_expira and isinstance(fecha_expira, str):
+        try:
+            empresa.licencia_expira = datetime.fromisoformat(
+                fecha_expira.replace("Z", "+00:00")
+            ).replace(tzinfo=None)
+        except ValueError:
+            pass
+    empresa.activa = bool(cuenta.get("activa", True))
+    await db.flush()
+
+    # 3) Usuario admin local = espejo de la credencial global.
+    email_local = str(usuario_central.get("email") or payload.email).lower()
+    id_credencial = usuario_central.get("id_credencial")
+    usuario_admin = (
+        await db.execute(
+            select(Usuario).where(
+                Usuario.email == email_local, Usuario.id_empresa == empresa.id_empresa
+            )
+        )
+    ).scalar_one_or_none()
+    if usuario_admin is None:
+        usuario_admin = Usuario(
+            id_empresa=empresa.id_empresa,
+            nombre=str(usuario_central.get("email") or payload.email).split("@")[0],
+            email=email_local,
+            rol=usuario_central.get("rol_global") or "ADMIN",
+        )
+        db.add(usuario_admin)
+    usuario_admin.password_hash = hash_password(payload.password)
+    usuario_admin.activo = True
+    if id_credencial:
+        usuario_admin.id_credencial = uuid.UUID(str(id_credencial))
+    await db.flush()
+
+    # 4) Identidad local (vínculo singleton con la cuenta del servidor).
+    identidad = (
+        await db.execute(select(IdentidadLocal).where(IdentidadLocal.id.is_(True)))
+    ).scalar_one_or_none()
+    if identidad is None:
+        identidad = IdentidadLocal(id=True)
+        db.add(identidad)
+    identidad.id_cuenta = uuid.UUID(str(cuenta.get("id_cuenta") or empresa.id_empresa))
+    identidad.rif_nit = rif
+    identidad.nombre_fiscal = empresa.nombre_fiscal
+    identidad.nombre_comercial = empresa.nombre_comercial
+    identidad.licencia_key = empresa.licencia_key
+    identidad.licencia_tier = empresa.licencia_tier
+    identidad.licencia_status = empresa.licencia_status
+    identidad.licencia_expira = empresa.licencia_expira
+    identidad.hardware_id = payload.hardware_id or obtener_hardware_id()
+    identidad.ultima_validacion = now
+    identidad.modo_offline = False
+
+    inc_active_user((empresa.licencia_tier or "UNKNOWN").upper())
+    await db.commit()
+    await db.refresh(usuario_admin)
+    await db.refresh(empresa)
+
+    access = create_access_token(str(usuario_admin.id_usuario), extra={"rol": usuario_admin.rol})
+    refresh = create_refresh_token(str(usuario_admin.id_usuario))
+    licencia_local: dict | None = {
+        "valid": True,
+        "status": empresa.licencia_status,
+        "tier": empresa.licencia_tier,
+        "expires_at": empresa.licencia_expira.isoformat()
+        if empresa.licencia_expira
+        else None,
+        "features": {
+            "max_usuarios": licencia.get("max_usuarios"),
+            "max_equipos": licencia.get("max_equipos"),
+            "max_sesiones": licencia.get("max_sesiones"),
+        },
+        "message": "Cuenta validada en el servidor central",
+    }
+    return LoginResponse(
+        access_token=access,
+        refresh_token=refresh,
+        user=to_user_out(usuario_admin),
+        empresa=_company_out(empresa),
+        license=licencia_local,
     )
 
 

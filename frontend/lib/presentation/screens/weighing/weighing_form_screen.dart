@@ -64,6 +64,16 @@ const _specProducto = CreatableSpec<Product>(
   icon: Icons.inventory,
   parse: Product.fromJson,
   campos: [
+    CrearCampoSpec(
+      key: 'id_categoria',
+      label: 'Categoría',
+      icon: Icons.category_outlined,
+      tipo: CrearCampoTipo.dropdown,
+      requerido: true,
+      catalogoPath: ApiConstants.categorias,
+      catalogoIdKey: 'id_categoria',
+      catalogoTituloKey: 'nombre',
+    ),
     CrearCampoSpec(key: 'nombre', label: 'Nombre', icon: Icons.badge_outlined, requerido: true, precargarTexto: true),
     CrearCampoSpec(key: 'codigo', label: 'Código', icon: Icons.numbers_outlined),
     CrearCampoSpec(key: 'densidad_estandar', label: 'Densidad estándar', icon: Icons.speed_outlined, tipo: CrearCampoTipo.numero),
@@ -293,7 +303,14 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   final Map<String, List<Object>> _nuevos = {};
   String? _numeroBoleto;
+  String? _ultimoBoletoId;
+  String? _ultimoNumeroBoleto;
   DateTime? _fechaActual;
+
+  List<dynamic> _series = [];
+  String? _idSerieSeleccionada;
+  Map<String, dynamic>? _serieActiva;
+  bool _guardandoPesaje = false;
 
   @override
   void initState() {
@@ -312,7 +329,28 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _focos[_idxCostoFlete] = _costoFleteFocus;
     _focos[_idxObservaciones] = _observacionesFocus;
     _cargarPermisosYEstado();
+    _cargarSeries();
     ServicesBinding.instance.keyboard.addHandler(_onKey);
+  }
+
+  Future<void> _cargarSeries() async {
+    try {
+      final resp = await di.sl<ApiClient>().listSeries();
+      final listado = resp.data is List ? (resp.data as List) : [];
+      if (mounted) {
+        setState(() {
+          _series = listado;
+          final activa = listado.firstWhere(
+            (s) => s['activa'] == true,
+            orElse: () => listado.isNotEmpty ? listado.first : null,
+          );
+          if (activa != null) {
+            _serieActiva = Map<String, dynamic>.from(activa);
+            _idSerieSeleccionada = activa['id_serie']?.toString();
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -591,11 +629,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         _confirmados[i] = false;
       }
     });
+    _cargarSeries();
   }
 
-  void _imprimirActual() {
-    if (_numeroBoleto != null) {
-      _reimprimirTicket(_numeroBoleto!, _numeroBoleto!);
+  void _imprimirActual({String formato = 'PDF'}) {
+    if (_ultimoBoletoId != null) {
+      _reimprimirTicket(_ultimoBoletoId!, _ultimoNumeroBoleto ?? 'Boleto', formato: formato);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Guarde el pesaje primero para imprimir')),
@@ -603,17 +642,21 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     }
   }
 
-  Future<void> _reimprimirTicket(String boleto, String nombreBoleto) async {
+  Future<void> _reimprimirTicket(String boleto, String nombreBoleto, {String formato = 'PDF'}) async {
     try {
-      final response = await di.sl<WeighingRepository>().getTicketPdf(boleto);
+      final repo = di.sl<WeighingRepository>();
+      final response = formato == 'TXT'
+          ? await repo.getTicketTxt(boleto)
+          : await repo.getTicketPdf(boleto);
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
-        throw Exception('El servidor no devolvió un PDF válido.');
+        throw Exception('El servidor no devolvió un $formato válido.');
       }
-      final ruta = await SaveFileUtils.save(bytes, 'ticket_$nombreBoleto.pdf', subcarpeta: 'tickets');
+      final extension = formato == 'TXT' ? 'txt' : 'pdf';
+      final ruta = await SaveFileUtils.save(bytes, 'ticket_$nombreBoleto.$extension', subcarpeta: 'tickets');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ticket guardado en: $ruta'), backgroundColor: SwsColors.success),
+          SnackBar(content: Text('Ticket ($formato) guardado en: $ruta'), backgroundColor: SwsColors.success),
         );
       }
     } catch (e) {
@@ -651,6 +694,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       idBalanza: _balanzaSeleccionada?.id,
       tipoTercero: _terceroSeleccionado != null ? _tipoTercero : null,
       idTercero: _terceroSeleccionado?.id,
+      idSerie: _idSerieSeleccionada,
       fechaHoraEntrada: now,
       pesoEntradaVehiculo: double.tryParse(_pesoEntradaCtrl.text) ?? 0,
       pesoEntradaRemolque: _remolque ? double.tryParse(_pesoRemolqueCtrl.text) : null,
@@ -676,6 +720,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       'es_peso_manual': _esPesoManual,
       'guia_sunagro': _guiaSunagroCtrl.text.trim().isNotEmpty ? _guiaSunagroCtrl.text.trim() : null,
       'medida': _medidaCtrl.text.trim().isNotEmpty ? _medidaCtrl.text.trim() : null,
+      if (_idSerieSeleccionada != null) 'id_serie': _idSerieSeleccionada,
     };
 
     context.read<WeighingBloc>().add(CreateWeighingEvent(weighing, adicionales: adicionales));
@@ -685,24 +730,34 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   Widget build(BuildContext context) {
     return BlocListener<WeighingBloc, WeighingState>(
       listener: (context, state) {
-        if (state is WeighingCreated) {
-          final boleto = state.weighing.boleto;
-          _numeroBoleto = boleto;
-          _subirFotos(boleto);
+        if (state is WeighingLoading) {
+          setState(() => _guardandoPesaje = true);
+        } else if (state is WeighingCreated) {
+          final boletoId = state.weighing.boleto;
+          final numeroVisible = state.weighing.numeroBoleto ?? 'Boleto';
+          _ultimoBoletoId = boletoId;
+          _ultimoNumeroBoleto = numeroVisible;
+          _numeroBoleto = numeroVisible;
+          setState(() => _guardandoPesaje = false);
+          _subirFotos(boletoId);
+          _limpiarFormulario();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Pesaje $numeroVisible guardado correctamente'),
+                backgroundColor: SwsColors.success,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } else if (state is WeighingError) {
+          setState(() => _guardandoPesaje = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Pesaje #$boleto creado — F5 para imprimir'),
-              backgroundColor: SwsColors.success,
-              action: SnackBarAction(
-                label: 'IMPRIMIR',
-                textColor: Colors.white,
-                onPressed: () => _reimprimirTicket(boleto, state.weighing.numeroBoleto ?? boleto),
-              ),
+              content: Text(state.message),
+              backgroundColor: SwsColors.danger,
+              duration: const Duration(seconds: 4),
             ),
-          );
-        } else if (state is WeighingError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.message), backgroundColor: SwsColors.danger),
           );
         }
       },
@@ -746,6 +801,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           onImprimir: _imprimirActual,
           onSalir: () => Navigator.of(context).pop(),
           puedeAnular: false,
+          guardando: _guardandoPesaje,
         ),
         const Divider(height: 1),
         Expanded(
@@ -870,10 +926,54 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   List<Widget> _buildDatosSection(BuildContext context, CatalogData data, List<Trailer> trailers, List<ThirdParty> terceros) {
     return [
-      _HeaderInfoRow(
-        label: 'Serie - Boleto',
-        value: _numeroBoleto ?? 'PENDIENTE',
-        icon: Icons.confirmation_number_outlined,
+      Row(
+        children: [
+          Expanded(
+            child: _HeaderInfoRow(
+              label: 'Serie - Boleto',
+              value: _numeroBoleto ?? (_serieActiva != null
+                  ? '${_serieActiva!['prefijo']}${(_serieActiva!['siguiente'] as int? ?? 1).toString().padLeft(_serieActiva!['digitos'] as int? ?? 6, '0')} (Próx.)'
+                  : 'PENDIENTE'),
+              icon: Icons.confirmation_number_outlined,
+            ),
+          ),
+          if (_series.length > 1) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: DropdownButton<String>(
+                value: _idSerieSeleccionada,
+                isDense: true,
+                underline: const SizedBox(),
+                items: _series.map<DropdownMenuItem<String>>((s) {
+                  final id = s['id_serie']?.toString() ?? '';
+                  final pref = s['prefijo']?.toString() ?? '';
+                  final nom = s['nombre']?.toString() ?? pref;
+                  return DropdownMenuItem<String>(
+                    value: id,
+                    child: Text('Serie: $pref ($nom)', style: const TextStyle(fontSize: 12)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _idSerieSeleccionada = val;
+                      final sel = _series.firstWhere((s) => s['id_serie']?.toString() == val, orElse: () => null);
+                      if (sel != null) {
+                        _serieActiva = Map<String, dynamic>.from(sel);
+                      }
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
+        ],
       ),
       _HeaderInfoRow(
         label: 'Fecha/Hora',
@@ -1192,11 +1292,11 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               color: SwsColors.warning.withValues(alpha: 0.25),
             ),
           ),
-          child: Row(
+          child: const Row(
             children: [
               Icon(Icons.edit_note, size: 18, color: SwsColors.warning),
-              const SizedBox(width: 8),
-              const Expanded(
+              SizedBox(width: 8),
+              Expanded(
                 child: Text(
                   'Peso manual — no hay báscula conectada',
                   style: TextStyle(
@@ -1426,7 +1526,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   List<Widget> _buildResumenSection(CatalogData data) {
     final pts = double.tryParse(_pesoRemolqueCtrl.text);
     return [
-      _ResumenRow(label: 'Serie - Boleto', value: _numeroBoleto ?? 'PENDIENTE'),
+      _ResumenRow(
+        label: 'Serie - Boleto',
+        value: _numeroBoleto ?? (_serieActiva != null
+            ? '${_serieActiva!['prefijo']}${(_serieActiva!['siguiente'] as int? ?? 1).toString().padLeft(_serieActiva!['digitos'] as int? ?? 6, '0')} (Próx.)'
+            : 'PENDIENTE'),
+      ),
       _ResumenRow(label: 'Camión', value: _camionSeleccionado?.placa ?? _camionTexto.toUpperCase()),
       _ResumenRow(label: 'Remolque', value: _remolque ? (_remolqueSeleccionado?.placa ?? 'Sí') : 'No'),
       _ResumenRow(label: 'Transporte', value: _transporteSeleccionado?.razonSocial ?? _transporteTexto),
@@ -1478,6 +1583,7 @@ class _QuickActionBar extends StatelessWidget {
   final VoidCallback onImprimir;
   final VoidCallback onSalir;
   final bool puedeAnular;
+  final bool guardando;
 
   const _QuickActionBar({
     required this.onEntrada,
@@ -1486,6 +1592,7 @@ class _QuickActionBar extends StatelessWidget {
     required this.onImprimir,
     required this.onSalir,
     required this.puedeAnular,
+    this.guardando = false,
   });
 
   @override
@@ -1497,7 +1604,13 @@ class _QuickActionBar extends StatelessWidget {
         children: [
           _ToolbarButton(icon: Icons.input, label: 'Entrada', shortcut: 'F2', onTap: onEntrada, color: SwsColors.success),
           const SizedBox(width: 6),
-          _ToolbarButton(icon: Icons.save, label: 'Guardar', shortcut: 'F4', onTap: onGuardar, color: SwsColors.accent),
+          _ToolbarButton(
+            icon: guardando ? Icons.hourglass_top : Icons.save,
+            label: guardando ? 'Guardando...' : 'Guardar',
+            shortcut: guardando ? null : 'F4',
+            onTap: guardando ? () {} : onGuardar,
+            color: SwsColors.accent,
+          ),
           const SizedBox(width: 6),
           _ToolbarButton(icon: Icons.cancel_outlined, label: 'Cancelar', shortcut: 'Esc', onTap: onCancelar),
           const SizedBox(width: 6),

@@ -60,7 +60,7 @@ class _FakeAuthRepository implements IAuthRepository {
   Future<User?> getCachedUser() async => _adminUser;
 
   @override
-  Future<void> restoreSession() async {}
+  Future<SesionRestaurada> restoreSession() async => SesionRestaurada.ok;
 
   @override
   Future<void> cacheUser(User user) async {}
@@ -136,7 +136,7 @@ void main() {
       restoreSessionUseCase: RestoreSessionUseCase(repo),
       forgotPasswordUseCase: ForgotPasswordUseCase(repo),
       resetPasswordUseCase: ResetPasswordUseCase(repo),
-    )..add(CheckAuthStatusEvent());
+    )..add(const CheckAuthStatusEvent());
 
     return BlocProvider<AuthBloc>(
       create: (_) => authBloc,
@@ -182,6 +182,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(buildApp());
     await tester.pump();
+    await tester.pumpAndSettle();
     final ex = tester.takeException();
     expect(ex, isNull, reason: 'Overflow/layout en 200px de ancho: $ex');
   });

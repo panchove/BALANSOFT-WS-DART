@@ -211,7 +211,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${w.idVehiculo ?? '—'} · ${w.numeroBoleto ?? _corto(w.boleto)}',
+                    '${w.idVehiculo ?? '—'} · ${w.numeroBoleto ?? 'Boleto s/n'}',
                     style: const TextStyle(
                         fontSize: 14, fontWeight: FontWeight.w700),
                   ),
@@ -283,6 +283,4 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     final h = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     return '$f $h';
   }
-
-  String _corto(String s) => s.length > 8 ? '${s.substring(0, 8)}…' : s;
 }

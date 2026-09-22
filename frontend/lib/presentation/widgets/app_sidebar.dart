@@ -1,9 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/repositories/accesos_repository.dart';
+import '../../injection.dart' as di;
 import '../providers/bloc/auth/auth_bloc.dart';
 
 /// Sidebar moderno con tamaños de fuente e iconos optimizados para alta legibilidad.
+///
+/// Cada hoja declara **explícitamente** su `index` en la lista `_pages` del
+/// `home_shell.dart`. Así, reordenar visualmente el menú no rompe la navegación.
+///
+/// Mapa actual de `_pages` (home_shell.dart):
+///   0  inicio
+///   1  terceros
+///   2  usuarios
+///   3  camiones
+///   4  conductores
+///   5  transportes
+///   6  categorias
+///   7  productos
+///   8  almacenes
+///   9  kardex
+///   10 entradas
+///   11 salidas
+///   12 reportes
+///   13 dispositivos
+///   14 seguridad
+///   15 documentos_empresa
+///   16 configuracion
 class AppSidebar extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -28,35 +52,30 @@ class _AppSidebarState extends State<AppSidebar> {
   final Set<String> _collapsedGroups = {};
   final ScrollController _scrollController = ScrollController();
 
+  /// Árbol de menú. Cada hoja tiene `index` que apunta a `_pages` en
+  /// `home_shell.dart`. NO usar el orden visual para inferir el índice.
+  /// `rolesPermitidos` = roles que pueden VER el módulo según la matriz por
+  /// defecto (`AccesosDefault`); los grupos/encabezados no filtran solos.
   static const _menuTree = [
-    _MenuNode(
-      label: 'Inicio',
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard,
-      clave: 'inicio',
-    ),
     _MenuNode(
       label: 'INFORMACIÓN',
       isSectionHeader: true,
       children: [
         _MenuNode(
-          label: 'Entidades',
+          label: 'Inicio',
+          icon: Icons.dashboard_outlined,
+          activeIcon: Icons.dashboard,
+          clave: 'inicio',
+          index: 0,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
+        ),
+        _MenuNode(
+          label: 'Terceros',
           icon: Icons.people_outline,
-          children: [
-            _MenuNode(
-              label: 'Terceros (C/P/A)',
-              icon: Icons.people_outline,
-              activeIcon: Icons.people,
-              clave: 'terceros',
-            ),
-            _MenuNode(
-              label: 'Usuarios del Sistema',
-              icon: Icons.admin_panel_settings_outlined,
-              activeIcon: Icons.admin_panel_settings,
-              clave: 'usuarios',
-              adminOnly: true,
-            ),
-          ],
+          activeIcon: Icons.people,
+          clave: 'terceros',
+          index: 1,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         _MenuNode(
           label: 'Flota y Transporte',
@@ -67,18 +86,24 @@ class _AppSidebarState extends State<AppSidebar> {
               icon: Icons.directions_car_outlined,
               activeIcon: Icons.directions_car,
               clave: 'camiones',
+              index: 3,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             _MenuNode(
               label: 'Conductores',
               icon: Icons.badge_outlined,
               activeIcon: Icons.badge,
               clave: 'conductores',
+              index: 4,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             _MenuNode(
               label: 'Empresas de Transporte',
               icon: Icons.fire_truck_outlined,
               activeIcon: Icons.fire_truck,
               clave: 'transportes',
+              index: 5,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
           ],
         ),
@@ -91,18 +116,24 @@ class _AppSidebarState extends State<AppSidebar> {
               icon: Icons.category_outlined,
               activeIcon: Icons.category,
               clave: 'categorias',
+              index: 6,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             _MenuNode(
               label: 'Productos',
               icon: Icons.inventory_2_outlined,
               activeIcon: Icons.inventory_2,
               clave: 'productos',
+              index: 7,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             _MenuNode(
               label: 'Almacenes',
               icon: Icons.warehouse_outlined,
               activeIcon: Icons.warehouse,
               clave: 'almacenes',
+              index: 8,
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
           ],
         ),
@@ -111,6 +142,8 @@ class _AppSidebarState extends State<AppSidebar> {
           icon: Icons.table_rows_outlined,
           activeIcon: Icons.table_rows,
           clave: 'kardex',
+          index: 9,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
       ],
     ),
@@ -123,18 +156,24 @@ class _AppSidebarState extends State<AppSidebar> {
           icon: Icons.arrow_downward_outlined,
           activeIcon: Icons.arrow_downward,
           clave: 'entradas',
+          index: 10,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         _MenuNode(
           label: 'Despachos (Salidas)',
           icon: Icons.arrow_upward_outlined,
           activeIcon: Icons.arrow_upward,
           clave: 'salidas',
+          index: 11,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         _MenuNode(
           label: 'Inventario (Stock Físico)',
           icon: Icons.inventory_outlined,
           activeIcon: Icons.inventory,
           clave: 'reportes',
+          index: 12,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
       ],
     ),
@@ -143,35 +182,60 @@ class _AppSidebarState extends State<AppSidebar> {
       isSectionHeader: true,
       children: [
         _MenuNode(
+          label: 'Usuarios del Sistema',
+          icon: Icons.admin_panel_settings_outlined,
+          activeIcon: Icons.admin_panel_settings,
+          clave: 'usuarios',
+          index: 2,
+          rolesPermitidos: {'ADMIN', 'AUDITOR'},
+        ),
+        _MenuNode(
           label: 'Dispositivos de Campo',
           icon: Icons.sensors_outlined,
           activeIcon: Icons.sensors,
           clave: 'dispositivos',
-          adminOnly: true,
+          index: 13,
+          rolesPermitidos: {'ADMIN'},
         ),
         _MenuNode(
           label: 'Seguridad y Accesos',
           icon: Icons.lock_outline,
           activeIcon: Icons.lock,
           clave: 'seguridad',
-          adminOnly: true,
+          index: 14,
+          rolesPermitidos: {'ADMIN'},
         ),
         _MenuNode(
           label: 'Empresa y Documentos',
           icon: Icons.business_outlined,
           activeIcon: Icons.business,
           clave: 'documentos_empresa',
-          adminOnly: true,
+          index: 15,
+          rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
         _MenuNode(
           label: 'Configuración General',
           icon: Icons.settings_outlined,
           activeIcon: Icons.settings,
           clave: 'configuracion',
+          index: 16,
+          rolesPermitidos: {'ADMIN'},
         ),
       ],
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarAccesos();
+  }
+
+  Future<void> _cargarAccesos() async {
+    final repo = di.sl<AccesosRepository>();
+    if (!repo.cargado) await repo.cargar();
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -202,8 +266,8 @@ class _AppSidebarState extends State<AppSidebar> {
                       vertical: 12,
                     ),
                     children: _buildNodes(
-                      _menuTree,
-                      esOperador: _esOperador(),
+                      _filtrarArbol(_menuTree),
+                      rol: _rolActual(),
                     ),
                   ),
                 ),
@@ -215,20 +279,46 @@ class _AppSidebarState extends State<AppSidebar> {
     );
   }
 
-  bool _esOperador() {
+  static const _rolDefault = 'OPERADOR';
+
+  String _rolActual() {
     final authState = context.read<AuthBloc>().state;
-    return authState is AuthAuthenticated && authState.user.isOperador;
+    if (authState is AuthAuthenticated) return authState.user.rol;
+    return _rolDefault;
+  }
+
+  /// Poda el árbol eliminando hojas sin permiso y los grupos/secciones que se
+  /// quedan sin hijos visibles.
+  List<_MenuNode> _filtrarArbol(List<_MenuNode> nodes) {
+    final rol = _rolActual();
+    final repo = di.sl<AccesosRepository>();
+    final result = <_MenuNode>[];
+
+    for (final node in nodes) {
+      // Hoja: visible si su clave la permite el rol (repositorio con fallback
+      // a la matriz por defecto).
+      if (node.isLeaf) {
+        final clave = node.clave;
+        if (clave == null || repo.puedeVer(rol, clave)) result.add(node);
+        continue;
+      }
+
+      // Nodo con hijos: filtra recursivamente y conserva solo si hay visibles.
+      final hijos = node.isSectionHeader ? node.children : node.children;
+      final filtrados = _filtrarArbol(hijos ?? const []);
+      if (filtrados.isEmpty) continue;
+      result.add(node.copyWith(children: filtrados));
+    }
+    return result;
   }
 
   List<Widget> _buildNodes(
     List<_MenuNode> nodes, {
-    required bool esOperador,
+    required String rol,
   }) {
     final widgets = <Widget>[];
 
     for (final node in nodes) {
-      if (node.adminOnly && esOperador) continue;
-
       if (node.isSectionHeader) {
         widgets.add(
           Padding(
@@ -246,10 +336,11 @@ class _AppSidebarState extends State<AppSidebar> {
         );
 
         if (node.children != null) {
-          widgets.addAll(_buildNodes(node.children!, esOperador: esOperador));
+          widgets.addAll(_buildNodes(node.children!, rol: rol));
         }
       } else if (node.isLeaf) {
-        final idx = _indexForClave(node.clave!);
+        // El índice viene EXPLÍCITO en el nodo. No se calcula por orden.
+        final idx = node.index ?? 0;
         final isSelected = widget.selectedIndex == idx;
 
         widgets.add(
@@ -304,7 +395,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       node.children!
                           .map((c) => c.copyWith(isSubItem: true))
                           .toList(),
-                      esOperador: esOperador,
+                      rol: rol,
                     ),
                   ),
                 ),
@@ -316,24 +407,6 @@ class _AppSidebarState extends State<AppSidebar> {
     }
     return widgets;
   }
-
-  int _indexForClave(String clave) {
-    final leaves = _allLeaves(_menuTree);
-    final i = leaves.indexWhere((n) => n.clave == clave);
-    return i == -1 ? 0 : i;
-  }
-
-  static List<_MenuNode> _allLeaves(List<_MenuNode> nodes) {
-    final result = <_MenuNode>[];
-    for (final n in nodes) {
-      if (n.isLeaf) {
-        result.add(n);
-      } else if (n.children != null) {
-        result.addAll(_allLeaves(n.children!));
-      }
-    }
-    return result;
-  }
 }
 
 // ─── Modelo de Datos ──────────────────────────────────────────────────
@@ -343,8 +416,12 @@ class _MenuNode {
   final IconData? icon;
   final IconData? activeIcon;
   final String? clave;
+  final int? index;
   final List<_MenuNode>? children;
-  final bool adminOnly;
+
+  /// Roles con acceso al módulo (matriz por defecto). Si es `null`, el nodo
+  /// (grupo/encabezado) no filtra por rol y depende de sus hijos.
+  final Set<String>? rolesPermitidos;
   final bool isSectionHeader;
   final bool isSubItem;
 
@@ -353,22 +430,24 @@ class _MenuNode {
     this.icon,
     this.activeIcon,
     this.clave,
+    this.index,
     this.children,
-    this.adminOnly = false,
+    this.rolesPermitidos,
     this.isSectionHeader = false,
     this.isSubItem = false,
   });
 
   bool get isLeaf => children == null && !isSectionHeader;
 
-  _MenuNode copyWith({bool? isSubItem}) {
+  _MenuNode copyWith({bool? isSubItem, List<_MenuNode>? children}) {
     return _MenuNode(
       label: label,
       icon: icon,
       activeIcon: activeIcon,
       clave: clave,
-      children: children,
-      adminOnly: adminOnly,
+      index: index,
+      children: children ?? this.children,
+      rolesPermitidos: rolesPermitidos,
       isSectionHeader: isSectionHeader,
       isSubItem: isSubItem ?? this.isSubItem,
     );
