@@ -54,6 +54,10 @@ class LoginCentralRequest(BaseModel):
 class ValidateLicenseRequest(BaseModel):
     licencia_key: str | None = None
     hardware_id: str | None = None
+    mac_address: str | None = None
+    device_brand: str | None = None
+    device_model: str | None = None
+    os_version: str | None = None
 
 
 class ForgotPasswordRequest(BaseModel):

@@ -461,6 +461,10 @@ async def validate_license(
             lambda: get_license_client().validate_or_activate(
                 licencia_key,
                 hardware_id,
+                mac_address=payload.mac_address,
+                device_brand=payload.device_brand,
+                device_model=payload.device_model,
+                os_version=payload.os_version,
                 product_code=settings.license_product_code,
             )
         )

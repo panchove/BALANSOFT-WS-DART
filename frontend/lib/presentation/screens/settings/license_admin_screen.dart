@@ -52,8 +52,14 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     setState(() => _renovando = true);
     try {
       final hwInfo = await DeviceInfo.getHardwareInfo();
+      final licenciaKey = _snapshot?['licencia_key_masked'] as String?;
       await di.sl<ApiClient>().validateLicense({
+        'licencia_key': licenciaKey,
         'hardware_id': hwInfo.hardwareId,
+        'mac_address': hwInfo.macAddress,
+        'device_brand': hwInfo.brand,
+        'device_model': hwInfo.model,
+        'os_version': hwInfo.osVersion,
       });
       if (mounted) await _cargarSnapshot();
     } catch (e) {

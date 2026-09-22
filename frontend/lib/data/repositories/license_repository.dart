@@ -24,7 +24,7 @@ class LicenseRepository implements ILicenseRepository {
   }
 
   @override
-  Future<License> validateLicense(String licenseKey, String hardwareId) async {
+  Future<License> validateLicense(String licenseKey) async {
     if (!await _isConnected) {
       final cached = await getCachedLicense();
       if (cached != null) return cached;
@@ -35,6 +35,10 @@ class LicenseRepository implements ILicenseRepository {
     final response = await _apiClient.validateLicense({
       'licencia_key': licenseKey,
       'hardware_id': hwInfo.hardwareId,
+      'mac_address': hwInfo.macAddress,
+      'device_brand': hwInfo.brand,
+      'device_model': hwInfo.model,
+      'os_version': hwInfo.osVersion,
     });
 
     final license = License.fromJson(response.data);
@@ -43,11 +47,15 @@ class LicenseRepository implements ILicenseRepository {
   }
 
   @override
-  Future<License> activateLicense(String licenseKey, String hardwareId) async {
+  Future<License> activateLicense(String licenseKey) async {
     final hwInfo = await DeviceInfo.getHardwareInfo();
     final response = await _apiClient.validateLicense({
       'licencia_key': licenseKey,
       'hardware_id': hwInfo.hardwareId,
+      'mac_address': hwInfo.macAddress,
+      'device_brand': hwInfo.brand,
+      'device_model': hwInfo.model,
+      'os_version': hwInfo.osVersion,
     });
 
     final license = License.fromJson(response.data);
@@ -75,8 +83,7 @@ class LicenseRepository implements ILicenseRepository {
   @override
   Future<License?> refreshLicense(String licenseKey) async {
     try {
-      final hwInfo = await DeviceInfo.getHardwareInfo();
-      return await validateLicense(licenseKey, hwInfo.hardwareId);
+      return await validateLicense(licenseKey);
     } catch (_) {
       return getCachedLicense();
     }
