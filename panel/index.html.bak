@@ -6,7 +6,7 @@
     <title>Balansoft WS — Panel Administrativo</title>
     <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css" />
     <link rel="stylesheet" href="vendor/icons/bootstrap-icons.min.css" />
-    <link rel="stylesheet" href="css/balansoft.css?v=5" />
+    <link rel="stylesheet" href="css/balansoft.css?v=4" />
   </head>
   <body class="login-body">
     <div class="login-container">
@@ -100,7 +100,7 @@
       </div>
     </div>
 
-    <!-- Modal informativo: API del servidor (solo lectura) -->
+    <!-- Modal de configuración de la API del servidor -->
     <div class="modal fade" id="apiModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -110,57 +110,65 @@
           </div>
           <div class="modal-body">
             <p class="text-secondary" style="font-size: 0.85rem">
-              URL base de la API del servidor. Esta dirección se configura en el
-              despliegue y no puede modificarse desde el navegador.
+              URL base de la API del servidor central (APP_ROLE=server), por ejemplo
+              <code>http://127.0.0.1:8001/api/v1</code>.
             </p>
-            <div class="input-group">
-              <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
-              <input
-                type="text"
-                class="form-control"
-                id="apiBaseDisplay"
-                readonly
-                aria-label="URL base de la API"
-              />
-            </div>
+            <input type="url" class="form-control" id="apiBaseInput" />
             <div id="apiAlert" class="alert alert-danger alert-box d-none mt-3" role="alert"></div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-outline-brand btn-sm" id="btnTestApi">
               Probar conexión
             </button>
-            <button type="button" class="btn btn-brand btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            <button type="button" class="btn btn-brand btn-sm" id="btnApiOk">Guardar</button>
           </div>
         </div>
       </div>
     </div>
 
     <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="config.js?v=5"></script>
-    <script src="js/api.js?v=5"></script>
-    <script src="js/auth.js?v=5"></script>
-    <script src="js/sglb-ui.js?v=5"></script>
+    <script src="config.js?v=4"></script>
+    <script src="js/api.js?v=4"></script>
+    <script src="js/auth.js?v=4"></script>
+    <script src="js/sglb-ui.js?v=4"></script>
     <script>
       (function () {
         function renderApiBase() {
-          var base = window.BalansoftConfig.apiBase;
-          var host = base
+          var host = window.BalansoftConfig.apiBase
             .replace(/^https?:\/\//, '')
             .replace(/\/api\/v\d+$/, '')
             .replace(/\/+$/, '');
           document.getElementById('apiBadgeLabel').textContent = 'API: ' + host;
-          document.getElementById('apiBaseLabel').textContent = base;
-          document.getElementById('apiBaseDisplay').value = base;
+          document.getElementById('apiBaseLabel').textContent = window.BalansoftConfig.apiBase;
         }
         renderApiBase();
 
         var apiModal = document.getElementById('apiModal');
         apiModal.addEventListener('show.bs.modal', function () {
+          document.getElementById('apiBaseInput').value = window.BalansoftConfig.apiBase;
           document.getElementById('apiAlert').classList.add('d-none');
+        });
+
+        document.getElementById('btnApiOk').addEventListener('click', function () {
+          var el = document.getElementById('apiBaseInput');
+          var url = el.value.trim();
+          if (!url) {
+            showApiError('Ingresa la URL base de la API.');
+            return;
+          }
+          if (!/^https?:\/\//i.test(url)) {
+            showApiError('La URL debe comenzar con http:// o https://');
+            return;
+          }
+          window.BalansoftConfig.apiBase = url;
+          bootstrap.Modal.getInstance(apiModal).hide();
           renderApiBase();
+          showLoginError('');
         });
 
         document.getElementById('btnTestApi').addEventListener('click', function () {
+          var el = document.getElementById('apiBaseInput');
+          var url = el.value.trim();
           var box = document.getElementById('apiAlert');
           box.className = 'alert alert-info alert-box mt-3';
           box.textContent = 'Probando conexión…';
@@ -179,12 +187,20 @@
               if (err.status === 404) {
                 msg =
                   'Se alcanzó un servidor, pero no expone el panel del proveedor. ' +
-                  '¿Es la API con APP_ROLE=server?';
+                  '¿Es la API con APP_ROLE=server? Usa la URL del servidor central ' +
+                  '(p. ej. http://127.0.0.1:8001/api/v1), no la de la estación (8000).';
               }
               box.className = 'alert alert-warning alert-box mt-3';
               box.textContent = msg;
             });
         });
+
+        function showApiError(msg) {
+          var box = document.getElementById('apiAlert');
+          box.textContent = msg;
+          box.className = 'alert alert-danger alert-box mt-3';
+          box.classList.remove('d-none');
+        }
 
         function showLoginError(msg) {
           var box = document.getElementById('alertBox');
@@ -216,7 +232,14 @@
               window.location.replace('panel.html');
             })
             .catch(function (err) {
-              showLoginError(err.message);
+              if (err.status === 404) {
+                showLoginError(
+                  'Not Found: la URL no es la API del servidor central. ' +
+                    'Abre el engranaje y usa p. ej. http://127.0.0.1:8001/api/v1 (no la estación en 8000).'
+                );
+              } else {
+                showLoginError(err.message);
+              }
               btn.disabled = false;
               spinner.classList.add('d-none');
               icon.classList.remove('d-none');
