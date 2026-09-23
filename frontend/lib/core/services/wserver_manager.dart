@@ -107,7 +107,7 @@ class WServerManager {
       _proceso = await Process.start(binario, args);
       
       // Capturar stderr para detectar errores si falla el proceso (ej: FATAL: password auth)
-      _proceso?.stderr.transform(SystemEncoding().decoder).listen((data) {
+      _proceso?.stderr.transform(const SystemEncoding().decoder).listen((data) {
         stderrSalida += data;
       });
       
@@ -131,11 +131,22 @@ class WServerManager {
     return isOnline();
   }
 
-  /// Baja el WServer lanzado por esta app (útil en desarrollo/tests).
+  /// Baja el WServer lanzado por esta app o corriendo en el puerto 8000.
   static Future<void> detener() async {
-    _proceso?.kill();
-    await _proceso?.exitCode.timeout(const Duration(seconds: 3), onTimeout: () => -1);
-    _proceso = null;
+    try {
+      if (_proceso != null) {
+        _proceso?.kill();
+        await _proceso?.exitCode
+            .timeout(const Duration(seconds: 3), onTimeout: () => -1);
+        _proceso = null;
+      } else {
+        if (Platform.isLinux || Platform.isMacOS) {
+          await Process.run('fuser', ['-k', '8000/tcp']);
+        } else if (Platform.isWindows) {
+          await Process.run('taskkill', ['/F', '/IM', 'WServer.exe']);
+        }
+      }
+    } catch (_) {}
     _intentado = false;
   }
 

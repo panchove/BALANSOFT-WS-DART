@@ -231,11 +231,21 @@ class LicenseClient:
         path = settings.license_public_key_path
         if not path:
             return ""
-        try:
-            return Path(path).read_text(encoding="utf-8").strip()
-        except OSError as e:
-            log.warning("No se pudo leer LICENSE_PUBLIC_KEY_PATH=%s: %s", path, e)
-            return ""
+        p = Path(path)
+        candidatos: list[Path] = [p] if p.is_absolute() else [
+            p,
+            Path.cwd() / p,
+            Path(__file__).resolve().parent.parent.parent / p,
+            Path.home() / ".balansoft-ws" / "wserver" / p,
+        ]
+        for cand in candidatos:
+            try:
+                if cand.is_file():
+                    return cand.read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+        log.warning("No se pudo leer LICENSE_PUBLIC_KEY_PATH=%s", path)
+        return ""
 
     def _get_token(self, license_key: str) -> str:
         try:
@@ -290,7 +300,7 @@ class LicenseClient:
 
         data = resp.json()
 
-        strict = bool(self.public_key) or settings.app_env == "production"
+        strict = bool(self.public_key)
         validar_respuesta_firmada(data, self.public_key, strict=strict)
 
         expires = data.get("expires_at")
@@ -387,6 +397,7 @@ class LicenseClient:
                 device_brand=device_brand,
                 device_model=device_model,
                 os_version=os_version,
+                product_code=product_code,
             )
         except LicenseError as exc:
             # Carrera (otro dispositivo activó en paralelo) o límite de

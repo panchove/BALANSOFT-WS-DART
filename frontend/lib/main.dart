@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/config/app_config.dart';
 import 'core/config/env_config.dart';
+import 'core/services/wserver_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'injection.dart' as di;
@@ -37,6 +38,7 @@ void main() async {
     // El manejador de ventana DEBE inicializarse antes de runApp para que
     // funcionen los atajos F9 (maximizar/restaurar) y F11 (pantalla completa).
     await windowManager.ensureInitialized();
+    await windowManager.setPreventClose(true);
   }
 
   await _aplicarModoKiosk();
@@ -62,8 +64,39 @@ Future<void> _aplicarModoKiosk() async {
   }
 }
 
-class BalansoftApp extends StatelessWidget {
+class BalansoftApp extends StatefulWidget {
   const BalansoftApp({super.key});
+
+  @override
+  State<BalansoftApp> createState() => _BalansoftAppState();
+}
+
+class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      windowManager.addListener(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      windowManager.removeListener(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    final autostart =
+        await WServerManager.autostartActivo() || AppConfig.wserverAutostart;
+    if (!autostart) {
+      await WServerManager.detener();
+    }
+    await windowManager.destroy();
+  }
 
   @override
   Widget build(BuildContext context) {
