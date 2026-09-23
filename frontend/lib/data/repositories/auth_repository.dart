@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -237,6 +238,9 @@ class AuthRepository implements IAuthRepository {
           deviceModel: hw.model,
           osVersion: hw.osVersion,
           macAddress: hw.macAddress,
+          nombreEquipo: Platform.localHostname,
+          sistemaOperativo: hw.osVersion,
+          versionApp: AppConfig.appVersion,
         );
         final acceso = resp.data['access_token'] as String?;
         final refresco = resp.data['refresh_token'] as String?;

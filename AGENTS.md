@@ -44,7 +44,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 ## Configuración (`.env`)
 
 - Referencias: `backend/.env.example` (producción), `backend/.env.plantilla` (plantilla embebida del WServer), `docs/MANEJO_DB.md §11`.
-- Claves clave: `DATABASE_URL`/`DATABASE_URL_SYNC` (obligatorio el par async/sync), `APP_ROLE`, `SERVER_API_URL` + `SERVER_DATABASE_URL` (solo rol local), `SECRET_KEY` (generar con `openssl rand -hex 32`), `API_HOST`/`API_PORT` (dev `127.0.0.1:8000`; servidor real `0.0.0.0:8002`), `LICENSE_API_URL=127.0.0.1:9001/api/v1`, `LICENSE_PRODUCT_CODE=WS` (ojo: el default de `config.py` es `BWS`), `RATE_LIMIT_*`, `METRICS_ENABLED`.
+- Claves clave: `DATABASE_URL`/`DATABASE_URL_SYNC` (obligatorio el par async/sync), `APP_ROLE`, `SERVER_API_URL` + `SERVER_DATABASE_URL` (solo rol local), `SECRET_KEY` (generar con `openssl rand -hex 32`), `API_HOST`/`API_PORT` (dev `127.0.0.1:8000`; servidor real `0.0.0.0:8002`), `LICENSE_API_URL` (en estaciones `https://lm.balansoft.com.ve/api/v1`; en el servidor central con LM local `127.0.0.1:9001/api/v1`), `LICENSE_PRODUCT_CODE=WS` (ojo: el default de `config.py` es `BWS`), `RATE_LIMIT_*`, `METRICS_ENABLED`.
 - En dev actual: `APP_ROLE=local` contra la BD `balansoft_ws` (single-DB). Las BDs split de prueba son `balansoft_ws_server` y `balansoft_ws_local` (mismo PostgreSQL local).
 
 ---

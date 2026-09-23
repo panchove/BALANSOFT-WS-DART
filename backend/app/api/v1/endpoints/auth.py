@@ -283,7 +283,7 @@ async def login_central(
         "password": payload.password,
         "hardware_id": payload.hardware_id or obtener_hardware_id(),
         "nombre_equipo": payload.nombre_equipo or socket.gethostname(),
-        "sistema_operativo": payload.sistema_operativo,
+        "sistema_operativo": payload.sistema_operativo or payload.os_version,
         "version_app": payload.version_app,
         "mac_address": payload.mac_address,
         "device_brand": payload.device_brand,
