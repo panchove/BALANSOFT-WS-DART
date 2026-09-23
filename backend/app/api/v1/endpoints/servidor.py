@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -61,6 +62,8 @@ from app.schemas_server import (
 
 router = APIRouter()
 
+log = logging.getLogger(__name__)
+
 
 def _naive_utc(value: datetime | None) -> datetime | None:
     if value is None:
@@ -84,6 +87,75 @@ def _max_sesiones_default(tier: str) -> int | None:
     if upper == "DEMO":
         return 3
     return None
+
+
+def _limite_por_tier(tier: str, campo: str) -> int | None:
+    """Máx. equipos/usuarios según tier: DEMO → 1, resto → ilimitado (None)."""
+    upper = (tier or "").strip().upper()
+    if upper == "DEMO":
+        return 1
+    return None
+
+
+def _normalizar_estado_lm(estado: str | None) -> str:
+    """Convierte un estado del LM (inglés) al estado que entiende el panel."""
+    e = (estado or "").upper()
+    if e in ("ACTIVE", "ACTIVA", "VIGENTE"):
+        return "ACTIVA"
+    if e in ("SUSPENDED", "SUSPENDIDA"):
+        return "SUSPENDIDA"
+    if e in ("EXPIRED", "VENCIDA"):
+        return "VENCIDA"
+    if e in ("INACTIVE", "INACTIVA"):
+        return "INACTIVA"
+    return e or "ACTIVA"
+
+
+async def _sync_licencia_desde_lm(db: AsyncSession, lic: Licencia) -> bool:
+    """Re-valida la licencia de una cuenta contra el LM y refresca la BD.
+
+    El LM es la fuente de verdad del tier/estado (el proveedor la actualiza en
+    el LM y el panel debe reflejarlo sin re-editar la cuenta). Devuelve True si
+    cambió algo o el LM no está disponible (en cuyo caso se conserva la BD).
+    """
+    key = (lic.licencia_key or "").strip().upper()
+    if not key or "•" in key or "..." in key:
+        return False
+    try:
+        info = await asyncio.to_thread(
+            lambda: get_license_client().check(key)
+        )
+    except Exception as e:  # noqa: BLE001 - sync best-effort: nunca romper el panel
+        log.warning("LM no disponible al sincronizar licencia %s: %s", key, e)
+        return False
+
+    if not info.get("exists"):
+        return False
+
+    nuevo_tier = (info.get("tier") or lic.licencia_tier or "DEMO").upper()
+    nuevo_estado = _normalizar_estado_lm(info.get("status") or lic.licencia_status)
+    cambia_tier = nuevo_tier != (lic.licencia_tier or "").upper()
+    cambia_estado = nuevo_estado != (lic.licencia_status or "").upper()
+
+    if not (cambia_tier or cambia_estado):
+        return False
+
+    lic.licencia_tier = nuevo_tier
+    lic.licencia_status = nuevo_estado
+    lm_expira = info.get("expires_at")
+    if lm_expira:
+        lic.fecha_expira = _naive_utc(lm_expira)
+    lic.max_equipos = _limite_por_tier(nuevo_tier, "max_equipos")
+    lic.max_usuarios = _limite_por_tier(nuevo_tier, "max_usuarios")
+    lic.max_sesiones = _max_sesiones_default(nuevo_tier)
+    await db.commit()
+    log.info(
+        "Licencia %s sincronizada desde el LM: tier=%s status=%s",
+        key,
+        nuevo_tier,
+        nuevo_estado,
+    )
+    return True
 
 
 async def _auditar(
@@ -668,6 +740,11 @@ async def panel_cuenta_detalle(
     licencias = (
         await db.execute(select(Licencia).where(Licencia.id_cuenta == id_cuenta))
     ).scalars().all()
+    # El LM es la fuente de verdad del tier/estado: si el proveedor la actualizó
+    # (p. ej. DEMO → CENTRAL), la BD del panel se fresca aquí, sin re-editar
+    # la cuenta. Si el LM está caído, se conserva lo registrado.
+    for lic in licencias:
+        await _sync_licencia_desde_lm(db, lic)
     credenciales = (
         await db.execute(select(Credencial).where(Credencial.id_cuenta == id_cuenta))
     ).scalars().all()
