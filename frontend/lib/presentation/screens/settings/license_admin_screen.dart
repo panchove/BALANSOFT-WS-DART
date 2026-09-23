@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/security/device_info.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/mensaje_error.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../providers/bloc/license/license_bloc.dart';
 import '../../../injection.dart' as di;
@@ -43,7 +44,7 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
       if (!mounted) return;
       setState(() {
         _cargando = false;
-        _error = 'No se pudo consultar la licencia: $e';
+        _error = 'No se pudo consultar la licencia: ${mensajeDeError(e)}';
       });
     }
   }
@@ -52,9 +53,12 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     setState(() => _renovando = true);
     try {
       final hwInfo = await DeviceInfo.getHardwareInfo();
-      final licenciaKey = _snapshot?['licencia_key_masked'] as String?;
+      final keyCandidate = _snapshot?['licencia_key_masked'] as String?;
+      final bool esMascara = keyCandidate == null ||
+          keyCandidate.contains('...') ||
+          keyCandidate.contains('•');
       await di.sl<ApiClient>().validateLicense({
-        'licencia_key': licenciaKey,
+        if (!esMascara) 'licencia_key': keyCandidate,
         'hardware_id': hwInfo.hardwareId,
         'mac_address': hwInfo.macAddress,
         'device_brand': hwInfo.brand,
@@ -64,7 +68,8 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
       if (mounted) await _cargarSnapshot();
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Renovación fallida: $e');
+        setState(() => _error =
+            'Renovación fallida: ${mensajeDeError(e, fallback: 'No se pudo validar la licencia con el servidor.')}');
       }
     } finally {
       if (mounted) setState(() => _renovando = false);

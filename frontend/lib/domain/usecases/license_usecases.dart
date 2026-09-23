@@ -1,14 +1,12 @@
 import '../entities/license.dart';
 import '../repositories/i_license_repository.dart';
-import '../../core/security/device_info.dart';
 
 class ValidateLicenseUseCase {
   final ILicenseRepository _repo;
   ValidateLicenseUseCase(this._repo);
 
   Future<License> execute(String licenseKey) async {
-    final hwInfo = await DeviceInfo.getHardwareInfo();
-    return _repo.validateLicense(licenseKey, hwInfo.hardwareId);
+    return _repo.validateLicense(licenseKey);
   }
 }
 
@@ -17,8 +15,7 @@ class ActivateLicenseUseCase {
   ActivateLicenseUseCase(this._repo);
 
   Future<License> execute(String licenseKey) async {
-    final hwInfo = await DeviceInfo.getHardwareInfo();
-    return _repo.activateLicense(licenseKey, hwInfo.hardwareId);
+    return _repo.activateLicense(licenseKey);
   }
 }
 

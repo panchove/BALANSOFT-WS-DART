@@ -23,6 +23,7 @@ from app.api.v1.endpoints import API_ROUTERS
 from app.api.v1.endpoints import auth as auth_module
 from app.core.database import get_db
 from app.core.license_client import LicenseInfo
+from app.core.security import hash_password
 from app.models import (
     Categoria,
     Empresa,
@@ -133,6 +134,31 @@ class TestIdentidadLocal:
         ).scalar_one_or_none()
         assert identidad is not None
         assert identidad.hardware_id == "HW-REAL-001"
+
+    async def test_login_admin_hardware_mismatch_rechazado(self, app, db, empresa, admin_user):
+        admin_user.password_hash = hash_password("password123")
+        identidad = IdentidadLocal(
+            id=True,
+            id_cuenta=empresa.id_empresa,
+            rif_nit=empresa.rif_nit,
+            nombre_fiscal=empresa.nombre_fiscal,
+            hardware_id="HW-TITULAR-001",
+        )
+        db.add(identidad)
+        await db.commit()
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": admin_user.email,
+                    "password": "password123",
+                    "hardware_id": "HW-OTRO-DISPOSITIVO",
+                },
+            )
+            assert resp.status_code == 403
+            assert "activada en otro equipo titular" in resp.json()["detail"]
 
     async def test_put_identidad_requiere_admin(self, app, db, empresa, monkeypatch):
         non_admin = Usuario(

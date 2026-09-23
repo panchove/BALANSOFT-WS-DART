@@ -121,7 +121,9 @@ def validate_license_key_format(key: str) -> str:
     return normalized
 
 
-def _verify_signature(payload: dict[str, Any], signature: str, public_key_pem: str) -> bool:
+def _verify_signature(
+    payload: dict[str, Any], signature: str, public_key_pem: str | bytes
+) -> bool:
     try:
         key_bytes = (
             public_key_pem.encode("utf-8")
@@ -307,6 +309,7 @@ class LicenseClient:
         device_brand: str | None = None,
         device_model: str | None = None,
         os_version: str | None = None,
+        product_code: str | None = None,
     ) -> dict[str, Any]:
         token = self._get_token(license_key)
         payload = {
@@ -316,6 +319,7 @@ class LicenseClient:
             "device_brand": _sanitize_text(device_brand, 64),
             "device_model": _sanitize_text(device_model, 64),
             "os_version": _sanitize_text(os_version, 64),
+            "product_code": product_code or settings.license_product_code,
         }
         resp = httpx.post(
             f"{self.base_url}/activate",

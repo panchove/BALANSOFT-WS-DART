@@ -178,11 +178,29 @@ async def login(
     if not empresa.activa:
         raise HTTPException(status_code=403, detail="Empresa inactiva")
 
+    # Validar ligadura de dispositivo titular para la cuenta ADMIN
+    identidad_actual = (
+        await db.execute(
+            select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+        )
+    ).scalar_one_or_none()
+    hardware_id_req = payload.hardware_id or obtener_hardware_id()
+    if (
+        usuario.rol == "ADMIN"
+        and identidad_actual
+        and identidad_actual.hardware_id
+        and identidad_actual.hardware_id != hardware_id_req
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La cuenta ADMIN está activada en otro equipo titular. No se permite abrir la cuenta de administrador desde un dispositivo distinto.",
+        )
+
     # Validar licencia contra el LM local
     licencia: dict | None = None
     if empresa.licencia_key:
         licencia_key = empresa.licencia_key
-        hardware_id = payload.hardware_id or obtener_hardware_id()
+        hardware_id = hardware_id_req
         try:
             info = await asyncio.to_thread(
                 lambda: get_license_client().validate_or_activate(
@@ -449,11 +467,21 @@ async def validate_license(
             select(Empresa).where(Empresa.id_empresa == current_user.id_empresa)
         )
     ).scalar_one()
-    licencia_key = empresa.licencia_key or payload.licencia_key
-    if not licencia_key:
+    licencia_key = empresa.licencia_key
+    if not licencia_key or "..." in licencia_key or "•" in licencia_key:
+        if (
+            payload.licencia_key
+            and "..." not in payload.licencia_key
+            and "•" not in payload.licencia_key
+        ):
+            licencia_key = payload.licencia_key
+        else:
+            licencia_key = empresa.licencia_key
+
+    if not licencia_key or "..." in licencia_key or "•" in licencia_key:
         raise HTTPException(
             status_code=400,
-            detail="La empresa no tiene una licencia configurada",
+            detail="La empresa no tiene una clave de licencia válida configurada",
         )
     hardware_id = payload.hardware_id or obtener_hardware_id()
     try:

@@ -372,6 +372,16 @@ async def server_login(
         raise HTTPException(status_code=403, detail="Cuenta inactiva")
 
     licencia = await _licencia_activa(db, cuenta.id_cuenta)
+    # Validar o registrar dispositivo titular de la licencia para la cuenta ADMIN
+    if cred.rol_global == "ADMIN" or (licencia.licencia_tier or "").upper() in ("MONOPUESTO", "DEMO"):
+        if not licencia.hardware_id:
+            licencia.hardware_id = payload.hardware_id
+        elif licencia.hardware_id != payload.hardware_id:
+            raise HTTPException(
+                status_code=403,
+                detail="La cuenta ADMIN está activada en otro equipo titular. No se permite abrir la sesión de administrador desde este dispositivo.",
+            )
+
     disp = await _dispositivo(db, cuenta.id_cuenta, payload.hardware_id, payload)
     if licencia.max_equipos is not None:
         equipo_count = (
