@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Código de producto registrado en el LM (products.code: "WS"). La clave de
     # licencia usa el prefijo BWS-… pero `product_code` enviado al LM es "WS".
     license_product_code: str = "WS"
+    # TTL (segundos) de la caché de validación para operación de pesaje: evita
+    # un round-trip al LM por cada boleto. La licencia se re-valida en vivo en
+    # login, /config/account y el panel (GET /auth/license).
+    license_cache_ttl_seconds: int = 300
 
     # API
     api_host: str = "0.0.0.0"

@@ -83,6 +83,22 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
+  /// "Válida hasta el 22 sep 2027 (398 días restantes)".
+  String _fmtVigencia(String? iso) {
+    final d = DateTime.tryParse(iso ?? '');
+    if (d == null) return 'Sin vencimiento';
+    final dias = d.difference(DateTime.now().toUtc()).inDays;
+    if (dias < 0) return 'Vencida el ${_fmtFecha(iso)}';
+    final meses = const [
+      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+    ];
+    return 'Válida hasta el ${d.day} ${meses[d.month - 1]} ${d.year} '
+        '($dias ${dias == 1 ? 'día' : 'días'} restantes)';
+  }
+
+  String _limite(num? v) => v == null ? 'Ilimitado' : v.toString();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -138,8 +154,11 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     final status = (s['status'] as String?) ?? '—';
     final valid = s['valid'] == true;
     final actuales = (s['registros_actuales'] as num?)?.toInt() ?? 0;
-    final maxReg = s['features']?['max_registros'] as num?;
+    final features = (s['features'] as Map<String, dynamic>?) ?? const {};
+    final maxReg = features['max_registros'] as num?;
     final maxRegInt = maxReg?.toInt();
+    final maxEquipos = _limite(features['max_equipos'] as num?);
+    final maxUsuarios = _limite(features['max_usuarios'] as num?);
 
     return Card(
       child: Padding(
@@ -176,8 +195,10 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
               ],
             ),
             const Divider(height: 24),
-            _InfoRow('Vencimiento', _fmtFecha(s['expires_at'] as String?)),
+            _InfoRow('Vigencia', _fmtVigencia(s['expires_at'] as String?)),
             _InfoRow('Clave', (s['licencia_key_masked'] as String?) ?? '—'),
+            _InfoRow('Máx. equipos', maxEquipos),
+            _InfoRow('Máx. usuarios', maxUsuarios),
             const SizedBox(height: 8),
             if (maxRegInt != null) ...[
               LinearProgressIndicator(
@@ -189,7 +210,7 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
               Text('$actuales / $maxRegInt registros (DEMO)',
                   style: const TextStyle(fontSize: 12)),
             ] else
-              Text('$actuales registros registrados',
+              Text('Registros ilimitados (CENTRAL) · $actuales usados',
                   style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 16),
             FilledButton.icon(

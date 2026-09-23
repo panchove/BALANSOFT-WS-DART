@@ -280,3 +280,102 @@ class TestValidarOAutoactivar:
         info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
         assert info is info_original
         assert not llamado["activado"]
+
+
+class TestValidateCached:
+    """Caché de validación por turno (offline-first en operación de pesaje)."""
+
+    def _client_limpio(self):
+        client = get_license_client()
+        client._cache.clear()  # type: ignore[attr-defined]
+        client._last_fallback.clear()  # type: ignore[attr-defined]
+        return client
+
+    def test_validacion_cacheada_dentro_ttl(self) -> None:
+        client = self._client_limpio()
+        llamadas = {"n": 0}
+
+        def fake_validate_or_activate(key, hw, **kw):
+            llamadas["n"] += 1
+            return LicenseInfo(valid=True, status="ACTIVE", tier="CENTRAL", message="ok")
+
+        client.validate_or_activate = fake_validate_or_activate  # type: ignore[method-assign]
+
+        info1 = client.validate_cached(
+            "BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=5)
+        )
+        info2 = client.validate_cached(
+            "BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=5)
+        )
+        assert info1 is not None and info1.valid
+        assert info2 is info1  # misma instancia cacheada
+        assert llamadas["n"] == 1
+
+    def test_resultado_invalido_no_se_cachea(self) -> None:
+        client = self._client_limpio()
+        llamadas = {"n": 0}
+        no_valida = LicenseInfo(valid=False, status="EXPIRED", tier="DEMO", message="x")
+
+        def fake_validate_or_activate(key, hw, **kw):
+            llamadas["n"] += 1
+            return no_valida
+
+        client.validate_or_activate = fake_validate_or_activate  # type: ignore[method-assign]
+
+        info = client.validate_cached(
+            "BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=5)
+        )
+        assert info is no_valida
+        assert client._cache == {}  # type: ignore[attr-defined]
+
+    def test_lm_inalcanzable_devuelve_none_sin_repreguntar(self) -> None:
+        client = self._client_limpio()
+        llamadas = {"n": 0}
+
+        def fake_validate_or_activate(key, hw, **kw):
+            llamadas["n"] += 1
+            raise LicenseError("LM no responde")
+
+        client.validate_or_activate = fake_validate_or_activate  # type: ignore[method-assign]
+
+        info1 = client.validate_cached(
+            "BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=5)
+        )
+        info2 = client.validate_cached(
+            "BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=5)
+        )
+        assert info1 is None
+        assert info2 is None
+        assert llamadas["n"] == 1  # el fallback evita martillar el LM
+
+    def test_ttl_0_siempre_revalida(self) -> None:
+        client = self._client_limpio()
+        llamadas = {"n": 0}
+
+        def fake_validate_or_activate(key, hw, **kw):
+            llamadas["n"] += 1
+            return LicenseInfo(valid=True, status="ACTIVE", tier="DEMO", message="ok")
+
+        client.validate_or_activate = fake_validate_or_activate  # type: ignore[method-assign]
+
+        client.validate_cached("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(0))
+        client.validate_cached("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(0))
+        assert llamadas["n"] == 2
+
+    def test_ttl_expirado_revalida_y_renueva(self) -> None:
+        client = self._client_limpio()
+        ahora = datetime.now(UTC).replace(tzinfo=None)
+        vencida = LicenseInfo(valid=True, status="ACTIVE", tier="CENTRAL", message="ok")
+        client._cache["BWS-A1B2-C3D4-E5F6-G7H8"] = type(
+            "LC", (), {"info": vencida, "cached_at": ahora - timedelta(minutes=30)}
+        )()
+        llamadas = {"n": 0}
+
+        def fake_validate_or_activate(key, hw, **kw):
+            llamadas["n"] += 1
+            return vencida
+
+        client.validate_or_activate = fake_validate_or_activate  # type: ignore[method-assign]
+
+        client.validate_cached("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1", ttl=timedelta(minutes=1))
+        assert llamadas["n"] == 1

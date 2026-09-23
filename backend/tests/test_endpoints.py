@@ -40,6 +40,9 @@ class FakeLM:
     def validate_or_activate(self, license_key: str, hardware_id: str, **kwargs):
         return self.validate(license_key, hardware_id, **kwargs)
 
+    def validate_cached(self, license_key: str, hardware_id: str, **kwargs):
+        return self.validate_or_activate(license_key, hardware_id, **kwargs)
+
 
 class FakeHAL:
     """HAL de balanza falso para probar el endpoint de conexión."""

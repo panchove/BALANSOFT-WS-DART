@@ -11,6 +11,8 @@ Reglas de negocio críticas:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import uuid
 from datetime import UTC, datetime
@@ -34,7 +36,7 @@ from app.api.dependencies import get_current_empresa, get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.hardware import obtener_hardware_id
-from app.core.license_client import LicenseError, LicenseInfo, get_license_client
+from app.core.license_client import LicenseInfo, get_license_client
 from app.core.monitoring import inc_pesaje_anulado, inc_pesaje_cerrado, inc_pesaje_creado
 from app.core.scale_session import get_scale_session_manager
 from app.models import (
@@ -62,6 +64,8 @@ from app.services.ticket_service import generar_ticket_pdf, generar_ticket_txt
 from app.services.weighing_service import WeighingService
 
 router = APIRouter(prefix="/api/v1/weighing", tags=["Weighing"])
+
+log = logging.getLogger(__name__)
 
 _SERVICE = WeighingService()
 
@@ -101,10 +105,11 @@ async def create_weighing(
 ) -> WeighingOut:
     _verificar_peso_manual(payload.es_peso_manual, current_user)
 
-    # Validar licencia online (best-effort: si el LM no responde, se bloquea
-    # la creación para no operar sin licencia verificada). Si la licencia aún
-    # no está activada (AVAILABLE) o el dispositivo de una CENTRAL no está
-    # registrado, se auto-activa en el LM antes de validar.
+    # Validar licencia contra el LM con caché por turno y sin bloquear el event
+    # loop: la llamada al LM es síncrona y el WServer corre con un solo worker,
+    # así que se ejecuta en un hilo. Si el LM no responde y no hay validación
+    # reciente, se DEGRADA con el estado cacheado en BD (offline-first) en lugar
+    # de tumbar la estación: el login/panel re-validan en vivo cuando hay red.
     lic_info: LicenseInfo | None = None
     if empresa.licencia_key:
         identidad = (
@@ -115,24 +120,36 @@ async def create_weighing(
         hardware_id = (
             identidad.hardware_id if identidad else None
         ) or obtener_hardware_id()
-        try:
-            info = get_license_client().validate_or_activate(
+        client = get_license_client()
+        info = await asyncio.to_thread(
+            client.validate_cached,
+            empresa.licencia_key,
+            hardware_id,
+            product_code=settings.license_product_code,
+        )
+        if info is None:
+            log.warning(
+                "Licencia %s sin verificar en LM al registrar entrada; "
+                "se usa estado cacheado (tier=%s, status=%s)",
                 empresa.licencia_key,
-                hardware_id,
-                product_code=settings.license_product_code,
+                empresa.licencia_tier,
+                empresa.licencia_status,
             )
+            lic_info = LicenseInfo(
+                valid=(empresa.licencia_status or "").upper()
+                in ("ACTIVE", "ACTIVA", "VIGENTE"),
+                tier=empresa.licencia_tier,
+                status=empresa.licencia_status,
+            )
+        else:
             lic_info = LicenseInfo(
                 valid=info.valid, tier=info.tier, status=info.status
             )
-        except LicenseError as e:
-            raise HTTPException(
-                status_code=503, detail=f"Error validando licencia: {e}"
-            ) from e
-        if not info.valid:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Licencia inválida o expirada: {info.message}",
-            )
+            if not info.valid:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Licencia inválida o expirada: {info.message}",
+                )
 
     pesaje = await _SERVICE.create(
         db,

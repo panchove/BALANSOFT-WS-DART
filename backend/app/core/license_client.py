@@ -225,6 +225,12 @@ class LicenseClient:
         self.base_url = settings.license_api_url.rstrip("/")
         self.public_key = settings.license_public_key or self._public_key_from_file()
         self.timeout = httpx.Timeout(10.0)
+        # Caché de validación "por turno": clave -> resultado válido fresco. La
+        # re-validación en vivo sigue ocurriendo en login/panel/config.
+        self._cache: dict[str, LicenseCache] = {}
+        # Último fallo de red por clave: evita re-golpear un LM inaccesible en
+        # cada boleto mientras dura el TTL (offline-first en operación).
+        self._last_fallback: dict[str, datetime] = {}
 
     def _public_key_from_file(self) -> str:
         """Lee la clave pública del LM desde LICENSE_PUBLIC_KEY_PATH (recomendado)."""
@@ -413,6 +419,48 @@ class LicenseClient:
             os_version=os_version,
             product_code=product_code,
         )
+
+    def validate_cached(
+        self,
+        license_key: str,
+        hardware_id: str,
+        *,
+        ttl: timedelta | None = None,
+        **kwargs: Any,
+    ) -> LicenseInfo | None:
+        """Valida contra el LM reutilizando una validación reciente y válida.
+
+        Pensado para operación de pesaje: la estación no debe lanzar llamadas
+        HTTP al LM por cada boleto (el LM puede estar remoto/lento y el WServer
+        corre con un solo worker). Devuelve:
+        - La ``LicenseInfo`` cacheada si hay una válida reciente.
+        - El resultado fresco del LM si no hay caché (lo guarda si es válido).
+        - ``None`` si el LM no responde y no hay validación reciente: el
+          llamador decide degradar con el estado cacheado en BD (offline-first).
+        """
+        ttl = ttl if ttl is not None else timedelta(seconds=settings.license_cache_ttl_seconds)
+        key = license_key.upper()
+        ahora = _now_naive()
+
+        cached = self._cache.get(key)
+        if cached and cached.info.valid and (ahora - cached.cached_at) < ttl:
+            return cached.info
+
+        ultimo_fallo = self._last_fallback.get(key)
+        if ultimo_fallo is not None and (ahora - ultimo_fallo) < ttl:
+            return None
+
+        try:
+            info = self.validate_or_activate(license_key, hardware_id, **kwargs)
+        except LicenseError:
+            self._last_fallback[key] = ahora
+            return None
+
+        if info.valid:
+            self._cache[key] = LicenseCache(info=info, cached_at=ahora)
+        else:
+            self._cache.pop(key, None)
+        return info
 
     def check(self, license_key: str) -> dict[str, Any]:
         resp = httpx.get(

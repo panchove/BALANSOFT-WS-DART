@@ -517,10 +517,27 @@ async def licencia_empresa(
 
     Incluye tier, estado, vencimiento, límites del tier (features) y el
     conteo actual de boletos de la empresa (uso de registros en DEMO).
+
+    La licencia se re-valida EN VIVO contra el LM (igual que /config/account):
+    si el proveedor cambia la licencia en el LM (p. ej. DEMO → CENTRAL), el
+    panel refleja el cambio sin esperar un nuevo login. Si el LM no responde,
+    devuelve el estado cacheado sin bloquear.
     """
-    tier = (empresa.licencia_tier or "").upper()
+    from app.services.license_service import sincronizar_licencia_e_identidad
+
+    identidad = await sincronizar_licencia_e_identidad(db, empresa, force_remote=True)
+    # Persistir el tier/status fresco (la sesión cierra con rollback si no hay
+    # commit): así el resto de la estación usa datos re-ciertos.
+    if not identidad.modo_offline:
+        await db.commit()
+
+    tier = (identidad.licencia_tier or empresa.licencia_tier or "").upper()
+    status = identidad.licencia_status or empresa.licencia_status
+    expira = identidad.licencia_expira or empresa.licencia_expira
     max_registros = settings.demo_max_records if tier == "DEMO" else None
     max_sesiones = None if tier == "CENTRAL" else (3 if tier == "DEMO" else 1)
+    max_equipos = None if tier == "CENTRAL" else 1
+    max_usuarios = None if tier == "CENTRAL" else 1
     consumo = await db.scalar(
         select(func.count())
         .select_from(BoletoPesaje)
@@ -529,15 +546,15 @@ async def licencia_empresa(
     key = empresa.licencia_key or ""
     key_masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else ("••••" if key else None)
     return {
-        "valid": (empresa.licencia_status or "").upper() == "ACTIVE",
-        "status": empresa.licencia_status,
-        "tier": empresa.licencia_tier,
-        "expires_at": empresa.licencia_expira.isoformat()
-        if empresa.licencia_expira
-        else None,
+        "valid": (status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE"),
+        "status": status,
+        "tier": tier,
+        "expires_at": expira.isoformat() if expira else None,
         "features": {
             "max_registros": max_registros,
             "max_sesiones": max_sesiones,
+            "max_equipos": max_equipos,
+            "max_usuarios": max_usuarios,
         },
         "licencia_key_masked": key_masked,
         "registros_actuales": consumo or 0,
