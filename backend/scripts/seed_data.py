@@ -93,9 +93,11 @@ async def main() -> None:
                 codigo="CAT-CEM",
                 nombre="Cemento y agregados",
             )
+            db.add(_cat_cemento)
+            await db.flush()
+
             db.add_all(
                 [
-                    _cat_cemento,
                     Camion(
                         placa="ABC123",
                         id_empresa=empresa.id_empresa,

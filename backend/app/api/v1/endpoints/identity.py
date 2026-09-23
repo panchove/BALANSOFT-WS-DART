@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from app.api.dependencies import get_current_empresa, get_current_user
 from app.core.database import get_db
 from app.models import Empresa, IdentidadLocal, Usuario
 from app.schemas import IdentidadOut, IdentidadUpdate
+from app.services.license_service import sincronizar_licencia_e_identidad
 
 router = APIRouter(prefix="/api/v1/identity", tags=["Identidad"])
 
@@ -38,11 +39,16 @@ async def _get_identidad(
 
 @router.get("", response_model=IdentidadOut)
 async def get_identidad(
+    refresh: bool = Query(False, description="Revalida en vivo contra el LM si es True"),
     current_user: Usuario = Depends(get_current_user),
-    _empresa: Empresa = Depends(get_current_empresa),
+    empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> IdentidadLocal:
     identidad = await _get_identidad(db)
+    if refresh and empresa:
+        identidad = await sincronizar_licencia_e_identidad(
+            db, empresa, force_remote=True
+        )
     if identidad is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -55,7 +61,7 @@ async def get_identidad(
 async def set_identidad(
     payload: IdentidadUpdate,
     current_user: Usuario = Depends(get_current_user),
-    _empresa: Empresa = Depends(get_current_empresa),
+    empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> IdentidadLocal:
     if current_user.rol != "ADMIN":
@@ -65,10 +71,28 @@ async def set_identidad(
         )
     identidad = await _get_identidad(db, create_if_missing=True)
     assert identidad is not None
-    for campo, valor in payload.model_dump().items():
-        setattr(identidad, campo, valor)
+    data = payload.model_dump(exclude_unset=True)
+    for campo, valor in data.items():
+        if valor is not None:
+            setattr(identidad, campo, valor)
+
+    # Espejar cambios principales a la empresa
+    if payload.rif_nit:
+        empresa.rif_nit = payload.rif_nit
+    if payload.nombre_fiscal:
+        empresa.nombre_fiscal = payload.nombre_fiscal
+    if payload.nombre_comercial:
+        empresa.nombre_comercial = payload.nombre_comercial
+    if payload.licencia_key:
+        empresa.licencia_key = payload.licencia_key
+    if payload.licencia_tier:
+        empresa.licencia_tier = payload.licencia_tier
+    if payload.licencia_status:
+        empresa.licencia_status = payload.licencia_status
+
     identidad.ultima_validacion = datetime.now(UTC).replace(tzinfo=None)
     identidad.updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     await db.commit()
     await db.refresh(identidad)
     return identidad

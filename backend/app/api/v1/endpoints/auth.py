@@ -483,34 +483,28 @@ async def validate_license(
             status_code=400,
             detail="La empresa no tiene una clave de licencia válida configurada",
         )
+    if payload.licencia_key and "..." not in payload.licencia_key and "•" not in payload.licencia_key:
+        empresa.licencia_key = payload.licencia_key
+
     hardware_id = payload.hardware_id or obtener_hardware_id()
-    try:
-        info = await asyncio.to_thread(
-            lambda: get_license_client().validate_or_activate(
-                licencia_key,
-                hardware_id,
-                mac_address=payload.mac_address,
-                device_brand=payload.device_brand,
-                device_model=payload.device_model,
-                os_version=payload.os_version,
-                product_code=settings.license_product_code,
-            )
-        )
-    except LicenseError as e:
-        inc_license_error((empresa.licencia_tier or "UNKNOWN").upper(), "validate")
-        raise HTTPException(status_code=503, detail=str(e)) from e
-    empresa.licencia_tier = info.tier
-    empresa.licencia_status = info.status
-    empresa.licencia_expira = info.expires_at
-    await _persistir_hardware_id(db, empresa, hardware_id)
-    await db.commit()
+    from app.services.license_service import sincronizar_licencia_e_identidad
+    identidad = await sincronizar_licencia_e_identidad(
+        db,
+        empresa,
+        hardware_id=hardware_id,
+        force_remote=True,
+        mac_address=payload.mac_address,
+        device_brand=payload.device_brand,
+        device_model=payload.device_model,
+        os_version=payload.os_version,
+    )
     return {
-        "valid": info.valid,
-        "status": info.status,
-        "tier": info.tier,
-        "expires_at": info.expires_at.isoformat() if info.expires_at else None,
-        "features": info.features,
-        "message": info.message,
+        "valid": (identidad.licencia_status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE"),
+        "status": identidad.licencia_status,
+        "tier": identidad.licencia_tier,
+        "expires_at": identidad.licencia_expira.isoformat() if identidad.licencia_expira else None,
+        "features": {},
+        "message": "Licencia validada y sincronizada correctamente",
     }
 
 

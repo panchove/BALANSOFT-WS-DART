@@ -94,7 +94,7 @@ class _FakeApiClient extends ApiClient {
   }
 
   @override
-  Future<Map<String, dynamic>?> getIdentity() async {
+  Future<Map<String, dynamic>?> getIdentity({bool refresh = false}) async {
     return {
       'nombre_comercial': 'Transportes Balansoft C.A.',
       'nombre_fiscal': 'Transportes Balansoft C.A.',

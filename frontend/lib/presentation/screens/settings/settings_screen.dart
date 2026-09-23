@@ -758,12 +758,12 @@ class _IdentidadTileState extends State<_IdentidadTile> {
   @override
   void initState() {
     super.initState();
-    _cargar();
+    _cargar(refresh: true);
   }
 
-  Future<void> _cargar() async {
+  Future<void> _cargar({bool refresh = false}) async {
     try {
-      final id = await di.sl<ApiClient>().getIdentity();
+      final id = await di.sl<ApiClient>().getIdentity(refresh: refresh);
       if (!mounted) return;
       setState(() {
         _identidad = id;
@@ -799,7 +799,7 @@ class _IdentidadTileState extends State<_IdentidadTile> {
       trailing: IconButton(
         icon: const Icon(Icons.refresh, size: 20),
         tooltip: 'Recargar',
-        onPressed: _cargar,
+        onPressed: () => _cargar(refresh: true),
       ),
     );
   }

@@ -244,8 +244,11 @@ class ApiClient {
 
   /// Identidad de la estación local (GET /api/v1/identity).
   /// Lanza 404 si la cuenta aún no se ha configurado tras un login.
-  Future<Map<String, dynamic>?> getIdentity() async {
-    final response = await _dio.get('$_baseUrl${ApiConstants.identity}');
+  Future<Map<String, dynamic>?> getIdentity({bool refresh = false}) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.identity}',
+      queryParameters: refresh ? {'refresh': 'true'} : null,
+    );
     return (response.data as Map<String, dynamic>?)?.cast<String, dynamic>();
   }
 
