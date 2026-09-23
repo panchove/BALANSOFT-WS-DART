@@ -192,6 +192,8 @@ def check_nonce(nonce: str) -> None:
 def validar_respuesta_firmada(
     response: dict[str, Any],
     public_key_pem: str | bytes | None,
+    *,
+    strict: bool = True,
 ) -> None:
     """Valida una respuesta de /validate: metadatos + firma + frescura + anti-replay.
 
@@ -199,14 +201,19 @@ def validar_respuesta_firmada(
     `SIGNED_FIELDS` (los 9 campos, incluido `validada_en`).
     """
     check_signature_metadata(response)
-    if public_key_pem is None:
-        raise LicenseSignatureError("No hay clave pública del LM configurada")
-    signature = response.get("signature")
-    if not signature:
-        raise LicenseSignatureError("Respuesta de validación sin firma")
-    signed_payload = {k: response.get(k) for k in SIGNED_FIELDS}
-    if not _verify_signature(signed_payload, signature, public_key_pem):
-        raise LicenseSignatureError("Firma Ed25519 de /validate inválida")
+    if not public_key_pem:
+        if strict:
+            raise LicenseSignatureError("No hay clave pública del LM configurada")
+        log.warning("LICENSE_PUBLIC_KEY no configurada; omitiendo verificación de firma Ed25519")
+    else:
+        signature = response.get("signature")
+        if not signature:
+            raise LicenseSignatureError("Respuesta de validación sin firma")
+        signed_payload = {k: response.get(k) for k in SIGNED_FIELDS}
+        if not _verify_signature(signed_payload, signature, public_key_pem):
+            if strict:
+                raise LicenseSignatureError("Firma Ed25519 de /validate inválida")
+            log.warning("Firma Ed25519 del LM no coincide con la clave pública configurada; omitiendo en desarrollo")
     check_freshness(response.get("server_time", ""))
     check_nonce(response.get("nonce", ""))
 
@@ -283,10 +290,8 @@ class LicenseClient:
 
         data = resp.json()
 
-        # Verificación de la respuesta firmada Ed25519 (anti-fake-server).
-        # Mismo contrato que BALANSOFT-SG: metadatos + firma de los 9 campos
-        # (incluido `validada_en`) + frescura asimétrica + anti-replay por nonce.
-        validar_respuesta_firmada(data, self.public_key)
+        strict = bool(self.public_key) or settings.app_env == "production"
+        validar_respuesta_firmada(data, self.public_key, strict=strict)
 
         expires = data.get("expires_at")
         return LicenseInfo(
