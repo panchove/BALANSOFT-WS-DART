@@ -200,8 +200,22 @@ class WeighingRepository implements IWeighingRepository {
   }
 
     @override
-  Future<Response> getTicketPdf(String boleto) async {
-    return _apiClient.getTicketPdf(boleto);
+  Future<Response> getTicketPdf(
+    String boleto, {
+    int boletos_por_hoja = 1,
+    String tamano_papel = 'Letter',
+    String orientacion = 'portrait',
+    bool mostrar_encabezado = true,
+    bool mostrar_detalles = true,
+  }) async {
+    return _apiClient.getTicketPdf(
+      boleto,
+      boletos_por_hoja: boletos_por_hoja,
+      tamano_papel: tamano_papel,
+      orientacion: orientacion,
+      mostrar_encabezado: mostrar_encabezado,
+      mostrar_detalles: mostrar_detalles,
+    );
   }
 
   @override

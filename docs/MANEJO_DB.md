@@ -422,7 +422,12 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
    (`WSERVER_HOME` → por defecto `~/.balansoft-ws/wserver`), crea `.env` desde
    `.env.plantilla` (SECRET_KEY aleatoria por máquina), **crea la BD local**
    (`balansoft_ws_local`) si no existe y aplica el esquema canónico +
-   migraciones de forma idempotente. Luego levanta la API en `127.0.0.1:8000`.
+   migraciones de forma idempotente. Luego levanta la API en `0.0.0.0:8000`
+   (escucha en todas las interfaces para que estaciones/equipos de la red
+   local puedan conectarse por IP; el WServer migra automáticamente
+   instalaciones previas con `API_HOST=127.0.0.1`). Intenta abrir el puerto
+   en el firewall (`ufw allow 8000/tcp` vía `pkexec`) y muestra la URL
+   alcanzable de la LAN (`http://<IP-local>:8000`).
 2. La app Flutter arranca sin `api_base_url` → entra en **modo instalación**:
    `WServerManager` localiza el binario (junto a la app instalada o vía
    `WSERVER_PATH`), lo lanza en detached y espera a que `/api/v1/health`

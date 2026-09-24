@@ -29,6 +29,7 @@ MODULOS: dict[str, str] = {
     "dispositivos": "Dispositivos de Campo",
     "seguridad": "Seguridad y Accesos",
     "documentos_empresa": "Empresa y Documentos",
+    "diseno_ticket": "Diseño de Ticket",
     "configuracion": "Configuración General",
 }
 
@@ -56,6 +57,7 @@ MATRIZ_DEFECTO: dict[str, dict[str, str]] = {
         "dispositivos": "ninguno",
         "seguridad": "ninguno",
         "documentos_empresa": "ninguno",
+        "diseno_ticket": "editar",
         "configuracion": "ninguno",
     },
     "AUDITOR": {
@@ -75,6 +77,7 @@ MATRIZ_DEFECTO: dict[str, dict[str, str]] = {
         "dispositivos": "ninguno",
         "seguridad": "ninguno",
         "documentos_empresa": "ver",
+        "diseno_ticket": "ver",
         "configuracion": "ninguno",
     },
     "TRABAJADOR": {

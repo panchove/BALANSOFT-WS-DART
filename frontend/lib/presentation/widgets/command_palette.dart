@@ -116,6 +116,11 @@ class _CommandPaletteState extends State<CommandPalette> {
       action: 'go:empresa',
     ),
     const _Command(
+      label: 'Diseño de Ticket',
+      icon: Icons.receipt_long_outlined,
+      action: 'go:diseno_ticket',
+    ),
+    const _Command(
       label: 'Configuración General',
       icon: Icons.settings_outlined,
       shortcut: 'Ctrl+,',

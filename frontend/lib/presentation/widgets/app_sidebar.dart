@@ -214,6 +214,14 @@ class _AppSidebarState extends State<AppSidebar> {
           rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
         _MenuNode(
+          label: 'Diseño de Ticket',
+          icon: Icons.receipt_long_outlined,
+          activeIcon: Icons.receipt_long,
+          clave: 'diseno_ticket',
+          index: 17,
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
+        ),
+        _MenuNode(
           label: 'Configuración General',
           icon: Icons.settings_outlined,
           activeIcon: Icons.settings,

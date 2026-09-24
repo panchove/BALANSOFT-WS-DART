@@ -40,5 +40,6 @@
    ├── 🔌 Dispositivos de Campo (Básculas, Periféricos)
    ├── 👤 Seguridad y Accesos (Roles y Permisos)
    ├── 📄 Empresa y Documentos
+   ├── 🧾 Diseño de Ticket (Diseño y Estilización del Boleto)
    └── 🛠️ Configuración General
 ```

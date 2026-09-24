@@ -6,6 +6,8 @@ import '../../models/user_model.dart';
 import '../../../domain/entities/user.dart';
 import '../../../core/security/secure_storage_service.dart';
 
+import '../../../domain/entities/printer_preset.dart';
+
 /// Almacenamiento local del cliente.
 ///
 /// TODO lo sensible (usuario con rol, licencia y matriz de accesos) vive en el
@@ -19,6 +21,7 @@ class LocalStorage {
   static const _scaleHostKey = 'scale_host';
   static const _scalePortKey = 'scale_port';
   static const _accesosKey = 'cached_matriz_accesos';
+  static const _printerPresetKey = 'printer_preset';
 
   final SecureStorageService _secure;
 
@@ -107,6 +110,22 @@ class LocalStorage {
       return docs.path;
     } catch (_) {
       return Directory.systemTemp.path;
+    }
+  }
+
+  Future<void> savePrinterPreset(PrinterPreset preset) async {
+    final prefs = await _prefs;
+    await prefs.setString(_printerPresetKey, jsonEncode(preset.toJson()));
+  }
+
+  Future<PrinterPreset> getPrinterPreset() async {
+    final prefs = await _prefs;
+    final raw = prefs.getString(_printerPresetKey);
+    if (raw == null) return const PrinterPreset();
+    try {
+      return PrinterPreset.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return const PrinterPreset();
     }
   }
 }

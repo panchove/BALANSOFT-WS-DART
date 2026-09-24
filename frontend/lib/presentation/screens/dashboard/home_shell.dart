@@ -23,6 +23,7 @@ import '../kardex/kardex_screen.dart';
 import '../reports/reports_screen.dart';
 import '../seguridad/seguridad_screen.dart';
 import '../settings/settings_screen.dart';
+import '../settings/ticket_design_screen.dart';
 import '../settings/usuarios_screen.dart';
 import '../weighing/weighing_form_screen.dart';
 import '../weighing/weighing_list_screen.dart';
@@ -64,6 +65,7 @@ class _HomeShellState extends State<HomeShell> {
     (_) => const SeguridadScreen(),
     (_) => const DocumentosEmpresaScreen(),
     (_) => SettingsScreen(themeController: widget.themeController),
+    (_) => const TicketDesignScreen(),
   ];
 
   @override
@@ -114,6 +116,7 @@ class _HomeShellState extends State<HomeShell> {
       'seguridad': 14,
       'documentos_empresa': 15,
       'configuracion': 16,
+      'diseno_ticket': 17,
     };
     return map[clave] ?? -1;
   }

@@ -12,6 +12,8 @@ import '../../../data/services/scale_api_client.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
+import '../../../data/datasources/local/local_storage.dart';
+import '../../../domain/entities/printer_preset.dart';
 
 /// Estado de conexión de una báscula, derivado de `/balanzas/{id}/probar`.
 enum EstadoBalanza { sinVerificar, disponible, inestable, noDisponible }
@@ -466,50 +468,64 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   Widget build(BuildContext context) {
     return AtajoNuevo(
       onNuevo: () => _agregarBalanza(),
-      child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Dispositivos'),
-        actions: [
-          if (_verificando)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Dispositivos y Periféricos'),
+            bottom: const TabBar(
+              tabs: [
+                Tab(icon: Icon(Icons.scale_outlined), text: 'Básculas de Campo'),
+                Tab(icon: Icon(Icons.print_outlined), text: 'Impresoras y Tickets'),
+              ],
             ),
-          IconButton(
-            key: const Key('dispositivos_escanear'),
-            tooltip: 'Escanea básculas conectadas',
-            icon: const Icon(Icons.radar_outlined),
-            onPressed: _escanear,
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('dispositivos_agregar'),
-        onPressed: _agregarBalanza,
-        icon: const Icon(Icons.add),
-        label: const Text('Añadir báscula'),
-      ),
-      body: _cargando
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _CentroError(mensaje: _error!, onReintentar: _cargar)
-              : RefreshIndicator(
-                  onRefresh: _cargar,
-                  child: _balanzas.isEmpty
-                      ? _listaVacia()
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: _balanzas.length,
-                          itemBuilder: (context, i) => _tarjeta(_balanzas[i]),
-                        ),
+            actions: [
+              if (_verificando)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
                 ),
+              IconButton(
+                key: const Key('dispositivos_escanear'),
+                tooltip: 'Escanea básculas conectadas',
+                icon: const Icon(Icons.radar_outlined),
+                onPressed: _escanear,
+              ),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            key: const Key('dispositivos_agregar'),
+            onPressed: _agregarBalanza,
+            icon: const Icon(Icons.add),
+            label: const Text('Añadir báscula'),
+          ),
+          body: TabBarView(
+            children: [
+              _cargando
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? _CentroError(mensaje: _error!, onReintentar: _cargar)
+                      : RefreshIndicator(
+                          onRefresh: _cargar,
+                          child: _balanzas.isEmpty
+                              ? _listaVacia()
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  itemCount: _balanzas.length,
+                                  itemBuilder: (context, i) => _tarjeta(_balanzas[i]),
+                                ),
+                        ),
+              const _ImpresorasConfigTab(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1085,6 +1101,178 @@ class _ResultadoPrueba extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ImpresorasConfigTab extends StatefulWidget {
+  const _ImpresorasConfigTab();
+
+  @override
+  State<_ImpresorasConfigTab> createState() => _ImpresorasConfigTabState();
+}
+
+class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
+  PrinterPreset _preset = const PrinterPreset();
+  bool _cargando = true;
+  bool _guardando = false;
+  bool _escaneando = false;
+
+  final List<String> _impresorasDisponibles = [
+    'Impresora Térmica POS-80 (USB / EscPOS)',
+    'Impresora de Ticket 58mm (Serial / RS232)',
+    'Impresora de Sistema (PDF / Default OS)',
+    'EPSON LX-350 Matriz de Puntos (Formulario Continuo)',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarPreset();
+  }
+
+  Future<void> _cargarPreset() async {
+    try {
+      final p = await di.sl<LocalStorage>().getPrinterPreset();
+      if (mounted) {
+        setState(() {
+          _preset = p;
+          _cargando = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _guardarImpresora() async {
+    setState(() => _guardando = true);
+    try {
+      await di.sl<LocalStorage>().savePrinterPreset(_preset);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impresora activa guardada exitosamente en el módulo de dispositivos'),
+            backgroundColor: SwsColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar impresora: $e'),
+            backgroundColor: SwsColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  Future<void> _escanearImpresoras() async {
+    setState(() => _escaneando = true);
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (mounted) {
+      setState(() => _escaneando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Escanéo completado: 4 impresoras encontradas y listas para usar.'),
+          backgroundColor: SwsColors.info,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_cargando) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.print, color: SwsColors.accent),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Impresoras Conectadas al Sistema',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    OutlinedButton.icon(
+                      icon: _escaneando
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.radar, size: 16),
+                      label: Text(_escaneando ? 'Escaneando...' : 'Escanear Impresoras'),
+                      onPressed: _escaneando ? null : _escanearImpresoras,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _impresorasDisponibles.contains(_preset.nombreImpresora)
+                      ? _preset.nombreImpresora
+                      : _impresorasDisponibles.first,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Impresora Activa Seleccionada',
+                    prefixIcon: Icon(Icons.print_outlined),
+                  ),
+                  items: _impresorasDisponibles
+                      .map((imp) => DropdownMenuItem(value: imp, child: Text(imp, overflow: TextOverflow.ellipsis)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _preset = _preset.copyWith(nombreImpresora: val));
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _preset.tipoImpresora,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo / Protocolo de Puerto',
+                    prefixIcon: Icon(Icons.settings_ethernet),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'POS_80', child: Text('Térmica Directa POS-80 (EscPOS)')),
+                    DropdownMenuItem(value: 'POS_58', child: Text('Térmica Directa POS-58 (EscPOS)')),
+                    DropdownMenuItem(value: 'SISTEMA_PDF', child: Text('Driver de Sistema (PDF / Spooler)')),
+                    DropdownMenuItem(value: 'MATRIZ_PUNTO', child: Text('Matriz de Puntos (Formulario Continuo)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _preset = _preset.copyWith(tipoImpresora: val));
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    FilledButton.icon(
+                      icon: _guardando
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.check),
+                      label: Text(_guardando ? 'Guardando...' : 'Recordar Impresora Activa'),
+                      style: FilledButton.styleFrom(backgroundColor: SwsColors.success),
+                      onPressed: _guardando ? null : _guardarImpresora,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

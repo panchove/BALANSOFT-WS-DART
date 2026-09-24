@@ -18,19 +18,15 @@ class ConnectionsScreen extends StatefulWidget {
 }
 
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
-  late final TextEditingController _serverCtrl;
   late final TextEditingController _localCtrl;
   bool _probandoLocal = false;
-  bool _probandoServer = false;
   bool _wserverOnline = false;
   bool _verificandoInicio = false;
   String? _resultadoLocal;
-  String? _resultadoServer;
 
   @override
   void initState() {
     super.initState();
-    _serverCtrl = TextEditingController(text: AppConfig.serverApiUrl ?? '');
     _localCtrl = TextEditingController(
       text: AppConfig.apiBaseUrl ??
           (widget.setupMode ? AppConfig.defaultApiBaseUrl : ''),
@@ -48,27 +44,11 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
 
   @override
   void dispose() {
-    _serverCtrl.dispose();
     _localCtrl.dispose();
     super.dispose();
   }
 
   String get _localUrl => _localCtrl.text.trim().replaceAll(RegExp(r'/$'), '');
-  String get _serverUrl => _serverCtrl.text.trim().replaceAll(RegExp(r'/$'), '');
-
-  Future<void> _probarServidor() async {
-    setState(() {
-      _probandoServer = true;
-      _resultadoServer = null;
-    });
-    final ok = await di.sl<ApiClient>().serverHealth(serverUrl: _serverUrl);
-    if (!mounted) return;
-    setState(() {
-      _probandoServer = false;
-      _resultadoServer =
-          ok ? 'Servidor central accesible ✓' : 'No se pudo conectar al servidor central';
-    });
-  }
 
   Future<void> _probarLocal() async {
     setState(() {
@@ -94,7 +74,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
 
   Future<void> _guardar() async {
     final localOk = _localUrl.isNotEmpty;
-    await AppConfig.setServerApiUrl(_serverUrl.isNotEmpty ? _serverUrl : AppConfig.defaultServerApiUrl);
     if (localOk) {
       await AppConfig.setApiBaseUrl(_localUrl);
       di.sl<ApiClient>().setBaseUrl(_localUrl);
@@ -172,14 +151,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
             verificando: _verificandoInicio,
           ),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _serverCard(context)),
-              const SizedBox(width: 16),
-              Expanded(child: _localCard(context)),
-            ],
-          ),
+          _localCard(context),
           const SizedBox(height: 20),
           Center(
             child: SizedBox(
@@ -216,8 +188,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           verificando: _verificandoInicio,
         ),
         const SizedBox(height: 8),
-        _serverCard(context),
-        const SizedBox(height: 12),
         _localCard(context),
         const SizedBox(height: 16),
         SizedBox(
@@ -237,69 +207,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _serverCard(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.cloud_outlined, color: SwsColors.accent),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Servidor central (cuenta y licencia)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Siempre disponible: se usa para validar la cuenta y la licencia.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _serverCtrl,
-              decoration: const InputDecoration(
-                labelText: 'URL del servidor central',
-                hintText: 'http://localhost:8002',
-                prefixIcon: Icon(Icons.cloud_outlined),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: _probandoServer ? null : _probarServidor,
-                icon: _probandoServer
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.network_check, size: 18),
-                label: const Text('Probar'),
-              ),
-            ),
-            if (_resultadoServer != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  _resultadoServer!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: (_resultadoServer?.contains('✓') ?? false)
-                        ? SwsColors.success
-                        : SwsColors.danger,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -425,7 +332,7 @@ class _SetupBanner extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Primera configuración: indica la URL de la API local de '
-                    'esta estación. El servidor central ya viene predefinido.',
+                    'esta estación.',
                     style: TextStyle(fontSize: 13),
                   ),
                 ),

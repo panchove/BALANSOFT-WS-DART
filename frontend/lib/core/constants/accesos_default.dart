@@ -27,6 +27,7 @@ class AccesosDefault {
     'dispositivos': 'Dispositivos de Campo',
     'seguridad': 'Seguridad y Accesos',
     'documentos_empresa': 'Empresa y Documentos',
+    'diseno_ticket': 'Diseño de Ticket',
     'configuracion': 'Configuración General',
   };
 
@@ -49,6 +50,7 @@ class AccesosDefault {
       'dispositivos' => Icons.sensors_outlined,
       'seguridad' => Icons.lock_outline,
       'documentos_empresa' => Icons.business_outlined,
+      'diseno_ticket' => Icons.receipt_long_outlined,
       'configuracion' => Icons.settings_outlined,
       _ => Icons.circle_outlined,
     };
@@ -74,6 +76,7 @@ class AccesosDefault {
       'seguridad' => 14,
       'documentos_empresa' => 15,
       'configuracion' => 16,
+      'diseno_ticket' => 17,
       _ => -1,
     };
   }
@@ -86,7 +89,8 @@ class AccesosDefault {
       'categorias': 'editar', 'productos': 'editar', 'almacenes': 'editar',
       'kardex': 'editar', 'entradas': 'editar', 'salidas': 'editar',
       'reportes': 'editar', 'dispositivos': 'editar', 'seguridad': 'editar',
-      'documentos_empresa': 'editar', 'configuracion': 'editar',
+      'documentos_empresa': 'editar', 'diseno_ticket': 'editar',
+      'configuracion': 'editar',
     },
     'OPERADOR': {
       'inicio': 'editar', 'terceros': 'editar', 'usuarios': 'ninguno',
@@ -94,7 +98,8 @@ class AccesosDefault {
       'categorias': 'editar', 'productos': 'editar', 'almacenes': 'editar',
       'kardex': 'ver', 'entradas': 'editar', 'salidas': 'editar',
       'reportes': 'editar', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
-      'documentos_empresa': 'ninguno', 'configuracion': 'ninguno',
+      'documentos_empresa': 'ninguno', 'diseno_ticket': 'editar',
+      'configuracion': 'ninguno',
     },
     'AUDITOR': {
       'inicio': 'editar', 'terceros': 'ver', 'usuarios': 'ver',
@@ -102,7 +107,8 @@ class AccesosDefault {
       'categorias': 'ver', 'productos': 'ver', 'almacenes': 'ver',
       'kardex': 'ver', 'entradas': 'ver', 'salidas': 'ver',
       'reportes': 'editar', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
-      'documentos_empresa': 'ver', 'configuracion': 'ninguno',
+      'documentos_empresa': 'ver', 'diseno_ticket': 'ver',
+      'configuracion': 'ninguno',
     },
     'TRABAJADOR': {
       'inicio': 'ver', 'terceros': 'ninguno', 'usuarios': 'ninguno',

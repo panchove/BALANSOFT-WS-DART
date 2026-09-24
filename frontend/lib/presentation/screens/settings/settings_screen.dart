@@ -1054,12 +1054,10 @@ class _ConexionesTile extends StatelessWidget {
         height: 24,
         child: Icon(Icons.settings_ethernet),
       ),
-      title: const Text('Servidores'),
-      subtitle: Text(
-        localPendiente
-            ? 'API local sin configurar · Central: ${AppConfig.serverApiUrl}'
-            : 'Local: $local · Central: ${AppConfig.serverApiUrl}',
-        style: const TextStyle(fontSize: 12),
+      title: const Text('Conexión local'),
+      subtitle: const Text(
+        'URL de la API local de esta estación y verificación de conexión.',
+        style: TextStyle(fontSize: 12),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),

@@ -352,6 +352,11 @@ async def _enriquecer_pesaje_ticket(db: AsyncSession, pesaje: BoletoPesaje) -> B
 @router.get("/{boleto}/pdf")
 async def get_weighing_pdf(
     boleto: str,
+    boletos_por_hoja: int = Query(default=1, ge=1, le=4),
+    tamano_papel: str = Query(default="Letter"),
+    orientacion: str = Query(default="portrait"),
+    mostrar_encabezado: bool = Query(default=True),
+    mostrar_detalles: bool = Query(default=True),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -359,7 +364,15 @@ async def get_weighing_pdf(
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
     pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
-    return generar_ticket_pdf(pesaje, empresa=empresa)
+    return generar_ticket_pdf(
+        pesaje,
+        empresa=empresa,
+        boletos_por_hoja=boletos_por_hoja,
+        tamano_papel=tamano_papel,
+        orientacion=orientacion,
+        mostrar_encabezado=mostrar_encabezado,
+        mostrar_detalles=mostrar_detalles,
+    )
 
 
 @router.get("/{boleto}/txt")

@@ -379,9 +379,23 @@ class ApiClient {
     return response;
   }
 
-  Future<Response> getTicketPdf(String boleto) async {
+  Future<Response> getTicketPdf(
+    String boleto, {
+    int boletos_por_hoja = 1,
+    String tamano_papel = 'Letter',
+    String orientacion = 'portrait',
+    bool mostrar_encabezado = true,
+    bool mostrar_detalles = true,
+  }) async {
     final response = await _dio.get(
       '$_baseUrl${ApiConstants.weighingPdf(boleto)}',
+      queryParameters: {
+        'boletos_por_hoja': boletos_por_hoja,
+        'tamano_papel': tamano_papel,
+        'orientacion': orientacion,
+        'mostrar_encabezado': mostrar_encabezado,
+        'mostrar_detalles': mostrar_detalles,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return response;

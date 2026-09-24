@@ -318,19 +318,36 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 8),
 
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white70,
-                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/connections'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 0, vertical: 8),
+                ),
+                icon: const Icon(Icons.wifi_tethering, size: 15),
+                label: const Text(
+                  'Conexión local',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
-              child: const Text(
-                '¿Olvidaste tu contraseña?',
-                style: TextStyle(fontSize: 12),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 0, vertical: 8),
+                ),
+                child: const Text(
+                  '¿Olvidaste tu contraseña?',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
-            ),
+            ],
           ),
           const SizedBox(height: 24),
 

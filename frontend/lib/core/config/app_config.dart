@@ -25,7 +25,9 @@ class AppConfig {
     // El servidor central SIEMPRE está presente (default); la API local queda
     // sin valor hasta que se configure en la primera ejecución.
     apiBaseUrl = _prefs.getString('api_base_url');
-    serverApiUrl = _prefs.getString('server_api_url') ?? defaultServerApiUrl;
+    // El servidor central (nube: cuenta y licencia) está definido de fábrica
+    // y NO es configurable por el usuario ni se lee de preferencias locales.
+    serverApiUrl = defaultServerApiUrl;
     licenseApiUrl = _prefs.getString('license_api_url') ?? 'http://localhost:8080';
     publicKey = _prefs.getString('public_key');
     offline = _prefs.getBool('offline') ?? false;

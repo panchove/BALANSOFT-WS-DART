@@ -10,13 +10,15 @@ import 'setup_layout_wrapper.dart';
 
 /// Pantalla de verificación de entorno (primera ejecución, modo instalación).
 ///
-/// Comprueba 5 cosas independientes:
+/// Comprueba 4 cosas independientes:
 ///
 /// 1. API local (WServer): binario arrancado y `/health` OK.
 /// 2. PostgreSQL instalado: servicio/binario presente en el SO.
 /// 3. Conexión a la BD local: el WServer puede conectar y el esquema existe.
-/// 4. Cuenta central: servidor remoto accesible.
-/// 5. Drivers de balanza (HAL / pyserial).
+/// 4. Drivers de balanza (HAL / pyserial).
+///
+/// El servidor central (cuenta/licencia) NO se verifica ni se muestra aquí:
+/// su URL es fija y se resuelve en el login y en el repositorio de auth.
 class EnvironmentCheckScreen extends StatefulWidget {
   const EnvironmentCheckScreen({super.key, this.setupMode = true});
 
@@ -33,13 +35,12 @@ class _CheckItem {
     required this.id,
     required this.titulo,
     required this.estado,
-    this.obligatorio = true,
   });
 
   final String id;
   final String titulo;
   _EstadoCheck estado;
-  final bool obligatorio;
+  final bool obligatorio = true;
   String detalle = '';
 }
 
@@ -59,12 +60,6 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
       id: 'postgres_conexion',
       titulo: 'Conexión a base de datos',
       estado: _EstadoCheck.cargando,
-    ),
-    _CheckItem(
-      id: 'servidor',
-      titulo: 'Cuenta central (licencia)',
-      estado: _EstadoCheck.cargando,
-      obligatorio: false, // en dev no bloquea
     ),
     _CheckItem(
       id: 'drivers',
@@ -129,7 +124,6 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
     await _verificarWServer();
     await _verificarPostgresInstalado();
     await _verificarEntorno(); // conexión BD + drivers
-    await _verificarServidor();
 
     if (!mounted) return;
     setState(() => _verificando = false);
@@ -306,24 +300,6 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
             ? 'HAL disponible (pyserial). Puertos: $puertosTexto. '
                 'Balanzas configuradas: $nBalanza.'
             : 'Driver de balanza (pyserial) no disponible.',
-      );
-    });
-  }
-
-  // ─── 4. Servidor central ───────────────────────────────────────────────
-  Future<void> _verificarServidor() async {
-    final ok = await ApiClient(baseUrl: _baseLocal)
-        .serverHealth(serverUrl: AppConfig.serverApiUrl);
-    if (!mounted) return;
-    setState(() {
-      _actualizar(
-        'servidor',
-        ok ? _EstadoCheck.ok : _EstadoCheck.error,
-        ok
-            ? 'Servidor central accesible en ${AppConfig.serverApiUrl}.'
-            : 'No se pudo conectar al servidor central '
-                '(${AppConfig.serverApiUrl}). Verifica la URL o que el '
-                'servicio central esté iniciado.',
       );
     });
   }
@@ -586,14 +562,12 @@ content: Text(
             const SizedBox(height: 8),
             const Text(
               'Antes de usar la estación verificamos que el entorno esté listo: '
-              'API local, PostgreSQL, conexión a la BD, drivers de balanza '
-              'y conexión con el servidor central.',
+              'API local, PostgreSQL, conexión a la BD y drivers de balanza.',
               style: TextStyle(fontSize: 13, color: Colors.white60),
             ),
             const SizedBox(height: 10),
             Text(
-              'API local: $_baseLocal · '
-              'Servidor central: ${AppConfig.serverApiUrl}',
+              'API local: $_baseLocal',
               style: const TextStyle(fontSize: 12, color: Colors.white38),
             ),
           ],

@@ -16,7 +16,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import secrets
+import shutil
+import socket
+import subprocess
 import sys
 from pathlib import Path
 
@@ -64,6 +68,7 @@ def asegurar_estructura(home: Path) -> None:
 
     env_file = home / ".env"
     if env_file.exists():
+        _migrar_api_host_lan(env_file)
         return
 
     plantilla = ROOT / ENV_PLANTILLA
@@ -76,6 +81,29 @@ def asegurar_estructura(home: Path) -> None:
     texto = texto.replace("__SECRET_KEY__", secrets.token_hex(32))
     env_file.write_text(texto, encoding="utf-8")
     print(f"[WServer] .env generado en {env_file}")
+
+
+def _migrar_api_host_lan(env_file: Path) -> None:
+    """Migra instalaciones previas con ``API_HOST=127.0.0.1`` a ``0.0.0.0``.
+
+    El WServer escucha en todas las interfaces por defecto para que clientes
+    de la red local (ej. otro equipo operativo) puedan conectarse por IP. Es
+    una migración idempotente; solo reescribe la clave si aún conserva el
+    valor loopback por defecto.
+    """
+    try:
+        texto = env_file.read_text(encoding="utf-8")
+        nuevo = re.sub(
+            r"^API_HOST=127\.0\.0\.1\s*$",
+            "API_HOST=0.0.0.0",
+            texto,
+            flags=re.MULTILINE,
+        )
+        if nuevo != texto:
+            env_file.write_text(nuevo, encoding="utf-8")
+            print("[WServer] API_HOST migrado a 0.0.0.0 (acceso desde la red local).")
+    except OSError as exc:
+        print(f"[WServer] Aviso: no se pudo verificar API_HOST ({exc}).")
 
 
 # ---------------------------------------------------------------------------
@@ -234,11 +262,52 @@ def _procesar_script(uri: str, script: Path, etiqueta: str) -> None:
 # ---------------------------------------------------------------------------
 # Arranque de la API
 # ---------------------------------------------------------------------------
-import re
+
+def _configurar_firewall(port: int) -> None:
+    """Abre el puerto del API en el firewall local (best-effort).
+
+    Usa ``pkexec`` (autenticación gráfica de polkit) para que el usuario no
+    tenga que acordarse de ejecutar comandos manuales. Si no hay privilegios
+    ni gestor de firewall, lo informa sin bloquear el arranque.
+    """
+    if not shutil.which("ufw"):
+        return
+    cmd_allow = shutil.which("pkexec") or shutil.which("sudo") or shutil.which("doas")
+    if not cmd_allow:
+        print(f"[WServer] Aviso: no se pudo abrir el puerto {port} en el firewall "
+              "(ufw). Si falla el acceso remoto, ejecuta: sudo ufw allow {port}/tcp")
+        return
+    try:
+        proc = subprocess.run(
+            [cmd_allow, "ufw", "allow", f"{port}/tcp"],
+            capture_output=True, text=True, timeout=90,
+        )
+        if proc.returncode == 0:
+            print(f"[WServer] Firewall: puerto {port}/tcp abierto (ufw).")
+        elif cmd_allow.endswith("pkexec"):
+            print(f"[WServer] Firewall: usuario no autorizó abrir el puerto {port} "
+                  f"({proc.stderr.strip() or 'cancelado'}).")
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[WServer] Firewall: no se pudo configurar ufw ({exc}).")
+
+
+def _ip_local() -> str | None:
+    """Devuelve la IP de la LAN desde donde se alcanzará el API (o ``None``)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
+def _es_bind_red(host: str) -> bool:
+    return host not in ("127.0.0.1", "localhost", "::1", "")
+
 
 def _actualizar_env_si_aplica(home: Path, args: argparse.Namespace) -> None:
     """Actualiza el archivo .env con los parámetros proporcionados."""
-    if not any([args.db_host, args.db_port, args.db_user, args.db_pass, args.db_name, args.api_port]):
+    if not any([args.db_host, args.db_port, args.db_user, args.db_pass, args.db_name, args.api_port, args.api_host]):
         return
         
     env_file = home / ".env"
@@ -268,9 +337,11 @@ def _actualizar_env_si_aplica(home: Path, args: argparse.Namespace) -> None:
     texto = re.sub(r"^DATABASE_URL=.*$", f"DATABASE_URL={new_url_async}", texto, flags=re.MULTILINE)
     texto = re.sub(r"^DATABASE_URL_SYNC=.*$", f"DATABASE_URL_SYNC={new_url_sync}", texto, flags=re.MULTILINE)
     
-    # 4. Reemplazar puerto API si aplica
+    # 4. Reemplazar puerto / host del API si aplica
     if args.api_port:
         texto = re.sub(r"^API_PORT=.*$", f"API_PORT={args.api_port}", texto, flags=re.MULTILINE)
+    if args.api_host:
+        texto = re.sub(r"^API_HOST=.*$", f"API_HOST={args.api_host}", texto, flags=re.MULTILINE)
         
     env_file.write_text(texto, encoding="utf-8")
     print("[WServer] .env actualizado con los nuevos parámetros de configuración.")
@@ -295,6 +366,10 @@ def main() -> int:
     parser.add_argument("--db-pass", type=str, help="Contraseña de la base de datos")
     parser.add_argument("--db-name", type=str, help="Nombre de la base de datos")
     parser.add_argument("--api-port", type=str, help="Puerto donde levantará la API local")
+    parser.add_argument(
+        "--api-host", type=str,
+        help="Interfaz donde escucha la API (por defecto 0.0.0.0 = toda la red local)",
+    )
     
     args = parser.parse_args()
 
@@ -323,8 +398,14 @@ def main() -> int:
 
     host = settings.api_host
     port = settings.api_port
+    if _es_bind_red(host):
+        _configurar_firewall(port)
     print(f"[WServer] Levantando API local en http://{host}:{port} "
           f"(env={settings.app_env})")
+    ip = _ip_local()
+    if _es_bind_red(host) and ip:
+        print(f"[WServer] ✅ Accesible desde la red local en "
+              f"http://{ip}:{port} (cliente/estación remota)")
 
     import uvicorn
 

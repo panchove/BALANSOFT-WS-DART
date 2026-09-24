@@ -531,6 +531,9 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final tituloColor = oscuro ? SwsColors.accentLight : SwsColors.primary;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -542,11 +545,11 @@ class _SectionCard extends StatelessWidget {
                 Icon(icon, size: 17, color: SwsColors.accent),
                 const SizedBox(width: 8),
                 Text(title,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                        color: SwsColors.primary)),
+                        color: tituloColor)),
               ],
             ),
             const Divider(height: 16),
@@ -581,47 +584,55 @@ class _WeightTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final fondoCard = oscuro ? SwsColors.darkCard : SwsColors.blue100;
+    final bordeCard = oscuro ? SwsColors.darkBorder : SwsColors.gray200;
     final pte = pesoEntradaVehiculo + (pesoEntradaRemolque ?? 0);
     final pts = pesoSalidaVehiculo != null
         ? pesoSalidaVehiculo! + (pesoSalidaRemolque ?? 0)
         : null;
     final pnt = pesoNeto ?? (pts != null ? pte - pts : null);
 
-    return Card(
-      color: SwsColors.blue100,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            _row('', 'Camión', 'Remolque', 'Total', header: true),
-            _row('Entrada',
-                NumberUtils.formatWeight(pesoEntradaVehiculo),
-                NumberUtils.formatWeight(pesoEntradaRemolque),
-                NumberUtils.formatWeight(pte)),
-            if (pts != null) ...[
-              _row('Salida',
-                  NumberUtils.formatWeight(pesoSalidaVehiculo),
-                  NumberUtils.formatWeight(pesoSalidaRemolque),
-                  NumberUtils.formatWeight(pts)),
-              const Divider(height: 14),
-              _row('Peso Neto', '', '', NumberUtils.formatWeight(pnt), bold: true),
-              _row('Peso Declarado', '', '',
-                  NumberUtils.formatWeight(pesoNetoDeclarado)),
-              _row('Diferencia', '', '',
-                  NumberUtils.formatWeight(pesoDiferencia),
-                  bold: pesoDiferencia != null && pesoDiferencia != 0),
-              _row('% Desviación', '', '',
-                  NumberUtils.formatPercent(porcentajeDesviacion)),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: fondoCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bordeCard),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _row(context, '', 'Camión', 'Remolque', 'Total', header: true),
+          _row(context, 'Entrada',
+              NumberUtils.formatWeight(pesoEntradaVehiculo),
+              NumberUtils.formatWeight(pesoEntradaRemolque),
+              NumberUtils.formatWeight(pte)),
+          if (pts != null) ...[
+            _row(context, 'Salida',
+                NumberUtils.formatWeight(pesoSalidaVehiculo),
+                NumberUtils.formatWeight(pesoSalidaRemolque),
+                NumberUtils.formatWeight(pts)),
+            const Divider(height: 14),
+            _row(context, 'Peso Neto', '', '', NumberUtils.formatWeight(pnt), bold: true),
+            _row(context, 'Peso Declarado', '', '',
+                NumberUtils.formatWeight(pesoNetoDeclarado)),
+            _row(context, 'Diferencia', '', '',
+                NumberUtils.formatWeight(pesoDiferencia),
+                bold: pesoDiferencia != null && pesoDiferencia != 0),
+            _row(context, '% Desviación', '', '',
+                NumberUtils.formatPercent(porcentajeDesviacion)),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _row(String label, String camion, String remolque, String total,
+  Widget _row(BuildContext context, String label, String camion, String remolque, String total,
       {bool header = false, bool bold = false}) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final textoColor = oscuro ? SwsColors.darkText : SwsColors.dark;
+    final labelColor = oscuro ? SwsColors.darkText.withValues(alpha: 0.8) : SwsColors.gray700;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -631,6 +642,7 @@ class _WeightTable extends StatelessWidget {
             child: Text(label,
                 style: TextStyle(
                     fontSize: 11.5,
+                    color: labelColor,
                     fontWeight: header
                         ? FontWeight.w700
                         : bold
@@ -643,6 +655,7 @@ class _WeightTable extends StatelessWidget {
                 textAlign: TextAlign.right,
                 style: TextStyle(
                     fontSize: header ? 11 : 11.5,
+                    color: textoColor,
                     fontWeight: header ? FontWeight.w700 : FontWeight.w600)),
           ),
           Expanded(
@@ -651,6 +664,7 @@ class _WeightTable extends StatelessWidget {
                 textAlign: TextAlign.right,
                 style: TextStyle(
                     fontSize: header ? 11 : 11.5,
+                    color: textoColor,
                     fontWeight: header ? FontWeight.w700 : FontWeight.w600)),
           ),
           Expanded(
@@ -660,7 +674,7 @@ class _WeightTable extends StatelessWidget {
                 style: TextStyle(
                     fontSize: header ? 11 : 12,
                     fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                    color: bold ? SwsColors.accent : SwsColors.dark)),
+                    color: bold ? SwsColors.accent : textoColor)),
           ),
         ],
       ),
@@ -677,12 +691,18 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = oscuro ? SwsColors.darkText.withValues(alpha: 0.7) : SwsColors.gray500;
+    final valueColor = isBold
+        ? SwsColors.accent
+        : (oscuro ? SwsColors.darkText : SwsColors.dark);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12.5, color: SwsColors.gray500)),
+          Text(label, style: TextStyle(fontSize: 12.5, color: labelColor)),
           Flexible(
             child: Text(
               value,
@@ -690,7 +710,7 @@ class _InfoRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-                color: isBold ? SwsColors.accent : SwsColors.dark,
+                color: valueColor,
               ),
             ),
           ),

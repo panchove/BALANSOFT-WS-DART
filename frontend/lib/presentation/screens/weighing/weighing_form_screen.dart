@@ -16,6 +16,7 @@ import '../../../data/services/scale_api_client.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../domain/entities/weighing.dart';
+import '../../widgets/ticket_preview_dialog.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/catalog/catalog_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
@@ -143,9 +144,12 @@ class _WeighingFormAppBar extends StatelessWidget implements PreferredSizeWidget
           icon: Icons.print_outlined,
           label: 'Imprimir',
           shortcut: 'F5',
-          onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Seleccione un boleto para imprimir')),
-          ),
+          onTap: () {
+            showDialog<void>(
+              context: context,
+              builder: (ctx) => const _BoletoImpresionDialog(),
+            );
+          },
         ),
         const SizedBox(width: 8),
       ],
@@ -276,6 +280,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   final _costoFleteCtrl = TextEditingController();
   final _observacionesCtrl = TextEditingController();
 
+  final _pesoSalidaVehiculoCtrl = TextEditingController();
+  final _pesoSalidaRemolqueCtrl = TextEditingController();
+  final _pesoSalidaVehiculoFocus = FocusNode();
+  final _pesoSalidaRemolqueFocus = FocusNode();
+  Weighing? _boletoSalida;
+
   bool _remolque = false;
   String _tipoTercero = 'CLIENTE';
   bool _esPesoManual = false;
@@ -360,6 +370,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _tipoTerceroFocus.dispose();
     _pesoEntradaFocus.dispose();
     _pesoRemolqueFocus.dispose();
+    _pesoSalidaVehiculoFocus.dispose();
+    _pesoSalidaRemolqueFocus.dispose();
     _documentoFocus.dispose();
     _guiaSunagroFocus.dispose();
     _medidaFocus.dispose();
@@ -370,6 +382,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _observacionesFocus.dispose();
     _pesoEntradaCtrl.dispose();
     _pesoRemolqueCtrl.dispose();
+    _pesoSalidaVehiculoCtrl.dispose();
+    _pesoSalidaRemolqueCtrl.dispose();
     _pesoNetoDeclaradoCtrl.dispose();
     _documentoCtrl.dispose();
     _guiaSunagroCtrl.dispose();
@@ -420,7 +434,11 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       return true;
     }
     if (key == LogicalKeyboardKey.f5) {
-      _imprimirActual();
+      _abrirSelectorImpresion();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.f6) {
+      _abrirSelectorSalida();
       return true;
     }
     if (key == LogicalKeyboardKey.escape) {
@@ -458,11 +476,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _confirmados[idx] = false;
   }
 
-  /// Orden efectivo de los campos según la configuración actual:
-  /// Camión → (Remolque) → Transporte → Conductor → Producto → Almacén →
-  /// Balanza → TipoTercero → Tercero → PesoEntrada → (PesoRemolque) →
-  /// Documento → GuíaSUNAGRO → Medida → Unidades → Densidad → Flete →
-  /// CostoFlete → Observaciones.
   List<int> _ordenEfectivo() {
     return <int>[
       _idxCamion,
@@ -487,10 +500,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     ];
   }
 
-  /// Navegación con flechas:
-  /// - ← / → : campo anterior/siguiente SOLO si el campo enfocado ya quedó
-  ///   confirmado con Enter. Si no, se deja pasar al campo para mover cursor.
-  /// - ↑ / ↓ : NUNCA se interceptan aquí.
   KeyEventResult _manejarFlechas(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -518,8 +527,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     if (nuevo != pos) _focos[visibles[nuevo]]?.requestFocus();
   }
 
-  /// Avanza al siguiente campo visible tras confirmar con Enter.
-  /// Si es el último (Observaciones), hace unfocus.
   void _avanzarAlSiguienteCampo(int actual) {
     final visibles = [
       for (final i in _ordenEfectivo())
@@ -562,17 +569,21 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   // --- Cálculos MODEL.md ---
   double get _pesoTotalEntrada =>
       (double.tryParse(_pesoEntradaCtrl.text) ?? 0) +
-      (double.tryParse(_pesoRemolqueCtrl.text) ?? 0);
+      (_remolque ? (double.tryParse(_pesoRemolqueCtrl.text) ?? 0) : 0);
+
+  double get _pesoTotalSalida =>
+      (double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0) +
+      (_remolque ? (double.tryParse(_pesoSalidaRemolqueCtrl.text) ?? 0) : 0);
 
   double get _pesoNetoDeclarado => double.tryParse(_pesoNetoDeclaradoCtrl.text) ?? 0;
+
+  double get _pesoNetoTotal => _boletoSalida != null ? (_pesoTotalEntrada - _pesoTotalSalida) : _pesoTotalEntrada;
 
   double get _pesoDiferencia {
     final pnd = _pesoNetoDeclarado;
     if (pnd == 0) return 0;
     return _pesoNetoTotal - pnd;
   }
-
-  double get _pesoNetoTotal => _pesoTotalEntrada;
 
   double get _porcentajeDesviacion {
     final pnd = _pesoNetoDeclarado;
@@ -581,6 +592,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   void _registrarEntrada() {
+    _limpiarFormulario();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Modo Entrada — capture el peso y guarde'),
@@ -590,10 +602,67 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     );
   }
 
+  Future<void> _abrirSelectorSalida() async {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _BoletoPendienteDialog(
+        onSelected: (b) {
+          Navigator.of(ctx).pop();
+          _cargarBoletoSalida(b);
+        },
+      ),
+    );
+  }
+
+  Future<void> _abrirSelectorImpresion() async {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _BoletoImpresionDialog(
+        ultimoBoletoId: _ultimoBoletoId,
+        ultimoNumeroBoleto: _ultimoNumeroBoleto,
+        onImprimir: (boletoId, numeroBoleto, formato) {
+          Navigator.of(ctx).pop();
+          _reimprimirTicket(boletoId, numeroBoleto, formato: formato);
+        },
+      ),
+    );
+  }
+
+  void _cargarBoletoSalida(Weighing b) {
+    setState(() {
+      _boletoSalida = b;
+      _numeroBoleto = b.numeroBoleto ?? b.boleto;
+      _camionTexto = b.idVehiculo ?? '';
+      _remolque = b.remolque;
+      _pesoEntradaCtrl.text = b.pesoEntradaVehiculo.toStringAsFixed(2);
+      _pesoRemolqueCtrl.text = _remolque ? (b.pesoEntradaRemolque ?? 0).toStringAsFixed(2) : '';
+      _pesoSalidaVehiculoCtrl.clear();
+      _pesoSalidaRemolqueCtrl.clear();
+      _pesoNetoDeclaradoCtrl.text = b.pesoNetoDeclarado != null ? b.pesoNetoDeclarado!.toStringAsFixed(2) : '';
+      _documentoCtrl.text = b.documento ?? '';
+      _observacionesCtrl.text = b.observaciones ?? '';
+      _fleteCtrl.text = b.flete ?? '';
+      _costoFleteCtrl.text = b.costoFlete != null ? b.costoFlete!.toStringAsFixed(2) : '';
+      _densidadCtrl.text = b.densidad != null ? b.densidad!.toStringAsFixed(2) : '';
+      _unidadesCtrl.text = b.litros != null ? b.litros!.toStringAsFixed(2) : '';
+      _tipoTercero = b.tipoTercero ?? 'CLIENTE';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Cargado Boleto $_numeroBoleto para pesaje de SALIDA'),
+        backgroundColor: SwsColors.success,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   void _limpiarFormulario() {
     setState(() {
+      _boletoSalida = null;
       _pesoEntradaCtrl.clear();
       _pesoRemolqueCtrl.clear();
+      _pesoSalidaVehiculoCtrl.clear();
+      _pesoSalidaRemolqueCtrl.clear();
       _pesoNetoDeclaradoCtrl.clear();
       _documentoCtrl.clear();
       _guiaSunagroCtrl.clear();
@@ -679,6 +748,33 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       return;
     }
 
+    // ── MODO SALIDA (Cierre directo de boleto) ──────────────────────────────
+    if (_boletoSalida != null) {
+      final pesoSalidaVeh = double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0;
+      if (pesoSalidaVeh <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ingrese el Peso de Salida del vehículo'),
+            backgroundColor: SwsColors.warning,
+          ),
+        );
+        return;
+      }
+      final payload = <String, dynamic>{
+        'peso_salida_vehiculo': pesoSalidaVeh,
+        if (_remolque && _pesoSalidaRemolqueCtrl.text.isNotEmpty)
+          'peso_salida_remolque': double.tryParse(_pesoSalidaRemolqueCtrl.text),
+        if (_pesoNetoDeclaradoCtrl.text.isNotEmpty)
+          'peso_neto_declarado': double.tryParse(_pesoNetoDeclaradoCtrl.text),
+        'es_peso_manual': _esPesoManual,
+        if (_observacionesCtrl.text.trim().isNotEmpty)
+          'observaciones': _observacionesCtrl.text.trim(),
+      };
+      context.read<WeighingBloc>().add(CloseWeighingEvent(_boletoSalida!.boleto, payload));
+      return;
+    }
+
+    // ── MODO ENTRADA (Creación de pesaje nuevo) ─────────────────────────────
     final now = DateTime.now();
     final placa = _camionSeleccionado?.placa ?? _camionTexto.toUpperCase();
 
@@ -744,7 +840,23 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Pesaje $numeroVisible guardado correctamente'),
+                content: Text('Pesaje de Entrada $numeroVisible guardado correctamente'),
+                backgroundColor: SwsColors.success,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } else if (state is WeighingClosed) {
+          final numeroVisible = state.weighing.numeroBoleto ?? 'Boleto';
+          _ultimoBoletoId = state.weighing.boleto;
+          _ultimoNumeroBoleto = numeroVisible;
+          setState(() => _guardandoPesaje = false);
+          _imprimirActual();
+          _limpiarFormulario();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Salida del pesaje $numeroVisible registrada exitosamente'),
                 backgroundColor: SwsColors.success,
                 duration: const Duration(seconds: 3),
               ),
@@ -796,13 +908,37 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       children: [
         _QuickActionBar(
           onEntrada: _registrarEntrada,
+          onSalida: _abrirSelectorSalida,
           onGuardar: _onSave,
           onCancelar: _limpiarFormulario,
-          onImprimir: _imprimirActual,
+          onImprimir: _abrirSelectorImpresion,
           onSalir: () => Navigator.of(context).pop(),
           puedeAnular: false,
           guardando: _guardandoPesaje,
+          modoSalida: _boletoSalida != null,
         ),
+        if (_boletoSalida != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: SwsColors.success.withValues(alpha: 0.15),
+            child: Row(
+              children: [
+                const Icon(Icons.output, color: SwsColors.success, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'MODO SALIDA — Cierre del Boleto: ${_numeroBoleto ?? _boletoSalida!.boleto} ($_camionTexto)',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: SwsColors.success, fontSize: 13),
+                  ),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Volver a Entrada'),
+                  onPressed: _limpiarFormulario,
+                ),
+              ],
+            ),
+          ),
         const Divider(height: 1),
         Expanded(
           child: SingleChildScrollView(
@@ -925,6 +1061,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   List<Widget> _buildDatosSection(BuildContext context, CatalogData data, List<Trailer> trailers, List<ThirdParty> terceros) {
+    final enModoSalida = _boletoSalida != null;
+
     return [
       Row(
         children: [
@@ -937,7 +1075,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               icon: Icons.confirmation_number_outlined,
             ),
           ),
-          if (_series.length > 1) ...[
+          if (_series.length > 1 && !enModoSalida) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1010,15 +1148,18 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         title: const Text('Tiene remolque', style: TextStyle(fontSize: 13.5)),
         value: _remolque,
         activeThumbColor: Theme.of(context).colorScheme.primary,
-        onChanged: (v) => setState(() {
-          _remolque = v;
-          if (!v) {
-            _remolqueSeleccionado = null;
-            _pesoRemolqueCtrl.clear();
-            _fotosRemolque = [];
-            _confirmados[_idxRemolque] = false;
-          }
-        }),
+        onChanged: enModoSalida
+            ? null
+            : (v) => setState(() {
+                  _remolque = v;
+                  if (!v) {
+                    _remolqueSeleccionado = null;
+                    _pesoRemolqueCtrl.clear();
+                    _pesoSalidaRemolqueCtrl.clear();
+                    _fotosRemolque = [];
+                    _confirmados[_idxRemolque] = false;
+                  }
+                }),
       ),
       if (_remolque) ...[
         const SizedBox(height: 10),
@@ -1041,29 +1182,31 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           crear: _puedePesoManual ? _specRemolque : null,
           onNext: () => _avanzarAlSiguienteCampo(_idxRemolque),
         ),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _pesoRemolqueCtrl,
-          focusNode: _pesoRemolqueFocus,
-          onChanged: (_) => _desconfirmarCampo(_idxPesoRemolque),
-          onFieldSubmitted: (_) {
-            _confirmarCampo(_idxPesoRemolque);
-            _avanzarAlSiguienteCampo(_idxPesoRemolque);
-          },
-          decoration: const InputDecoration(
-            labelText: 'Peso Remolque Entrada (kg)',
-            hintText: 'Se sugiere la tara del remolque',
-            prefixIcon: Icon(Icons.fitness_center),
-            isDense: true,
+        if (!enModoSalida) ...[
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _pesoRemolqueCtrl,
+            focusNode: _pesoRemolqueFocus,
+            onChanged: (_) => _desconfirmarCampo(_idxPesoRemolque),
+            onFieldSubmitted: (_) {
+              _confirmarCampo(_idxPesoRemolque);
+              _avanzarAlSiguienteCampo(_idxPesoRemolque);
+            },
+            decoration: const InputDecoration(
+              labelText: 'Peso Remolque Entrada (kg)',
+              hintText: 'Se sugiere la tara del remolque',
+              prefixIcon: Icon(Icons.fitness_center),
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return null;
+              final num = double.tryParse(v);
+              if (num == null || num < 0) return 'Peso debe ser positivo';
+              return null;
+            },
           ),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          validator: (v) {
-            if (v == null || v.trim().isEmpty) return null;
-            final num = double.tryParse(v);
-            if (num == null || num < 0) return 'Peso debe ser positivo';
-            return null;
-          },
-        ),
+        ],
       ],
       const SizedBox(height: 10),
       AutocompleteCreatable<Transport>(
@@ -1265,9 +1408,11 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   /// Lectura de pesos:
-  /// - Si HAY báscula registrada → `ScaleMonitorWidget` (peso en vivo).
-  /// - Si NO hay báscula → aviso sobrio "Peso manual" + campo editable.
+  /// - En MODO ENTRADA: captura peso de entrada del vehículo (y remolque si aplica).
+  /// - En MODO SALIDA: muestra entrada fijada y captura peso de salida del vehículo (y remolque si aplica).
   List<Widget> _buildLecturaSection(BuildContext context) {
+    final enModoSalida = _boletoSalida != null;
+
     return [
       if (_hayBascula)
         ScaleMonitorWidget(
@@ -1275,10 +1420,16 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           label: _balanzaSeleccionada?.descripcion ?? 'Báscula',
           balanzaId: _balanzaSeleccionada?.id,
           balanzaDescripcion: _balanzaSeleccionada?.descripcion,
-          initialWeight: double.tryParse(_pesoEntradaCtrl.text) ?? 0,
+          initialWeight: enModoSalida
+              ? (double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0)
+              : (double.tryParse(_pesoEntradaCtrl.text) ?? 0),
           onPesoLeido: (peso) {
             setState(() {
-              _pesoEntradaCtrl.text = peso.toStringAsFixed(2);
+              if (enModoSalida) {
+                _pesoSalidaVehiculoCtrl.text = peso.toStringAsFixed(2);
+              } else {
+                _pesoEntradaCtrl.text = peso.toStringAsFixed(2);
+              }
             });
           },
         )
@@ -1313,7 +1464,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         key: const Key('peso_entrada_field'),
         controller: _pesoEntradaCtrl,
         focusNode: _pesoEntradaFocus,
-        readOnly: !_esPesoManual,
+        readOnly: !_esPesoManual || enModoSalida,
         onChanged: (_) => _desconfirmarCampo(_idxPesoEntrada),
         onFieldSubmitted: (_) {
           _confirmarCampo(_idxPesoEntrada);
@@ -1321,18 +1472,55 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         },
         decoration: InputDecoration(
           labelText: 'Peso Entrada Vehículo (kg) *',
-          prefixIcon: !_esPesoManual
+          prefixIcon: !_esPesoManual || enModoSalida
               ? const Icon(Icons.link)
               : const Icon(Icons.monitor_weight),
-          helperText: _esPesoManual
-              ? 'Registro manual (solo Supervisor/Admin)'
-              : 'Peso registrado por la báscula: no se puede editar',
+          helperText: enModoSalida
+              ? 'Peso fijado a la entrada'
+              : (_esPesoManual
+                  ? 'Registro manual (solo Supervisor/Admin)'
+                  : 'Peso registrado por la báscula: no se puede editar'),
           isDense: true,
         ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: (v) => Validators.positiveNumber(v, 'Peso'),
+        validator: (v) => Validators.positiveNumber(v, 'Peso Entrada'),
       ),
-      if (_puedePesoManual && _hayBascula) ...[
+      if (enModoSalida) ...[
+        const SizedBox(height: 10),
+        TextFormField(
+          key: const Key('peso_salida_field'),
+          controller: _pesoSalidaVehiculoCtrl,
+          focusNode: _pesoSalidaVehiculoFocus,
+          readOnly: !_esPesoManual,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'Peso Salida Vehículo (kg) *',
+            prefixIcon: const Icon(Icons.output, color: SwsColors.success),
+            helperText: _esPesoManual
+                ? 'Registro manual de salida (solo Supervisor/Admin)'
+                : 'Lectura de balanza para salida',
+            isDense: true,
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: (v) => enModoSalida ? Validators.positiveNumber(v, 'Peso Salida') : null,
+        ),
+        if (_remolque) ...[
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _pesoSalidaRemolqueCtrl,
+            focusNode: _pesoSalidaRemolqueFocus,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Peso Salida Remolque (kg)',
+              hintText: 'Ingrese peso del remolque a la salida',
+              prefixIcon: Icon(Icons.fitness_center),
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+        ],
+      ],
+      if (_puedePesoManual && _hayBascula && !enModoSalida) ...[
         const SizedBox(height: 6),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -1349,9 +1537,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       const SizedBox(height: 8),
       _WeightTable(
         pesoEntrada: double.tryParse(_pesoEntradaCtrl.text) ?? 0,
-        pesoRemolqueEntrada: double.tryParse(_pesoRemolqueCtrl.text),
-        pesoSalida: null,
-        pesoRemolqueSalida: null,
+        pesoRemolqueEntrada: _remolque ? double.tryParse(_pesoRemolqueCtrl.text) : null,
+        pesoSalida: enModoSalida ? double.tryParse(_pesoSalidaVehiculoCtrl.text) : null,
+        pesoRemolqueSalida: (enModoSalida && _remolque) ? double.tryParse(_pesoSalidaRemolqueCtrl.text) : null,
         pesoNetoDeclarado: double.tryParse(_pesoNetoDeclaradoCtrl.text),
       ),
     ];
@@ -1524,7 +1712,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   List<Widget> _buildResumenSection(CatalogData data) {
-    final pts = double.tryParse(_pesoRemolqueCtrl.text);
+    final enModoSalida = _boletoSalida != null;
+    final ptsRem = _remolque ? double.tryParse(_pesoSalidaRemolqueCtrl.text) ?? double.tryParse(_pesoRemolqueCtrl.text) : null;
+
     return [
       _ResumenRow(
         label: 'Serie - Boleto',
@@ -1541,12 +1731,24 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _ResumenRow(label: 'Selección', value: _tipoTercero),
       _ResumenRow(label: 'Razón Social', value: _terceroSeleccionado?.razonSocial ?? _terceroTexto),
       const Divider(height: 20),
-      _ResumenRow(label: 'Peso Camión', value: NumberUtils.formatKg(double.tryParse(_pesoEntradaCtrl.text)), highlight: true),
-      if (pts != null && _remolque) _ResumenRow(label: 'Peso Remolque', value: NumberUtils.formatKg(pts)),
+      _ResumenRow(label: 'Peso Camión Entrada', value: NumberUtils.formatKg(double.tryParse(_pesoEntradaCtrl.text)), highlight: true),
+      if (ptsRem != null && _remolque) _ResumenRow(label: 'Peso Remolque', value: NumberUtils.formatKg(ptsRem)),
       _ResumenRow(label: 'Peso Total Entrada', value: NumberUtils.formatKg(_pesoTotalEntrada), highlight: true),
+      if (enModoSalida) ...[
+        _ResumenRow(label: 'Peso Total Salida', value: NumberUtils.formatKg(_pesoTotalSalida), highlight: true),
+        _ResumenRow(
+          label: 'Peso Neto Total',
+          value: _pesoNetoTotal.abs() == 0
+              ? '0,00 kg'
+              : '${NumberUtils.formatKg(_pesoNetoTotal.abs())} ${_pesoNetoTotal < 0 ? "(DESPACHO)" : "(INGRESO)"}',
+          highlight: true,
+        ),
+      ],
       _ResumenRow(label: 'Peso Neto Declarado', value: NumberUtils.formatKg(_pesoNetoDeclarado)),
-      _ResumenRow(label: 'Diferencia', value: NumberUtils.formatKg(_pesoDiferencia), highlight: _pesoDiferencia != 0),
-      _ResumenRow(label: '% Desviación', value: NumberUtils.formatPercent(_porcentajeDesviacion)),
+      if (enModoSalida) ...[
+        _ResumenRow(label: 'Diferencia', value: NumberUtils.formatKg(_pesoDiferencia), highlight: _pesoDiferencia != 0),
+        _ResumenRow(label: '% Desviación', value: NumberUtils.formatPercent(_porcentajeDesviacion)),
+      ],
     ];
   }
 
@@ -1578,21 +1780,25 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
 class _QuickActionBar extends StatelessWidget {
   final VoidCallback onEntrada;
+  final VoidCallback onSalida;
   final VoidCallback onGuardar;
   final VoidCallback onCancelar;
   final VoidCallback onImprimir;
   final VoidCallback onSalir;
   final bool puedeAnular;
   final bool guardando;
+  final bool modoSalida;
 
   const _QuickActionBar({
     required this.onEntrada,
+    required this.onSalida,
     required this.onGuardar,
     required this.onCancelar,
     required this.onImprimir,
     required this.onSalir,
     required this.puedeAnular,
     this.guardando = false,
+    this.modoSalida = false,
   });
 
   @override
@@ -1602,14 +1808,16 @@ class _QuickActionBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          _ToolbarButton(icon: Icons.input, label: 'Entrada', shortcut: 'F2', onTap: onEntrada, color: SwsColors.success),
+          _ToolbarButton(icon: Icons.input, label: 'Entrada', shortcut: 'F2', onTap: onEntrada, color: modoSalida ? Colors.white70 : SwsColors.accent),
+          const SizedBox(width: 6),
+          _ToolbarButton(icon: Icons.output, label: 'Salida', shortcut: 'F6', onTap: onSalida, color: modoSalida ? SwsColors.success : SwsColors.accentLight),
           const SizedBox(width: 6),
           _ToolbarButton(
-            icon: guardando ? Icons.hourglass_top : Icons.save,
-            label: guardando ? 'Guardando...' : 'Guardar',
+            icon: guardando ? Icons.hourglass_top : (modoSalida ? Icons.check_circle : Icons.save),
+            label: guardando ? 'Guardando...' : (modoSalida ? 'Registrar Salida' : 'Guardar'),
             shortcut: guardando ? null : 'F4',
             onTap: guardando ? () {} : onGuardar,
-            color: SwsColors.accent,
+            color: modoSalida ? SwsColors.success : SwsColors.accent,
           ),
           const SizedBox(width: 6),
           _ToolbarButton(icon: Icons.cancel_outlined, label: 'Cancelar', shortcut: 'Esc', onTap: onCancelar),
@@ -1802,6 +2010,13 @@ class _WeightTable extends StatelessWidget {
     final pdv = (pdf != null && pnd != 0) ? (pdf / pnd) * 100 : null;
     final oscuro = Theme.of(context).brightness == Brightness.dark;
 
+    String pntTxt = '—';
+    if (pnt != null) {
+      final pntAbs = pnt.abs();
+      final tag = pnt < 0 ? ' (DESPACHO)' : (pnt > 0 ? ' (INGRESO)' : ' (SIN MOVIMIENTO)');
+      pntTxt = '${NumberUtils.formatKg(pntAbs)}$tag';
+    }
+
     return Card(
       color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
       elevation: 0,
@@ -1813,7 +2028,7 @@ class _WeightTable extends StatelessWidget {
             if (pesoSalida != null) ...[
               _weightRow(context, 'Balanza Salida', NumberUtils.formatKg(pesoSalida), NumberUtils.formatKg(pesoRemolqueSalida), NumberUtils.formatKg(pts)),
               const Divider(height: 16),
-              _weightRow(context, 'Peso Neto', '', '', NumberUtils.formatKg(pnt), bold: true),
+              _weightRow(context, 'Peso Neto', '', '', pntTxt, bold: true),
               _weightRow(context, 'Peso Declarado', '', '', NumberUtils.formatKg(pnd)),
               _weightRow(context, 'Diferencia', '', '', NumberUtils.formatKg(pdf), bold: pdf != null && pdf != 0),
               _weightRow(context, '% Desviación', '', '', NumberUtils.formatPercent(pdv)),
@@ -1849,6 +2064,358 @@ class _WeightTable extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BoletoPendienteDialog extends StatefulWidget {
+  final ValueChanged<Weighing> onSelected;
+  const _BoletoPendienteDialog({required this.onSelected});
+
+  @override
+  State<_BoletoPendienteDialog> createState() => _BoletoPendienteDialogState();
+}
+
+class _BoletoPendienteDialogState extends State<_BoletoPendienteDialog> {
+  final _searchCtrl = TextEditingController();
+  List<Weighing> _boletos = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarBoletos();
+  }
+
+  Future<void> _cargarBoletos() async {
+    try {
+      final repo = di.sl<WeighingRepository>();
+      final list = await repo.listWeighings(estado: 'PENDIENTE');
+      if (mounted) {
+        setState(() {
+          _boletos = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final filtrados = _boletos.where((b) {
+      if (query.isEmpty) return true;
+      final num = (b.numeroBoleto ?? b.boleto).toLowerCase();
+      final placa = (b.idVehiculo ?? '').toLowerCase();
+      final cond = (b.conductorNombre ?? b.idConductor ?? '').toLowerCase();
+      final prod = (b.productoNombre ?? b.idProducto ?? '').toLowerCase();
+      return num.contains(query) || placa.contains(query) || cond.contains(query) || prod.contains(query);
+    }).toList();
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.output, color: SwsColors.success),
+          SizedBox(width: 8),
+          Text('Boletos Pendientes para Salida', style: TextStyle(fontSize: 16)),
+        ],
+      ),
+      content: SizedBox(
+        width: 550,
+        height: 400,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'Buscar por Placa, Boleto, Conductor o Producto...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(child: Text('Error: $_error', style: const TextStyle(color: SwsColors.danger)))
+                      : filtrados.isEmpty
+                          ? const Center(
+                              child: Text('No hay boletos pendientes de salida.',
+                                  style: TextStyle(color: SwsColors.gray500)))
+                          : ListView.separated(
+                              itemCount: filtrados.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final b = filtrados[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: SwsColors.accent.withValues(alpha: 0.15),
+                                    child: const Icon(Icons.directions_car, color: SwsColors.accent, size: 20),
+                                  ),
+                                  title: Text(
+                                    '${b.idVehiculo ?? "Sin Placa"} — ${b.numeroBoleto ?? b.boleto}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  ),
+                                  subtitle: Text(
+                                    'Entrada: ${NumberUtils.formatKg(b.pesoEntradaVehiculo)} | Conductor: ${b.conductorNombre ?? b.idConductor ?? "N/A"}\nProducto: ${b.productoNombre ?? b.idProducto ?? "N/A"}',
+                                    style: const TextStyle(fontSize: 11.5),
+                                  ),
+                                  trailing: FilledButton.icon(
+                                    icon: const Icon(Icons.output, size: 16),
+                                    label: const Text('Cargar Salida', style: TextStyle(fontSize: 11.5)),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: SwsColors.success,
+                                    ),
+                                    onPressed: () => widget.onSelected(b),
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BoletoImpresionDialog extends StatefulWidget {
+  final String? ultimoBoletoId;
+  final String? ultimoNumeroBoleto;
+  final void Function(String boletoId, String numeroBoleto, String formato)? onImprimir;
+
+  const _BoletoImpresionDialog({
+    this.ultimoBoletoId,
+    this.ultimoNumeroBoleto,
+    this.onImprimir,
+  });
+
+  @override
+  State<_BoletoImpresionDialog> createState() => _BoletoImpresionDialogState();
+}
+
+class _BoletoImpresionDialogState extends State<_BoletoImpresionDialog> {
+  final _searchCtrl = TextEditingController();
+  List<Weighing> _boletos = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarBoletos();
+  }
+
+  Future<void> _cargarBoletos() async {
+    try {
+      final repo = di.sl<WeighingRepository>();
+      final list = await repo.listWeighings(limit: 100);
+      if (mounted) {
+        setState(() {
+          _boletos = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final y = dt.year;
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$d/$m/$y $h:$min';
+  }
+
+  void _abrirPrevisualizacion(Weighing b) {
+    Navigator.of(context).pop();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => TicketPreviewDialog(weighing: b),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final filtrados = _boletos.where((b) {
+      if (query.isEmpty) return true;
+      final num = (b.numeroBoleto ?? b.boleto).toLowerCase();
+      final placa = (b.idVehiculo ?? '').toLowerCase();
+      final cond = (b.conductorNombre ?? b.idConductor ?? '').toLowerCase();
+      final prod = (b.productoNombre ?? b.idProducto ?? '').toLowerCase();
+      return num.contains(query) || placa.contains(query) || cond.contains(query) || prod.contains(query);
+    }).toList();
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.print, color: SwsColors.accent),
+          SizedBox(width: 8),
+          Text('Imprimir / Reimprimir Ticket de Pesaje', style: TextStyle(fontSize: 16)),
+        ],
+      ),
+      content: SizedBox(
+        width: 650,
+        height: 450,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'Buscar por Placa, Boleto, Conductor o Producto...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(child: Text('Error: $_error', style: const TextStyle(color: SwsColors.danger)))
+                      : filtrados.isEmpty
+                          ? const Center(
+                              child: Text('No hay boletos registrados para imprimir.',
+                                  style: TextStyle(color: SwsColors.gray500)))
+                          : ListView.separated(
+                              itemCount: filtrados.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final b = filtrados[index];
+                                final isUltimo = b.boleto == widget.ultimoBoletoId;
+                                final estado = b.estadoBoleto;
+                                final estadoColor = estado == 'CERRADO'
+                                    ? SwsColors.success
+                                    : (estado == 'PENDIENTE' ? SwsColors.warning : SwsColors.danger);
+
+                                final double displayPeso = (b.pesoNeto != null && b.pesoNeto != 0)
+                                    ? b.pesoNeto!.abs()
+                                    : b.pesoEntradaVehiculo;
+
+                                final numVisible = b.numeroBoleto ?? b.boleto;
+
+                                return Container(
+                                  color: isUltimo
+                                      ? (isDark
+                                          ? SwsColors.accent.withValues(alpha: 0.15)
+                                          : SwsColors.accent.withValues(alpha: 0.08))
+                                      : null,
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                    onTap: () => _abrirPrevisualizacion(b),
+                                    leading: CircleAvatar(
+                                      backgroundColor: estadoColor.withValues(alpha: 0.15),
+                                      child: Icon(
+                                        estado == 'CERRADO' ? Icons.check_circle : Icons.hourglass_bottom,
+                                        color: estadoColor,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Text(
+                                          '$numVisible — Placa: ${b.idVehiculo ?? "Sin Placa"}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: estadoColor.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            estado,
+                                            style: TextStyle(color: estadoColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        if (isUltimo) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: SwsColors.accent.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: const Text(
+                                              'ÚLTIMO',
+                                              style: TextStyle(color: SwsColors.accent, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        'Conductor: ${b.conductorNombre ?? b.idConductor ?? "N/A"} | Producto: ${b.productoNombre ?? b.idProducto ?? "N/A"}\nFecha: ${_formatDate(b.createdAt)} | Peso: ${NumberUtils.formatKg(displayPeso)}',
+                                        style: const TextStyle(fontSize: 11.5),
+                                      ),
+                                    ),
+                                    trailing: FilledButton.icon(
+                                      icon: const Icon(Icons.preview, size: 14),
+                                      label: const Text('Previsualizar', style: TextStyle(fontSize: 11)),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: SwsColors.accent,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () => _abrirPrevisualizacion(b),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cerrar'),
+        ),
+      ],
     );
   }
 }

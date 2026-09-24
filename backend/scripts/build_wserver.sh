@@ -68,6 +68,18 @@ if [[ -d "${BUNDLE_DIR}" ]]; then
   echo "    ✅ WServer + wserver_icon.jpeg copiados a la raíz del bundle."
 fi
 
+# 4.5) Bundle de debug (dev): mismo binario donde lo usa WServerManager en tests locales
+for DEBUG_DIR in \
+  ../frontend/build/linux/x64/debug/outputs/BALANSOFT-WS-CLIENT_SERVER \
+  ../frontend/build/linux/x64/debug/bundle; do
+  if [[ -d "${DEBUG_DIR}" ]]; then
+    echo "[4.5] Actualizando WServer en el bundle de debug (${DEBUG_DIR})..."
+    cp "${BIN}" "${DEBUG_DIR}/WServer"
+    chmod +x "${DEBUG_DIR}/WServer"
+    echo "    ✅ WServer actualizado."
+  fi
+done
+
 echo ""
 echo "== Listo =="
 echo "  Prueba rápida: ${BIN} --version"
