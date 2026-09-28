@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/save_file_utils.dart';
+import '../../../data/datasources/remote/api_client.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../data/repositories/weighing_repository.dart' show WeighingRepository;
 import '../../../domain/entities/weighing.dart';
@@ -35,7 +37,8 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
   DateTimeRange? _rango;
   String? _estado;
   bool _soloPendientes = false;
-  final String _formatoDefault = 'PDF';
+  /// Formato de boleto configurado para la empresa (REQ-NF-ONB-004).
+  String _formatoDefault = 'PDF';
   Product? _producto;
   ThirdParty? _cliente;
   CatalogData _catalogos = CatalogData.empty;
@@ -47,12 +50,19 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
     super.initState();
     _estado = widget.estadoInicial;
     _loadCatalogs();
+    _cargarFormatoTicket();
   }
 
   @override
   void dispose() {
     _placaCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _cargarFormatoTicket() async {
+    final prefs = await di.sl<ApiClient>().getPreferenciasEmpresa();
+    if (!mounted) return;
+    setState(() => _formatoDefault = prefs['formato_ticket'] ?? 'PDF');
   }
 
   Future<void> _loadCatalogs() async {
@@ -77,9 +87,8 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
     if (boleto.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Este pesaje aún no tiene número de boleto (pendiente de sincronizar).'),
+          SnackBar(
+            content: Text('ticket_not_synced'.tr()),
             backgroundColor: SwsColors.warning,
           ),
         );
@@ -93,7 +102,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
       final dynamic datos = response.data;
       final bytes = (datos is List<int>) ? datos : null;
       if (bytes == null || bytes.isEmpty) {
-        throw Exception('El servidor no devolvió un ${fmt == 'TXT' ? 'TXT' : 'PDF'} válido.');
+        throw Exception('ticket_invalid'.tr());
       }
       final ruta = await SaveFileUtils.save(
           bytes, 'ticket_$nombreBoleto.${fmt == 'TXT' ? 'txt' : 'pdf'}',
@@ -227,12 +236,12 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                                     w.numeroBoleto ?? w.boleto,
                                     formato: formato),
                                 itemBuilder: (context) => [
-                                  const PopupMenuItem(
+                                  PopupMenuItem(
                                       value: 'PDF',
-                                      child: Text('Ticket PDF')),
-                                  const PopupMenuItem(
+                                      child: Text('ticket_pdf'.tr())),
+                                  PopupMenuItem(
                                       value: 'TXT',
-                                      child: Text('Ticket TXT')),
+                                      child: Text('ticket_txt'.tr())),
                                 ],
                               ),
                               const Icon(Icons.chevron_right),
@@ -288,14 +297,14 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
           if (pendientesCount > 0 && _soloPendientes)
             TextButton(
               onPressed: () => setState(() => _soloPendientes = false),
-              child: const Text('Ver todos los pesajes'),
+              child: Text('view_all_weighings'.tr()),
             ),
           if (_soloPendientes && pendientesCount == 0)
             TextButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const WeighingFormScreen()),
               ),
-              child: const Text('Registrar nueva entrada'),
+              child: Text('register_new_entry'.tr()),
             ),
         ],
       ),
@@ -366,12 +375,12 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                   isDense: true,
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos')),
-                    DropdownMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
-                    DropdownMenuItem(value: 'CERRADO', child: Text('Cerrado')),
-                    DropdownMenuItem(value: 'MODIFICADO', child: Text('Modificado')),
-                    DropdownMenuItem(value: 'ANULADO', child: Text('Anulado')),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text('all'.tr())),
+                    DropdownMenuItem(value: 'PENDIENTE', child: Text('status_pending'.tr())),
+                    DropdownMenuItem(value: 'CERRADO', child: Text('status_closed'.tr())),
+                    DropdownMenuItem(value: 'MODIFICADO', child: Text('status_modified'.tr())),
+                    DropdownMenuItem(value: 'ANULADO', child: Text('status_annulled'.tr())),
                   ],
                   onChanged: (v) => setState(() => _estado = v),
                 ),
@@ -389,7 +398,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                     isExpanded: true,
                     underline: const SizedBox.shrink(),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: null, child: Text('all'.tr())),
                       ...productos.map((p) =>
                           DropdownMenuItem(value: p.id, child: Text(p.nombre))),
                     ],
@@ -410,7 +419,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                     isExpanded: true,
                     underline: const SizedBox.shrink(),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: null, child: Text('all'.tr())),
                       ...terceros.map((t) =>
                           DropdownMenuItem(value: t.id, child: Text(t.razonSocial))),
                     ],

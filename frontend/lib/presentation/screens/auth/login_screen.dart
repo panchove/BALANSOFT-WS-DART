@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/i18n/locale_controller.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/brand_text.dart';
+import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,6 +28,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    // El trabajador es cliente delgado: su API vive en la estación titular, así
+    // que no debe levantar un WServer propio (docs/MANEJO_DB.md §13).
+    if (AppConfig.esTrabajador) return;
     // Si ya hay una conexión local configurada, asegura que el WServer esté
     // levantado antes de intentar el login (p. ej. tras un reinicio del
     // equipo sin autostart activo). Best-effort: no bloquea la pantalla.
@@ -113,9 +119,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 36),
                     _buildLoginForm(),
                     const SizedBox(height: 32),
-                    const Text(
-                      'Funciona sin conexión',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    Text(
+                      'works_offline'.tr(),
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -160,9 +166,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 24),
-                const Text(
-                  'Funciona sin conexión',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                Text(
+                  'works_offline'.tr(),
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
             ),
@@ -213,9 +219,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      'Funciona sin conexión',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    Text(
+                      'works_offline'.tr(),
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -234,8 +240,18 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildLanguageSelector(context),
+            ],
+          ),
+          if (AppConfig.empresaConfigPendiente) ...[
+            _buildPendingCompanyNotice(),
+            const SizedBox(height: 10),
+          ],
           Text(
-            'Iniciar Sesión',
+            context.tr('Iniciar Sesión'),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -243,9 +259,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Accede a tu estación de pesaje',
-            style: TextStyle(color: Colors.white60, fontSize: 14),
+          Text(
+            context.tr('Accede a tu estación de pesaje'),
+            style: const TextStyle(color: Colors.white60, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 28),
@@ -261,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.06),
-              labelText: 'Correo electrónico',
+              labelText: context.tr('Correo Electrónico'),
               labelStyle: const TextStyle(color: Colors.white60),
               prefixIcon: const Icon(Icons.mail_outline, color: Colors.white60),
               enabledBorder: const UnderlineInputBorder(
@@ -291,7 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.06),
-              labelText: 'Contraseña',
+              labelText: context.tr('Contraseña'),
               labelStyle: const TextStyle(color: Colors.white60),
               prefixIcon: const Icon(Icons.lock_outline, color: Colors.white60),
               enabledBorder: const UnderlineInputBorder(
@@ -330,9 +346,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       horizontal: 0, vertical: 8),
                 ),
                 icon: const Icon(Icons.wifi_tethering, size: 15),
-                label: const Text(
-                  'Conexión local',
-                  style: TextStyle(fontSize: 12),
+                label: Text(
+                  context.tr('Conexión local'),
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
               TextButton(
@@ -342,9 +358,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 0, vertical: 8),
                 ),
-                child: const Text(
-                  '¿Olvidaste tu contraseña?',
-                  style: TextStyle(fontSize: 12),
+                child: Text(
+                  context.tr('¿Olvidaste tu contraseña?'),
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
             ],
@@ -385,7 +401,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(width: 10),
                       Flexible(
                         child: Text(
-                          loading ? 'Ingresando...' : 'Iniciar Sesión',
+                          loading
+                              ? context.tr('loading')
+                              : context.tr('Iniciar Sesión'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -400,6 +418,74 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Aviso de la instalación: los datos de empresa se capturaron antes del
+  /// login y se aplican en cuanto la sesión se valida (REQ-NF-ONB-006).
+  Widget _buildPendingCompanyNotice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: SwsColors.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: SwsColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.storefront_outlined,
+              size: 18, color: SwsColors.accentLight),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'setup_company_pending_hint'.tr(),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLanguageSelector(BuildContext context) {
+    if (!di.sl.isRegistered<LocaleController>()) return const SizedBox.shrink();
+    final localeCtrl = di.sl<LocaleController>();
+    return PopupMenuButton<AppLanguage>(
+      tooltip: context.tr('Idioma del Sistema'),
+      icon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.language, size: 16, color: Colors.white70),
+          const SizedBox(width: 4),
+          Text(
+            localeCtrl.activeLanguageCode.toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+      onSelected: (lang) => localeCtrl.setLanguage(lang),
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: AppLanguage.system,
+          child: Text(context.tr('Detectar idioma del dispositivo (automático)')),
+        ),
+        const PopupMenuItem(
+          value: AppLanguage.es,
+          child: Text('Español (ES)'),
+        ),
+        const PopupMenuItem(
+          value: AppLanguage.en,
+          child: Text('English (EN)'),
+        ),
+        const PopupMenuItem(
+          value: AppLanguage.pt,
+          child: Text('Português (PT)'),
+        ),
+      ],
     );
   }
 }

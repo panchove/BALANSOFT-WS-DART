@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/config/app_config.dart';
+import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_text.dart';
 import '../providers/bloc/auth/auth_bloc.dart';
@@ -116,24 +117,27 @@ class _TopRow extends StatelessWidget {
 
           // Botón de sincronizar
           IconButton(
-            tooltip: 'Sincronizar',
+            tooltip: AppTranslations.tr('sync_btn',
+                langCode: Localizations.localeOf(context).languageCode),
             icon: const Icon(Icons.sync_outlined, color: Colors.white70),
             onPressed: () {
               context.read<WeighingBloc>().add(SyncWeighingsEvent());
             },
           ),
 
+
           const SizedBox(width: 4),
 
           // Perfil de usuario
           if (nombre != null || email != null)
-            _buildUserProfile(compacto: compacto),
+            _buildUserProfile(context, compacto: compacto),
         ],
       ),
     );
   }
 
-  Widget _buildUserProfile({required bool compacto}) {
+  Widget _buildUserProfile(BuildContext context, {required bool compacto}) {
+
     final iniciales = _iniciales(nombre ?? email ?? '');
 
     // ── Móvil: solo avatar + logout ──────────────────────────────────
@@ -161,7 +165,8 @@ class _TopRow extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
             onPressed: onLogout,
-            tooltip: 'Cerrar Sesión',
+            tooltip: AppTranslations.tr('logout_btn',
+                langCode: Localizations.localeOf(context).languageCode),
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -218,7 +223,8 @@ class _TopRow extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
               onPressed: onLogout,
-              tooltip: 'Cerrar Sesión',
+              tooltip: AppTranslations.tr('logout_btn',
+                  langCode: Localizations.localeOf(context).languageCode),
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -245,16 +251,17 @@ class _HealthStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = Localizations.localeOf(context).languageCode;
     return BlocBuilder<SyncBloc, SyncState>(
       builder: (context, state) {
-        final online = state is HealthOnline;
+        final online = state.isOnline;
         final modoOffline = AppConfig.offline;
         final (mensaje, color) = modoOffline
-            ? ('Estación en modo sin conexión', SwsColors.warning)
+            ? (AppTranslations.tr('tooltip_no_network', langCode: lang), SwsColors.warning)
             : (
                 online
-                    ? 'Backend en línea'
-                    : 'Backend sin conexión (toca para reintentar)',
+                    ? AppTranslations.tr('tooltip_online', langCode: lang)
+                    : AppTranslations.tr('tooltip_offline', langCode: lang),
                 online ? SwsColors.success : SwsColors.danger,
               );
         return Tooltip(
@@ -270,7 +277,11 @@ class _HealthStatusBadge extends StatelessWidget {
                   Icon(Icons.circle, size: 12, color: color),
                   const SizedBox(width: 6),
                   Text(
-                    modoOffline ? 'Sin red' : (online ? 'Online' : 'Offline'),
+                    modoOffline
+                        ? AppTranslations.tr('status_no_network', langCode: lang)
+                        : (online
+                            ? AppTranslations.tr('status_online', langCode: lang)
+                            : AppTranslations.tr('status_offline', langCode: lang)),
                     style: TextStyle(fontSize: 12, color: color),
                   ),
                 ],

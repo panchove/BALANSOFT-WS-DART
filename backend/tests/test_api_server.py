@@ -16,7 +16,7 @@ from datetime import datetime
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -167,6 +167,317 @@ async def test_login_credencial_invalida(_server_engine) -> None:
             json={"email": "noexiste@test.com", "password": "x", "hardware_id": "HW-1"},
         )
         assert r.status_code == 401
+
+
+async def _registrar_cuenta(
+    ac: httpx.AsyncClient, rif: str, email: str, **extra
+) -> dict:
+    cuerpo = {
+        "empresa_nombre": f"Cliente {rif}",
+        "empresa_rif": rif,
+        "email_admin": email,
+        "usuario_nombre": "Admin",
+        "password": "pass123456",
+        "licencia_key": f"BWS-{uuid.uuid4().hex[:12].upper()}",
+        "licencia_tier": "CENTRAL",
+        "fecha_expira": "2027-12-31T00:00:00Z",
+    }
+    cuerpo.update(extra)
+    r = await ac.post("/api/v1/auth/register", json=cuerpo)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+@pytest.mark.asyncio
+async def test_primer_dispositivo_queda_como_titular_servidor(_server_engine) -> None:
+    """Regla del titular: el PRIMER equipo que valida la cuenta es el dueño de
+    la licencia (SERVIDOR_LOCAL) y por tanto puede instalarse como servidor."""
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"titular-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        await _registrar_cuenta(ac, rif, email)
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-TITULAR"},
+        )
+        assert r.status_code == 200, r.text
+        disp = r.json()["dispositivo"]
+        assert disp["rol"] == "SERVIDOR_LOCAL"
+        assert disp["puede_ser_servidor"] is True
+
+
+@pytest.mark.asyncio
+async def test_segundo_dispositivo_queda_como_trabajador(
+    _server_engine, server_db
+) -> None:
+    """El segundo equipo de la misma cuenta es LOCAL: no puede ser servidor.
+
+    El ADMIN queda atado al `licencia.hardware_id` del titular, así que el
+    segundo equipo entra con una credencial propia (la que le asigna el admin).
+    """
+    from app.models_server import Credencial
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"dos-{uuid.uuid4().hex[:8]}@test.com"
+    email_operador = f"oper-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta = await _registrar_cuenta(ac, rif, email)
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-PRIMERO"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+
+        server_db.add(
+            Credencial(
+                id_cuenta=uuid.UUID(alta["cuenta"]["id_cuenta"]),
+                email=email_operador,
+                password_hash=hash_password("oper123456"),
+                rol_global="OPERADOR",
+            )
+        )
+        await server_db.commit()
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email_operador,
+                "password": "oper123456",
+                "hardware_id": "HW-SEGUNDO",
+            },
+        )
+        assert r.status_code == 200, r.text
+        disp = r.json()["dispositivo"]
+        assert disp["rol"] == "LOCAL"
+        assert disp["puede_ser_servidor"] is False
+
+
+@pytest.mark.asyncio
+async def test_titular_no_pierde_el_rol_al_reingresar(_server_engine) -> None:
+    """El titular conserva SERVIDOR_LOCAL aunque su sesión se cierre y vuelva
+    a validar la licencia (no debe degradarse a LOCAL)."""
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"reing-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        await _registrar_cuenta(ac, rif, email)
+        for _ in range(2):
+            r = await ac.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "pass123456", "hardware_id": "HW-REEN"},
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+
+
+@pytest.mark.asyncio
+async def test_rol_titular_se_autocorrige_segun_la_licencia(
+    _server_engine, server_db
+) -> None:
+    """El rol del titular lo manda la LICENCIA, no el orden de las filas.
+
+    Caso real de campo: la fila del equipo quedó como ``LOCAL`` (se había
+    registrado antes de existir la regla, o por un equipo de pruebas) pero la
+    licencia sí está atada a ese mismo hardware. Al volver a validar la cuenta
+    el rol se corrige solo, sin editar la base a mano.
+    """
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo, Licencia
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"corr-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta = await _registrar_cuenta(ac, rif, email)
+        id_cuenta = uuid.UUID(alta["cuenta"]["id_cuenta"])
+
+        # La licencia queda atada a HW-BUTACA, pero la fila nace degradada.
+        await server_db.execute(
+            update(Licencia)
+            .where(Licencia.id_cuenta == id_cuenta)
+            .values(hardware_id="HW-BUTACA")
+        )
+        server_db.add(
+            Dispositivo(
+                id_cuenta=id_cuenta,
+                hardware_id="HW-BUTACA",
+                rol_dispositivo="LOCAL",
+            )
+        )
+        server_db.add(
+            Dispositivo(
+                id_cuenta=id_cuenta,
+                hardware_id="HW-OTRO",
+                rol_dispositivo="SERVIDOR_LOCAL",  # rol obsoleto
+            )
+        )
+        await server_db.commit()
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-BUTACA"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+        assert r.json()["dispositivo"]["puede_ser_servidor"] is True
+
+        # Y el equipo que tenía el rol viejo lo pierde: solo hay un titular.
+        roles = dict(
+            (
+                await server_db.execute(
+                    select(Dispositivo.hardware_id, Dispositivo.rol_dispositivo).where(
+                        Dispositivo.id_cuenta == id_cuenta
+                    )
+                )
+            ).all()
+        )
+        assert roles == {"HW-BUTACA": "SERVIDOR_LOCAL", "HW-OTRO": "LOCAL"}
+
+
+@pytest.mark.asyncio
+async def test_panel_designar_titular(_server_engine, server_db) -> None:
+    """El panel puede reatar la licencia a otro equipo registrado y recalcula roles."""
+    from app.models_server import Cuenta, Dispositivo, Licencia
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+
+    cuenta = Cuenta(
+        rif_nit=f"J-{uuid.uuid4().hex[:10]}",
+        nombre_fiscal="Titular SA",
+        email_admin=f"tit-{uuid.uuid4().hex[:8]}@test.com",
+        activa=True,
+    )
+    server_db.add(cuenta)
+    await server_db.flush()
+    server_db.add(
+        Licencia(
+            id_cuenta=cuenta.id_cuenta,
+            licencia_key=f"BWS-TIT-{uuid.uuid4().hex[:12].upper()}",
+            licencia_tier="CENTRAL",
+            licencia_status="ACTIVA",
+            fecha_expira=datetime(2030, 1, 1),
+            hardware_id="HW-VIEJO",
+        )
+    )
+    server_db.add(
+        Dispositivo(id_cuenta=cuenta.id_cuenta, hardware_id="HW-VIEJO", rol_dispositivo="LOCAL")
+    )
+    server_db.add(
+        Dispositivo(id_cuenta=cuenta.id_cuenta, hardware_id="HW-NUEVO", rol_dispositivo="LOCAL")
+    )
+    prov = ProveedorUsuario(
+        email=f"prov-{uuid.uuid4().hex[:8]}@tit.com",
+        password_hash=hash_password("prov123456"),
+        nombre="Soporte",
+        rol="SOPORTE",
+    )
+    server_db.add(prov)
+    await server_db.commit()
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/v1/panel/login",
+            json={"email": prov.email, "password": "prov123456"},
+        )
+        token = r.json()["access_token"]
+        auth = {"Authorization": f"Bearer {token}"}
+
+        # Un equipo de otra cuenta no sirve.
+        r = await ac.post(
+            f"/api/v1/panel/cuentas/{cuenta.id_cuenta}/titular",
+            json={"hardware_id": "HW-AJENO"},
+            headers=auth,
+        )
+        assert r.status_code == 404, r.text
+
+        r = await ac.post(
+            f"/api/v1/panel/cuentas/{cuenta.id_cuenta}/titular",
+            json={"hardware_id": "HW-NUEVO"},
+            headers=auth,
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["hardware_titular"] == "HW-NUEVO"
+        roles = {d["hardware_id"]: d["rol_dispositivo"] for d in body["dispositivos"]}
+        assert roles == {"HW-VIEJO": "LOCAL", "HW-NUEVO": "SERVIDOR_LOCAL"}
+
+
+@pytest.mark.asyncio
+async def test_licencia_virgen_available_se_amarra_al_primer_equipo(
+    _server_engine, server_db
+) -> None:
+    """AVAILABLE = licencia VIRGEN: no está rechazada.
+
+    El primer equipo que valida la cuenta se amarra a la licencia como titular
+    único (SERVIDOR_LOCAL) y la licencia queda ACTIVA. Antes, el estado AVAILABLE
+    del LM se guardaba en `licencias.licencia_status` y el central la takeoff
+    como inválida (`_licencia_activa` exigía ACTIVA), dejando al equipo sin
+    poder instalarse como servidor (docs/MANEJO_DB.md §13).
+    """
+    from sqlalchemy import select
+
+    from app.api.v1.endpoints.servidor import _normalizar_estado_lm
+    from app.models_server import Dispositivo, Licencia
+
+    # El AVAILABLE del LM nunca debe escribirse como estado de la cuenta.
+    assert _normalizar_estado_lm("AVAILABLE") == "ACTIVA"
+    assert _normalizar_estado_lm("DEVICE_NOT_REGISTERED") == "ACTIVA"
+    assert _normalizar_estado_lm("ACTIVE") == "ACTIVA"
+    assert _normalizar_estado_lm("SUSPENDED") == "SUSPENDIDA"
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"virgen-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta = await _registrar_cuenta(ac, rif, email)
+        id_cuenta = uuid.UUID(alta["cuenta"]["id_cuenta"])
+
+        # Licencia virgen: estado heredado AVAILABLE (fila vieja del sync) y sin
+        # hardware atado.
+        await server_db.execute(
+            update(Licencia)
+            .where(Licencia.id_cuenta == id_cuenta)
+            .values(licencia_status="AVAILABLE", hardware_id=None)
+        )
+        server_db.add(
+            Dispositivo(
+                id_cuenta=id_cuenta, hardware_id="HW-PRUEBA", rol_dispositivo="LOCAL"
+            )
+        )
+        await server_db.commit()
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-NUEVO"},
+        )
+        assert r.status_code == 200, r.text
+        # Este equipo es el titular y el otro queda como trabajador.
+        assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+        assert r.json()["licencia"]["licencia_status"] == "ACTIVA"
+        assert r.json()["licencia"]["hardware_id"] == "HW-NUEVO"
+
+        roles = dict(
+            (
+                await server_db.execute(
+                    select(Dispositivo.hardware_id, Dispositivo.rol_dispositivo).where(
+                        Dispositivo.id_cuenta == id_cuenta
+                    )
+                )
+            ).all()
+        )
+        assert roles == {"HW-PRUEBA": "LOCAL", "HW-NUEVO": "SERVIDOR_LOCAL"}
 
 
 @pytest.mark.asyncio
@@ -627,6 +938,8 @@ async def test_panel_cuenta_detalle(_server_engine, server_db) -> None:
         assert len(body["credenciales"]) == 1
         assert body["credenciales"][0]["rol_global"] == "OPERADOR"
         assert body["total_dispositivos"] == 1
+        assert [d["hardware_id"] for d in body["dispositivos"]] == ["HW-DET-1"]
+        assert body["hardware_titular"] is None
 
 
 @pytest.mark.asyncio

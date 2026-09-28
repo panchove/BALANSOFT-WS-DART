@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/scale_monitor_widget.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -124,7 +125,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      const SnackBar(content: Text('Escaneando básculas conectadas…')),
+      SnackBar(content: Text('scanning_scales'.tr())),
     );
 
     List<Map<String, dynamic>> encontradas;
@@ -146,8 +147,8 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       messenger.hideCurrentSnackBar();
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No se detectaron básculas conectadas'),
+        SnackBar(
+          content: Text('no_scales_found'.tr()),
         ),
       );
       return;
@@ -218,11 +219,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.delete_outline, color: SwsColors.danger),
-            SizedBox(width: 10),
-            Expanded(child: Text('Eliminar báscula')),
+            const Icon(Icons.delete_outline, color: SwsColors.danger),
+            const SizedBox(width: 10),
+            Expanded(child: Text('delete_scale'.tr())),
           ],
         ),
         content: Text(
@@ -250,8 +251,8 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       await _cargar();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Báscula eliminada'),
+        SnackBar(
+          content: Text('scale_deleted'.tr()),
           backgroundColor: SwsColors.success,
         ),
       );
@@ -276,11 +277,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     final creada = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.scale, color: SwsColors.primary),
-            SizedBox(width: 12),
-            Expanded(child: Text('Añadir báscula TCP')),
+            const Icon(Icons.scale, color: SwsColors.primary),
+            const SizedBox(width: 12),
+            Expanded(child: Text('add_tcp_scale'.tr())),
           ],
         ),
         content: SingleChildScrollView(
@@ -353,8 +354,8 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
               final puerto = int.tryParse(puertoCtrl.text.trim());
               if (desc.isEmpty || ip.isEmpty || puerto == null) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text('Complete descripción, IP y puerto'),
+                  SnackBar(
+                    content: Text('fill_desc_ip_port'.tr()),
                     backgroundColor: SwsColors.danger,
                   ),
                 );
@@ -369,7 +370,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
                 'is_simulada': true,
               });
             },
-            child: const Text('Añadir'),
+            child: Text('add'.tr()),
           ),
         ],
       ),
@@ -386,8 +387,8 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       await _cargar();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Báscula añadida correctamente'),
+        SnackBar(
+          content: Text('scale_added'.tr()),
           backgroundColor: SwsColors.success,
         ),
       );
@@ -420,7 +421,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      const SnackBar(content: Text('Probando conexión…')),
+      SnackBar(content: Text('testing_connection'.tr())),
     );
     try {
       final prueba =
@@ -472,11 +473,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
         length: 2,
         child: Scaffold(
           appBar: AppBar(
-            title: const Text('Dispositivos y Periféricos'),
-            bottom: const TabBar(
+            title: Text(context.tr('Dispositivos de Campo')),
+            bottom: TabBar(
               tabs: [
-                Tab(icon: Icon(Icons.scale_outlined), text: 'Básculas de Campo'),
-                Tab(icon: Icon(Icons.print_outlined), text: 'Impresoras y Tickets'),
+                Tab(icon: const Icon(Icons.scale_outlined), text: context.tr('Básculas de Campo')),
+                Tab(icon: const Icon(Icons.print_outlined), text: context.tr('Impresoras y Tickets')),
               ],
             ),
             actions: [
@@ -493,7 +494,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
                 ),
               IconButton(
                 key: const Key('dispositivos_escanear'),
-                tooltip: 'Escanea básculas conectadas',
+                tooltip: context.tr('Escanea básculas conectadas'),
                 icon: const Icon(Icons.radar_outlined),
                 onPressed: _escanear,
               ),
@@ -503,7 +504,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
             key: const Key('dispositivos_agregar'),
             onPressed: _agregarBalanza,
             icon: const Icon(Icons.add),
-            label: const Text('Añadir báscula'),
+            label: Text(context.tr('Añadir báscula')),
           ),
           body: TabBarView(
             children: [
@@ -724,9 +725,9 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
         color: SwsColors.blue100,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Text(
-        'SIMULADA',
-        style: TextStyle(
+      child: Text(
+        'simulated'.tr(),
+        style: const TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
           color: SwsColors.primary,
@@ -886,8 +887,8 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       widget.onGuardado();
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configuración de conexión guardada'),
+        SnackBar(
+          content: Text('connection_config_saved'.tr()),
           backgroundColor: SwsColors.success,
         ),
       );
@@ -945,13 +946,13 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
             const SizedBox(height: 16),
 
             if (widget.esAdmin) ...[
-              Text('Conexión',
+              Text('connection'.tr(),
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'tcp', label: Text('TCP')),
-                  ButtonSegment(value: 'serial', label: Text('Serial')),
+                segments: [
+                  ButtonSegment(value: 'tcp', label: Text('tcp'.tr())),
+                  ButtonSegment(value: 'serial', label: Text('serial'.tr())),
                 ],
                 selected: {_protocolo},
                 onSelectionChanged: (sel) =>
@@ -1151,8 +1152,8 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
       await di.sl<LocalStorage>().savePrinterPreset(_preset);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Impresora activa guardada exitosamente en el módulo de dispositivos'),
+          SnackBar(
+            content: Text('printer_active_saved'.tr()),
             backgroundColor: SwsColors.success,
           ),
         );
@@ -1177,8 +1178,8 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
     if (mounted) {
       setState(() => _escaneando = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Escanéo completado: 4 impresoras encontradas y listas para usar.'),
+        SnackBar(
+          content: Text('printer_scan_done'.tr()),
           backgroundColor: SwsColors.info,
         ),
       );
@@ -1205,9 +1206,9 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
                   children: [
                     const Icon(Icons.print, color: SwsColors.accent),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Impresoras Conectadas al Sistema',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    Text(
+                      'printers_connected'.tr(),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
                     OutlinedButton.icon(
@@ -1240,15 +1241,15 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
                 DropdownButtonFormField<String>(
                   initialValue: _preset.tipoImpresora,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Tipo / Protocolo de Puerto',
-                    prefixIcon: Icon(Icons.settings_ethernet),
+                  decoration: InputDecoration(
+                    labelText: 'port_type_protocol'.tr(),
+                    prefixIcon: const Icon(Icons.settings_ethernet),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'POS_80', child: Text('Térmica Directa POS-80 (EscPOS)')),
-                    DropdownMenuItem(value: 'POS_58', child: Text('Térmica Directa POS-58 (EscPOS)')),
-                    DropdownMenuItem(value: 'SISTEMA_PDF', child: Text('Driver de Sistema (PDF / Spooler)')),
-                    DropdownMenuItem(value: 'MATRIZ_PUNTO', child: Text('Matriz de Puntos (Formulario Continuo)')),
+                  items: [
+                    DropdownMenuItem(value: 'POS_80', child: Text('thermal_80'.tr())),
+                    DropdownMenuItem(value: 'POS_58', child: Text('thermal_58'.tr())),
+                    DropdownMenuItem(value: 'SISTEMA_PDF', child: Text('system_driver'.tr())),
+                    DropdownMenuItem(value: 'MATRIZ_PUNTO', child: Text('dot_matrix'.tr())),
                   ],
                   onChanged: (val) {
                     if (val != null) setState(() => _preset = _preset.copyWith(tipoImpresora: val));

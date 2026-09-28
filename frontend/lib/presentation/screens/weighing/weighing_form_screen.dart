@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/validators.dart';
@@ -131,18 +132,18 @@ class _WeighingFormAppBar extends StatelessWidget implements PreferredSizeWidget
   Widget build(BuildContext context) {
     return AppBar(
       titleSpacing: 12,
-      title: const Text('Estación de Pesaje', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+      title: Text(context.tr('Estación de Pesaje'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
       actions: [
         _ActionChip(
           icon: Icons.search,
-          label: 'Buscar',
+          label: context.tr('Buscar'),
           shortcut: 'F3',
           onTap: () => _abrirBusqueda(context),
         ),
         const SizedBox(width: 4),
         _ActionChip(
           icon: Icons.print_outlined,
-          label: 'Imprimir',
+          label: context.tr('Imprimir'),
           shortcut: 'F5',
           onTap: () {
             showDialog<void>(
@@ -594,10 +595,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   void _registrarEntrada() {
     _limpiarFormulario();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Modo Entrada — capture el peso y guarde'),
+      SnackBar(
+        content: Text('weighing_entry_mode_title'.tr()),
         backgroundColor: SwsColors.accent,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -706,7 +707,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _reimprimirTicket(_ultimoBoletoId!, _ultimoNumeroBoleto ?? 'Boleto', formato: formato);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Guarde el pesaje primero para imprimir')),
+        SnackBar(content: Text('weighing_save_first'.tr())),
       );
     }
   }
@@ -740,8 +741,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   void _onSave() {
     if (!(_formKey.currentState?.validate() ?? false)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complete los campos mínimos para guardar'),
+        SnackBar(
+          content: Text('weighing_min_fields_required'.tr()),
           backgroundColor: SwsColors.warning,
         ),
       );
@@ -753,8 +754,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       final pesoSalidaVeh = double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0;
       if (pesoSalidaVeh <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ingrese el Peso de Salida del vehículo'),
+          SnackBar(
+            content: Text('weighing_exit_weight_prompt'.tr()),
             backgroundColor: SwsColors.warning,
           ),
         );
@@ -933,7 +934,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text('Volver a Entrada'),
+                  label: Text('weighing_back_to_entry'.tr()),
                   onPressed: _limpiarFormulario,
                 ),
               ],
@@ -1145,7 +1146,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       const SizedBox(height: 10),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        title: const Text('Tiene remolque', style: TextStyle(fontSize: 13.5)),
+        title: Text('weighing_has_trailer'.tr(), style: const TextStyle(fontSize: 13.5)),
         value: _remolque,
         activeThumbColor: Theme.of(context).colorScheme.primary,
         onChanged: enModoSalida
@@ -1350,10 +1351,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 prefixIcon: Icon(Icons.people_outline),
                 isDense: true,
               ),
-              items: const [
-                DropdownMenuItem(value: 'CLIENTE', child: Text('Cliente')),
-                DropdownMenuItem(value: 'PROVEEDOR', child: Text('Proveedor')),
-                DropdownMenuItem(value: 'AMBOS', child: Text('Ambos')),
+              items: [
+                DropdownMenuItem(value: 'CLIENTE', child: Text('third_customer'.tr())),
+                DropdownMenuItem(value: 'PROVEEDOR', child: Text('third_supplier'.tr())),
+                DropdownMenuItem(value: 'AMBOS', child: Text('weighing_both'.tr())),
               ],
               onChanged: (v) => setState(() {
                 _tipoTercero = v ?? 'CLIENTE';
@@ -1443,14 +1444,14 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               color: SwsColors.warning.withValues(alpha: 0.25),
             ),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.edit_note, size: 18, color: SwsColors.warning),
-              SizedBox(width: 8),
+              const Icon(Icons.edit_note, size: 18, color: SwsColors.warning),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Peso manual — no hay báscula conectada',
-                  style: TextStyle(
+                  'weighing_manual_weight_no_scale'.tr(),
+                  style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1525,10 +1526,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
-          title: const Text('Registro manual del peso',
-              style: TextStyle(fontSize: 12.5)),
-          subtitle: const Text('Solo Supervisor/Admin',
-              style: TextStyle(fontSize: 11)),
+          title: Text('weighing_manual_record'.tr(),
+              style: const TextStyle(fontSize: 12.5)),
+          subtitle: Text('weighing_supervisor_admin_only'.tr(),
+              style: const TextStyle(fontSize: 11)),
           value: _esPesoManual,
           activeThumbColor: Theme.of(context).colorScheme.primary,
           onChanged: (v) => setState(() => _esPesoManual = v),
@@ -1808,23 +1809,23 @@ class _QuickActionBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          _ToolbarButton(icon: Icons.input, label: 'Entrada', shortcut: 'F2', onTap: onEntrada, color: modoSalida ? Colors.white70 : SwsColors.accent),
+          _ToolbarButton(icon: Icons.input, label: context.tr('Entrada'), shortcut: 'F2', onTap: onEntrada, color: modoSalida ? Colors.white70 : SwsColors.accent),
           const SizedBox(width: 6),
-          _ToolbarButton(icon: Icons.output, label: 'Salida', shortcut: 'F6', onTap: onSalida, color: modoSalida ? SwsColors.success : SwsColors.accentLight),
+          _ToolbarButton(icon: Icons.output, label: context.tr('Salida'), shortcut: 'F6', onTap: onSalida, color: modoSalida ? SwsColors.success : SwsColors.accentLight),
           const SizedBox(width: 6),
           _ToolbarButton(
             icon: guardando ? Icons.hourglass_top : (modoSalida ? Icons.check_circle : Icons.save),
-            label: guardando ? 'Guardando...' : (modoSalida ? 'Registrar Salida' : 'Guardar'),
+            label: guardando ? context.tr('loading') : (modoSalida ? context.tr('Registrar Salida') : context.tr('Guardar')),
             shortcut: guardando ? null : 'F4',
             onTap: guardando ? () {} : onGuardar,
             color: modoSalida ? SwsColors.success : SwsColors.accent,
           ),
           const SizedBox(width: 6),
-          _ToolbarButton(icon: Icons.cancel_outlined, label: 'Cancelar', shortcut: 'Esc', onTap: onCancelar),
+          _ToolbarButton(icon: Icons.cancel_outlined, label: context.tr('Cancelar'), shortcut: 'Esc', onTap: onCancelar),
           const SizedBox(width: 6),
-          _ToolbarButton(icon: Icons.print, label: 'Imprimir', shortcut: 'F5', onTap: onImprimir),
+          _ToolbarButton(icon: Icons.print, label: context.tr('Imprimir'), shortcut: 'F5', onTap: onImprimir),
           const SizedBox(width: 6),
-          _ToolbarButton(icon: Icons.exit_to_app, label: 'Salir', onTap: onSalir),
+          _ToolbarButton(icon: Icons.exit_to_app, label: context.tr('Salir'), onTap: onSalir),
         ],
       ),
     );
@@ -2127,11 +2128,11 @@ class _BoletoPendienteDialogState extends State<_BoletoPendienteDialog> {
     }).toList();
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.output, color: SwsColors.success),
-          SizedBox(width: 8),
-          Text('Boletos Pendientes para Salida', style: TextStyle(fontSize: 16)),
+          const Icon(Icons.output, color: SwsColors.success),
+          const SizedBox(width: 8),
+          Text('weighing_pending_for_exit'.tr(), style: const TextStyle(fontSize: 16)),
         ],
       ),
       content: SizedBox(
@@ -2155,9 +2156,9 @@ class _BoletoPendienteDialogState extends State<_BoletoPendienteDialog> {
                   : _error != null
                       ? Center(child: Text('Error: $_error', style: const TextStyle(color: SwsColors.danger)))
                       : filtrados.isEmpty
-                          ? const Center(
-                              child: Text('No hay boletos pendientes de salida.',
-                                  style: TextStyle(color: SwsColors.gray500)))
+                          ? Center(
+                              child: Text('weighing_no_pending'.tr(),
+                                  style: const TextStyle(color: SwsColors.gray500)))
                           : ListView.separated(
                               itemCount: filtrados.length,
                               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -2178,7 +2179,7 @@ class _BoletoPendienteDialogState extends State<_BoletoPendienteDialog> {
                                   ),
                                   trailing: FilledButton.icon(
                                     icon: const Icon(Icons.output, size: 16),
-                                    label: const Text('Cargar Salida', style: TextStyle(fontSize: 11.5)),
+                                    label: Text('weighing_load_exit'.tr(), style: const TextStyle(fontSize: 11.5)),
                                     style: FilledButton.styleFrom(
                                       backgroundColor: SwsColors.success,
                                     ),
@@ -2285,11 +2286,11 @@ class _BoletoImpresionDialogState extends State<_BoletoImpresionDialog> {
     }).toList();
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.print, color: SwsColors.accent),
-          SizedBox(width: 8),
-          Text('Imprimir / Reimprimir Ticket de Pesaje', style: TextStyle(fontSize: 16)),
+          const Icon(Icons.print, color: SwsColors.accent),
+          const SizedBox(width: 8),
+          Text('weighing_print_ticket'.tr(), style: const TextStyle(fontSize: 16)),
         ],
       ),
       content: SizedBox(
@@ -2313,9 +2314,9 @@ class _BoletoImpresionDialogState extends State<_BoletoImpresionDialog> {
                   : _error != null
                       ? Center(child: Text('Error: $_error', style: const TextStyle(color: SwsColors.danger)))
                       : filtrados.isEmpty
-                          ? const Center(
-                              child: Text('No hay boletos registrados para imprimir.',
-                                  style: TextStyle(color: SwsColors.gray500)))
+                          ? Center(
+                              child: Text('weighing_no_tickets_to_print'.tr(),
+                                  style: const TextStyle(color: SwsColors.gray500)))
                           : ListView.separated(
                               itemCount: filtrados.length,
                               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -2376,9 +2377,9 @@ class _BoletoImpresionDialogState extends State<_BoletoImpresionDialog> {
                                               color: SwsColors.accent.withValues(alpha: 0.2),
                                               borderRadius: BorderRadius.circular(4),
                                             ),
-                                            child: const Text(
-                                              'ÚLTIMO',
-                                              style: TextStyle(color: SwsColors.accent, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                            child: Text(
+                                              'weighing_last'.tr(),
+                                              style: const TextStyle(color: SwsColors.accent, fontSize: 9.5, fontWeight: FontWeight.bold),
                                             ),
                                           ),
                                         ],
@@ -2393,7 +2394,7 @@ class _BoletoImpresionDialogState extends State<_BoletoImpresionDialog> {
                                     ),
                                     trailing: FilledButton.icon(
                                       icon: const Icon(Icons.preview, size: 14),
-                                      label: const Text('Previsualizar', style: TextStyle(fontSize: 11)),
+                                      label: Text('weighing_preview'.tr(), style: const TextStyle(fontSize: 11)),
                                       style: FilledButton.styleFrom(
                                         backgroundColor: SwsColors.accent,
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

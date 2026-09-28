@@ -78,6 +78,7 @@ class ApiConstants {
   static const String reportMonthly = '$apiPrefix/reports/monthly';
   static String reportVehicle(String id) => '$apiPrefix/reports/vehicle/$id';
   static const String reportExportExcel = '$apiPrefix/reports/export/excel';
+  static const String reportExportPdf = '$apiPrefix/reports/export/pdf';
   static const String kardexSaldo = '$apiPrefix/reports/kardex/saldo';
   static const String kardexDetalle = '$apiPrefix/reports/kardex/detalle';
   static const String kardexExportExcel = '$apiPrefix/reports/export/kardex/excel';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../i18n/translations.dart';
 import '../theme/app_theme.dart';
 
 class PhotoCaptured {
@@ -155,7 +156,7 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
               child: OutlinedButton.icon(
                 onPressed: fotos.length >= widget.maxFotos ? null : _tomarFoto,
                 icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                label: const Text('Tomar foto'),
+                label: Text('take_photo'.tr()),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: SwsColors.primary,
                   side: BorderSide(color: SwsColors.primary.withValues(alpha: 0.4)),
@@ -168,7 +169,7 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
               child: OutlinedButton.icon(
                 onPressed: fotos.length >= widget.maxFotos ? null : _elegirGaleria,
                 icon: const Icon(Icons.image_outlined, size: 18),
-                label: const Text('Cargar'),
+                label: Text('upload'.tr()),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: SwsColors.primary,
                   side: BorderSide(color: SwsColors.primary.withValues(alpha: 0.4)),

@@ -28,7 +28,7 @@ import glob
 import io
 import os
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from fastapi.responses import StreamingResponse
@@ -48,6 +48,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.core.formato import formatear_numero
+from app.core.i18n import t, traducir_estado_boleto
 from app.models import BoletoPesaje, Empresa
 from app.services.weighing_service import normalizar_estado
 
@@ -69,24 +71,13 @@ ANCHO_TXT = 100
 # ─────────────────────────────────────────────────────────────────────────────
 # Formateo de números y fechas
 # ─────────────────────────────────────────────────────────────────────────────
-def _fmt(v: Decimal | float | int | str | None, decimales: int = 2) -> str:
-    """Formatea número con separador de miles latino y coma decimal.
+def _fmt(v: Decimal | float | int | str | None, decimales: int = 2, lang: str = "es") -> str:
+    """Formatea número con los separadores del idioma.
 
-    Ejemplo: 15000.50 → '15.000,50'
+    Ejemplos: 15000.50 → '15.000,50' (es/pt) · '15,000.50' (en)
+    Espejo de _formatNumber() en Flutter (TicketPreviewDialog).
     """
-    if v is None or v == "":
-        return "0,00"
-    try:
-        if isinstance(v, Decimal):
-            num = float(v)
-        elif isinstance(v, (int, float)):
-            num = float(v)
-        else:
-            num = float(str(v).replace(",", "."))
-    except (ValueError, InvalidOperation):
-        return str(v)
-    fmt_str = f"{{:,.{decimales}f}}"
-    return fmt_str.format(num).replace(",", "X").replace(".", ",").replace("X", ".")
+    return formatear_numero(v, decimales, lang)
 
 
 def _fmt_dt(dt: datetime | None) -> str:
@@ -94,7 +85,7 @@ def _fmt_dt(dt: datetime | None) -> str:
     return dt.strftime("%d/%m/%Y %H:%M") if dt else "—"
 
 
-def _fmt_sig(v: Decimal | float | int | None, decimales: int = 2) -> str:
+def _fmt_sig(v: Decimal | float | int | None, decimales: int = 2, lang: str = "es") -> str:
     """Formatea un número con su signo explícito ('+'), como la diferencia.
 
     Espejo de _fmtConSigno() en Flutter: +1.234,50 / -1.234,50 / 0,00.
@@ -102,18 +93,19 @@ def _fmt_sig(v: Decimal | float | int | None, decimales: int = 2) -> str:
     """
     if v is None:
         return ""
-    f = _fmt(v, decimales)
+    f = _fmt(v, decimales, lang)
     if v > 0:
         return f"+{f}"
     return f
 
 
-def _fmt_densidad(v: Decimal | float | None) -> str | None:
-    """Densidad con hasta 8 decimales sin ceros finales ('0,92'), coma latina."""
+def _fmt_densidad(v: Decimal | float | None, lang: str = "es") -> str | None:
+    """Densidad con hasta 8 decimales sin ceros finales ('0,92' / '0.92')."""
     if v is None:
         return None
-    s = _fmt(v, decimales=8)
-    s = s.rstrip("0").rstrip(",")
+    s = _fmt(v, decimales=8, lang=lang)
+    decimal_sep = "." if lang == "en" else ","
+    s = s.rstrip("0").rstrip(decimal_sep)
     return s or "0"
 
 
@@ -122,7 +114,7 @@ def _fmt_densidad(v: Decimal | float | None) -> str | None:
 # FUENTE: TicketPreviewDialog._buildSingleTicketBlock (Flutter)
 # Solo se incluyen los campos que aparecen en esa función.
 # ─────────────────────────────────────────────────────────────────────────────
-def _dato(p: BoletoPesaje) -> dict[str, Any]:
+def _dato(p: BoletoPesaje, idioma: str = "es") -> dict[str, Any]:
     """Extrae los campos usados por la previsualización Flutter.
 
     Referencia: TicketPreviewDialog._buildSingleTicketBlock
@@ -136,9 +128,11 @@ def _dato(p: BoletoPesaje) -> dict[str, Any]:
             or getattr(p, "remolque_placa", None)
             or getattr(p, "id_remolque", None)
         )
-        remolque_txt = f"Sí — {placa}" if placa else "Sí"
+        remolque_txt = (
+            f"{t('si', idioma)} — {placa}" if placa else t("si", idioma)
+        )
     else:
-        remolque_txt = "No"
+        remolque_txt = t("no", idioma)
 
     p_ent_v  = p.peso_entrada_vehiculo or Decimal("0")
     p_ent_r  = p.peso_entrada_remolque or Decimal("0")
@@ -162,41 +156,45 @@ def _dato(p: BoletoPesaje) -> dict[str, Any]:
         # ── Datos del boleto (orden exacto del widget Flutter) ───────────────
         "numero":       (
             p.numero_boleto
-            or (f"BOL-{str(p.boleto)[:8].upper()}" if getattr(p, "boleto", None) else "Boleto s/n")
+            or (
+                f"BOL-{str(p.boleto)[:8].upper()}"
+                if getattr(p, "boleto", None)
+                else t("boleto_sin_numero", idioma)
+            )
         ),
         "fecha_hora":   _fmt_dt(p.fecha_hora_entrada),
-        "camion":       (p.id_vehiculo or "Sin Placa"),
+        "camion":       (p.id_vehiculo or t("sin_placa", idioma)),
         "remolque":     remolque_txt,
         "transporte":   (
             getattr(p, "transporte_nombre", None)
             or getattr(p, "transporte", None)
             or getattr(p, "id_transporte", None)
-            or "N/A"
+            or t("na", idioma)
         ),
         "conductor":    (
             getattr(p, "conductor_nombre", None)
             or getattr(p, "conductor", None)
             or getattr(p, "id_conductor", None)
-            or "N/A"
+            or t("na", idioma)
         ),
         "producto":     (
             getattr(p, "producto_nombre", None)
             or getattr(p, "producto", None)
             or getattr(p, "id_producto", None)
-            or "N/A"
+            or t("na", idioma)
         ),
         "almacen":      (
             getattr(p, "almacen_nombre", None)
             or getattr(p, "almacen", None)
             or getattr(p, "id_almacen", None)
-            or "N/A"
+            or t("na", idioma)
         ),
-        "seleccion":    seleccion or "N/A",
+        "seleccion":    seleccion or t("na", idioma),
         "razon_social": (
             getattr(p, "razon_social", None)
             or getattr(p, "tercero_nombre", None)
             or getattr(p, "id_tercero", None)
-            or "N/A"
+            or t("na", idioma)
         ),
         # ── Lecturas de peso (tabla: Balanza|Fecha/Hora|Camion|Remolque|Total)
         "hora_entrada":  p.fecha_hora_entrada,
@@ -218,9 +216,11 @@ def _dato(p: BoletoPesaje) -> dict[str, Any]:
         # ── Datos adicionales ─────────────────────────────────────────────────
         "documento":     (p.documento or "").strip(),
         "unidades_txt":  (
-            _fmt(p.unidades or p.litros) if (p.unidades or p.litros) is not None else None
+            _fmt(p.unidades or p.litros, lang=idioma)
+            if (p.unidades or p.litros) is not None
+            else None
         ),
-        "densidad_txt":  _fmt_densidad(getattr(p, "densidad", None)),
+        "densidad_txt":  _fmt_densidad(getattr(p, "densidad", None), idioma),
         # ── Metadatos ────────────────────────────────────────────────────────
         "observaciones":    (p.observaciones or "").strip(),
         "estado":           normalizar_estado(p.estado_boleto),
@@ -394,15 +394,16 @@ def _bloque_anulado(
     d: dict[str, Any],
     st: dict[str, ParagraphStyle],
     ancho_util: float,
+    idioma: str = "es",
 ) -> Table:
     """Recuadro rojo 'DOCUMENTO ANULADO' + motivo (espejo del bloque TXT)."""
-    motivo = d["motivo_anulacion"] or "No especificado"
+    motivo = d["motivo_anulacion"] or t("no_especificado", idioma)
     texto = (
-        f'<font color="#C53030"><b>DOCUMENTO ANULADO</b></font><br/>'
-        f'<font size="8">Motivo: {motivo}</font>'
+        f'<font color="#C53030"><b>{t("doc_anulado", idioma)}</b></font><br/>'
+        f'<font size="8">{t("motivo", idioma)}: {motivo}</font>'
     )
-    t = Table([[Paragraph(texto, st["obs"])]], colWidths=[ancho_util])
-    t.setStyle(TableStyle([
+    t_elem = Table([[Paragraph(texto, st["obs"])]], colWidths=[ancho_util])
+    t_elem.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 1, ROJO_ANULADO),
         ("TOPPADDING",    (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
@@ -410,7 +411,7 @@ def _bloque_anulado(
         ("RIGHTPADDING",  (0, 0), (-1, -1), 5),
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
     ]))
-    return t
+    return t_elem
 
 
 def _build_boleto_simple(
@@ -421,21 +422,9 @@ def _build_boleto_simple(
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
     compact: bool = False,
+    idioma: str = "es",
 ) -> list[Any]:
-    """Construye la lista de flowables de UN boleto.
-
-    Hoja (Carta/A4, ``compact=False``) — espejo de
-    TicketPreviewDialog._buildSingleTicketBlock (Flutter):
-      Encabezado empresa → Título → DATOS (10 filas) →
-      LECTURA DE PESOS (tabla Balanza|Fecha/Hora|Camion|Remolque|Total) →
-      PESO NETO / PESO DECLARADO / DIFERENCIA / DESVIACIÓN →
-      DATOS ADICIONALES → OBSERVACIONES → Firmas.
-
-    Rollo térmico (``compact=True``) — espejo de _buildTicketTermico (Flutter):
-      layout antiguo de 2 columnas sin desglose por camión/remolque.
-
-    IMPORTANTE: Si se modifica el widget en Flutter, actualizar esta función.
-    """
+    """Construye la lista de flowables de UN boleto con i18n."""
     col_l = ancho_util * 0.38   # etiqueta  38 %
     col_r = ancho_util * 0.62   # valor     62 %
 
@@ -482,7 +471,9 @@ def _build_boleto_simple(
             Paragraph(cab["nombre"], st["empresa_c"]),
         ]
         if cab["rif"]:
-            els.append(Paragraph(f'RIF: {cab["rif"]}', st["rif_c"]))
+            els.append(
+                Paragraph(f'{t("etiqueta_rif", idioma)}: {cab["rif"]}', st["rif_c"])
+            )
         els.append(Spacer(1, 1.0 * mm))
         els.append(_hr_negro(1.0))
         els.append(Spacer(1, 1.2 * mm))
@@ -490,46 +481,46 @@ def _build_boleto_simple(
         els = []
 
     # ── 2. Título ─────────────────────────────────────────────────────────────
-    els.append(Paragraph("BOLETO DE PESAJE DE BALANSOFT", st["titulo_c"]))
+    els.append(Paragraph(t("titulo_boleto", idioma), st["titulo_c"]))
     els.append(Spacer(1, 0.8 * mm))
     els.append(_hr_gris())
     els.append(Spacer(1, 1.2 * mm))
 
     # ═══════════════════════ VARIANTE COMPACTA (térmico) ═════════════════════
     if compact:
-        els.append(_fila("Serie - Boleto:", d["numero"], bold=True))
-        els.append(_fila("Fecha/Hora:",     d["fecha_hora"]))
-        els.append(_fila("Camión:",         d["camion"]))
-        els.append(_fila("Remolque:",       d["remolque"]))
-        els.append(_fila("Transporte:",     d["transporte"]))
-        els.append(_fila("Conductor:",      d["conductor"]))
-        els.append(_fila("Producto:",       d["producto"]))
-        els.append(_fila("Almacén:",        d["almacen"]))
-        els.append(_fila("Cliente/Proveedor:", d["razon_social"]))
+        els.append(_fila(f"{t('serie_boleto', idioma)}:", d["numero"], bold=True))
+        els.append(_fila(f"{t('fecha_hora', idioma)}:",     d["fecha_hora"]))
+        els.append(_fila(f"{t('camion', idioma)}:",         d["camion"]))
+        els.append(_fila(f"{t('remolque', idioma)}:",       d["remolque"]))
+        els.append(_fila(f"{t('transporte', idioma)}:",     d["transporte"]))
+        els.append(_fila(f"{t('conductor', idioma)}:",      d["conductor"]))
+        els.append(_fila(f"{t('producto', idioma)}:",       d["producto"]))
+        els.append(_fila(f"{t('almacen', idioma)}:",        d["almacen"]))
+        els.append(_fila(f"{t('cliente_proveedor', idioma)}:", d["razon_social"]))
 
         els.append(Spacer(1, 1.5 * mm))
         els.append(_hr_negro(1.0))
         els.append(Spacer(1, 0.8 * mm))
-        els.append(Paragraph("LECTURA DE PESOS", st["seccion_c"]))
+        els.append(Paragraph(t("lectura_pesos", idioma), st["seccion_c"]))
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_gris())
         els.append(Spacer(1, 1.2 * mm))
 
         fecha_e = _fmt_dt(d["hora_entrada"])
-        peso_e  = f"{_fmt(d['pte'])} kg"
-        els.append(_fila("Entrada:", f"{fecha_e}   {peso_e}"))
+        peso_e  = f"{_fmt(d['pte'], lang=idioma)} kg"
+        els.append(_fila(f"{t('col_entrada', idioma)}:", f"{fecha_e}   {peso_e}"))
         if d["hora_salida"] is not None:
             fecha_s = _fmt_dt(d["hora_salida"])
-            peso_s  = f"{_fmt(d['pts'])} kg"
-            els.append(_fila("Salida:", f"{fecha_s}   {peso_s}"))
+            peso_s  = f"{_fmt(d['pts'], lang=idioma)} kg"
+            els.append(_fila(f"{t('col_salida', idioma)}:", f"{fecha_s}   {peso_s}"))
 
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_gris())
         els.append(Spacer(1, 1.0 * mm))
         neto_val = d["neto"] if d["neto"] is not None else Decimal("0")
         neto_abs = abs(neto_val)
-        sufijo = " (DESPACHO)" if neto_val < 0 else (" (INGRESO)" if neto_val > 0 else "")
-        els.append(_fila("PESO NETO:", f"{_fmt(neto_abs)} kg{sufijo}", bold=True))
+        sufijo = f" ({t('despacho', idioma)})" if neto_val < 0 else (f" ({t('ingreso', idioma)})" if neto_val > 0 else "")
+        els.append(_fila(f"{t('peso_neto', idioma)}:", f"{_fmt(neto_abs, lang=idioma)} kg{sufijo}", bold=True))
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_negro(1.0))
 
@@ -539,14 +530,14 @@ def _build_boleto_simple(
 
         if (d["estado"] or "").upper() == "ANULADO":
             els.append(Spacer(1, 1.0 * mm))
-            els.append(_bloque_anulado(d, st, ancho_util))
+            els.append(_bloque_anulado(d, st, ancho_util, idioma=idioma))
 
         els.append(Spacer(1, 4 * mm))
         firma_izq = Paragraph(
-            "_______________________<br/><b>Firma Operador</b>", st["firma_c"],
+            f"_______________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
         )
         firma_der = Paragraph(
-            "_______________________<br/><b>Firma Conductor</b>", st["firma_c"],
+            f"_______________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
         )
         firmas = Table(
             [[firma_izq, firma_der]],
@@ -565,22 +556,22 @@ def _build_boleto_simple(
 
     # ═══════════════════════ VARIANTE HOJA (Carta/A4) ════════════════════════
     # ── 3. DATOS ──────────────────────────────────────────────────────────────
-    els.append(_fila("Serie - Boleto:", d["numero"], bold=True))
-    els.append(_fila("Fecha/Hora:",     d["fecha_hora"]))
-    els.append(_fila("Camión:",         d["camion"]))
-    els.append(_fila("Remolque:",       d["remolque"]))
-    els.append(_fila("Transporte:",     d["transporte"]))
-    els.append(_fila("Conductor:",      d["conductor"]))
-    els.append(_fila("Producto:",       d["producto"]))
-    els.append(_fila("Almacén:",        d["almacen"]))
-    els.append(_fila("Selección:",      d["seleccion"]))
-    els.append(_fila("Razón Social:",   d["razon_social"]))
+    els.append(_fila(f"{t('serie_boleto', idioma)}:", d["numero"], bold=True))
+    els.append(_fila(f"{t('fecha_hora', idioma)}:",     d["fecha_hora"]))
+    els.append(_fila(f"{t('camion', idioma)}:",         d["camion"]))
+    els.append(_fila(f"{t('remolque', idioma)}:",       d["remolque"]))
+    els.append(_fila(f"{t('transporte', idioma)}:",     d["transporte"]))
+    els.append(_fila(f"{t('conductor', idioma)}:",      d["conductor"]))
+    els.append(_fila(f"{t('producto', idioma)}:",       d["producto"]))
+    els.append(_fila(f"{t('almacen', idioma)}:",        d["almacen"]))
+    els.append(_fila(f"{t('seleccion', idioma)}:",      d["seleccion"]))
+    els.append(_fila(f"{t('razon_social', idioma)}:",   d["razon_social"]))
 
     # ── 4. LECTURA DE PESOS (tabla) ───────────────────────────────────────────
     els.append(Spacer(1, 1.5 * mm))
     els.append(_hr_negro(1.0))
     els.append(Spacer(1, 0.8 * mm))
-    els.append(Paragraph("LECTURA DE PESOS", st["seccion_c"]))
+    els.append(Paragraph(t("lectura_pesos", idioma), st["seccion_c"]))
     els.append(Spacer(1, 0.8 * mm))
     els.append(_hr_gris())
     els.append(Spacer(1, 1.2 * mm))
@@ -596,46 +587,46 @@ def _build_boleto_simple(
     col_feh = ancho_util * 0.26
     col_num = ancho_util * 0.14
 
-    balanza_entrada = f"Balanza Entrada: {d['balanza']}".rstrip()
+    balanza_entrada = f"{t('balanza_entrada', idioma)}: {d['balanza']}".rstrip()
     rows = [
-        [_celda("", centro=True), _celda("Fecha/Hora", centro=True),
-         _celda("Peso Camion", centro=True), _celda("Peso Remolque", centro=True),
-         _celda("Peso Total", centro=True)],
+        [_celda("", centro=True), _celda(t("fecha_hora", idioma), centro=True),
+         _celda(t("peso_camion", idioma), centro=True), _celda(t("peso_remolque", idioma), centro=True),
+         _celda(t("peso_total", idioma), centro=True)],
         [_lab_tab(balanza_entrada), _celda(_fmt_dt(d["hora_entrada"])),
-         _celda(_fmt(d["pe_v"])), _celda(_fmt(d["pe_r"])), _celda(_fmt(d["pte"]))],
+         _celda(_fmt(d["pe_v"], lang=idioma)), _celda(_fmt(d["pe_r"], lang=idioma)), _celda(_fmt(d["pte"], lang=idioma))],
     ]
     hay_salida = d["hora_salida"] is not None
     if hay_salida:
         rows.append([
-            _lab_tab(f"Balanza Salida: {d['balanza']}".rstrip()),
+            _lab_tab(f"{t('balanza_salida', idioma)}: {d['balanza']}".rstrip()),
             _celda(_fmt_dt(d["hora_salida"])),
-            _celda(_fmt(d["ps_v"] or Decimal("0"))),
-            _celda(_fmt(d["ps_r"] or Decimal("0"))),
-            _celda(_fmt(d["pts"])),
+            _celda(_fmt(d["ps_v"] or Decimal("0"), lang=idioma)),
+            _celda(_fmt(d["ps_r"] or Decimal("0"), lang=idioma)),
+            _celda(_fmt(d["pts"], lang=idioma)),
         ])
 
     neto_val = d["neto"] if d["neto"] is not None else Decimal("0")
-    just = " (DESPACHO)" if neto_val < 0 else (" (INGRESO)" if neto_val > 0 else "")
+    just = f" ({t('despacho', idioma)})" if neto_val < 0 else (f" ({t('ingreso', idioma)})" if neto_val > 0 else "")
     rows.append([
-        _lab_tab(f"PESO NETO{just}:"),
-        _celda(""), _celda(_fmt(d["neto_camion"]), bold=True),
-        _celda(_fmt(d["neto_remolque"]), bold=True),
-        _celda(_fmt(neto_val), bold=True),
+        _lab_tab(f"{t('peso_neto', idioma)}{just}:"),
+        _celda(""), _celda(_fmt(d["neto_camion"], lang=idioma), bold=True),
+        _celda(_fmt(d["neto_remolque"], lang=idioma), bold=True),
+        _celda(_fmt(neto_val, lang=idioma), bold=True),
     ])
     idx_neto = len(rows) - 1
 
     if d["declarado"] is not None:
         rows.append([
-            _lab_tab("PESO DECLARADO / DIFERENCIA:"),
+            _lab_tab(f"{t('peso_declarado_diferencia', idioma)}:"),
             _celda(""), _celda(""),
-            _celda(_fmt(d["declarado"]), bold=True),
-            _celda(_fmt_sig(d["diferencia"]), bold=True),
+            _celda(_fmt(d["declarado"], lang=idioma), bold=True),
+            _celda(_fmt_sig(d["diferencia"], lang=idioma), bold=True),
         ])
         if d["desviacion"] is not None:
             rows.append([
-                _lab_tab("DESVIACIÓN:"),
+                _lab_tab(f"{t('desviacion', idioma)}:"),
                 _celda(""), _celda(""), _celda(""),
-                _celda(f"{_fmt(d['desviacion'])} %", bold=True),
+                _celda(f"{_fmt(d['desviacion'], lang=idioma)} %", bold=True),
             ])
 
     tabla = Table(rows, colWidths=[col_bal, col_feh, col_num, col_num, col_num])
@@ -655,13 +646,13 @@ def _build_boleto_simple(
 
     # ── 5. DATOS ADICIONALES ─────────────────────────────────────────────────
     dats_adic = [
-        ("Documento:", d["documento"]) if d["documento"] else None,
-        ("Unidades:", d["unidades_txt"]) if d["unidades_txt"] is not None else None,
-        ("Densidad:", d["densidad_txt"]) if d["densidad_txt"] is not None else None,
+        (f"{t('documento', idioma)}:", d["documento"]) if d["documento"] else None,
+        (f"{t('unidades', idioma)}:", d["unidades_txt"]) if d["unidades_txt"] is not None else None,
+        (f"{t('densidad', idioma)}:", d["densidad_txt"]) if d["densidad_txt"] is not None else None,
     ]
     if any(x is not None for x in dats_adic):
         els.append(Spacer(1, 1.2 * mm))
-        els.append(Paragraph("DATOS ADICIONALES", st["seccion_c"]))
+        els.append(Paragraph(t("datos_adicionales", idioma), st["seccion_c"]))
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_gris())
         els.append(Spacer(1, 1.0 * mm))
@@ -674,7 +665,7 @@ def _build_boleto_simple(
     # ── 6. OBSERVACIONES ──────────────────────────────────────────────────────
     if mostrar_detalles and d["observaciones"]:
         els.append(Spacer(1, 1.2 * mm))
-        els.append(Paragraph("OBSERVACIONES", st["seccion_c"]))
+        els.append(Paragraph(t("observaciones", idioma), st["seccion_c"]))
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_gris())
         els.append(Spacer(1, 1.0 * mm))
@@ -683,15 +674,15 @@ def _build_boleto_simple(
     # ── 6b. ANULADO (bloque rojo, espejo del TXT) ─────────────────────────────
     if (d["estado"] or "").upper() == "ANULADO":
         els.append(Spacer(1, 1.2 * mm))
-        els.append(_bloque_anulado(d, st, ancho_util))
+        els.append(_bloque_anulado(d, st, ancho_util, idioma=idioma))
 
     # ── 7. Firmas ─────────────────────────────────────────────────────────────
     els.append(Spacer(1, 4 * mm))
     firma_izq = Paragraph(
-        "________________________<br/><b>Firma Operador</b>", st["firma_c"],
+        f"________________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
     )
     firma_der = Paragraph(
-        "________________________<br/><b>Firma Conductor</b>", st["firma_c"],
+        f"________________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
     )
     firmas = Table(
         [[firma_izq, firma_der]],
@@ -741,25 +732,10 @@ def _build_pdf(
     orientacion: str = "portrait",
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
+    idioma: str = "es",
 ) -> io.BytesIO:
-    """PDF con N tickets de altura exacta por página usando Frames fijos.
-
-    Cada ticket ocupa exactamente (alto_pagina - mg_v*2 - gap*(n-1)) / n
-    puntos de alto y la escala tipográfica se ajusta (adaptativa) para que
-    todo el contenido del boleto quepa en esa franja sin cortes.
-
-    Modo de ancho fijo: en hojas de papel normal (Letter/A4...) el boleto se
-    imprime SIEMPRE estrecho (140mm) y centrado, sin importar cuántos boletos
-    se apilen (1..4 por hoja), para que coincida 1:1 con la previsualización.
-    En rollo térmico (80mm/58mm) el ancho es el del propio papel.
-
-    Referencia layout: TicketPreviewDialog (Flutter) → _buildSingleTicketBlock
-    (hoja) y _buildTicketTermico (rollo térmico compacto).
-    - tamano_papel: Letter | HalfLetter | A4 | 80mm | 58mm
-    - orientacion:  portrait | landscape
-    - boletos_por_hoja: 1..4 (térmicos forzados a 1)
-    """
-    d   = _dato(p)
+    """PDF con N tickets de altura exacta por página usando Frames fijos con i18n."""
+    d   = _dato(p, idioma)
     cab = _empresa_cabecera(empresa)
     anulado = (d["estado"] or "").upper() == "ANULADO"
 
@@ -784,12 +760,6 @@ def _build_pdf(
 
     compact = tamano_papel in ("80mm", "58mm")
 
-    # Ancho del boleto: SIEMPRE estrecho y centrado (140mm) en hojas de papel
-    # normal (Letter/A4...), sin importar cuántos boletos se apilen (1..4),
-    # para que el impreso coincida 1:1 con la previsualización.
-    # Térmico (80mm/58mm): el ancho es el del propio rollo (ancho_pag - 2*mg_lat).
-    # Se evita el centrado solo si la hoja es tan angosta como el ticket
-    # (HalfLetter) para no quedar con márgenes negativos.
     ANCHO_TICKET = 100  # mm, ancho fijo del boleto centrado
     centrado = (
         not compact
@@ -798,15 +768,9 @@ def _build_pdf(
     ancho_frame = ANCHO_TICKET * mm if centrado else (ancho_pag - 2 * mg_lat)
     margen_frame = (ancho_pag - ancho_frame) / 2 if centrado else mg_lat
 
-    # Altura disponible dividida en N frames iguales — cada ticket ocupa
-    # exactamente su franja: (alto_hoja - mg_v*2 - gap*(n-1)) / n
     alto_frame  = (alto_pag - mg_top - mg_bot - gap * (n - 1)) / n
 
     # ── Escala tipográfica adaptativa ─────────────────────────────────────────
-    # Se elige el tamaño más grande de la lista que permite que el boleto
-    # COMPLETO quepa en su franja (medido con _caben), garantizando que ningún
-    # ticket se corte ni desborde aunque el contenido crezca (obs largas, etc.),
-    # sin depender de estimaciones manuales de alto por ticket.
     escala_candidatas = {
         1: [10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5],
         2: [9.5,  9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0],
@@ -822,19 +786,19 @@ def _build_pdf(
             mostrar_encabezado=mostrar_encabezado,
             mostrar_detalles=mostrar_detalles,
             compact=compact,
+            idioma=idioma,
         )
         if _caben(flowables_probe, ancho_frame, alto_frame):
             st = st_probe
             break
     if st is None:
-        # Caso extremo (p. ej. observaciones gigantes): usar la menor escala.
         st = _estilos_simples(escala_candidatas[-1])
 
     # ── Canvas ───────────────────────────────────────────────────────────────
     buf = io.BytesIO()
     cnv = canvas.Canvas(buf, pagesize=pagina)
     cnv.setTitle(f"Boleto de Pesaje {d['numero']}")
-    cnv.setAuthor(cab["nombre"] or "Sistema de Pesaje")
+    cnv.setAuthor(cab["nombre"] or t("sistema_pesaje", idioma))
 
     # Marca de agua ANULADO (45°, semitransparente)
     if anulado:
@@ -844,7 +808,7 @@ def _build_pdf(
         cnv.setFont(FUENTE_BOLD, 72)
         cnv.translate(ancho_pag / 2, alto_pag / 2)
         cnv.rotate(45)
-        cnv.drawCentredString(0, 0, "ANULADO")
+        cnv.drawCentredString(0, 0, t("doc_anulado", idioma))
         cnv.restoreState()
 
     # Pie de página (fecha de impresión + estado + número de boleto)
@@ -853,17 +817,15 @@ def _build_pdf(
     cnv.setFillColor(GRIS_MEDIO)
     cnv.drawString(
         margen_frame, mg_bot / 2,
-        f"Impreso: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}   Estado: {d['estado']}",
+        f"{t('impreso', idioma)}: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}   {t('estado', idioma)}: {traducir_estado_boleto(d['estado'], idioma)}",
     )
     cnv.drawRightString(
         margen_frame + ancho_frame, mg_bot / 2,
-        f"Boleto N° {d['numero']}",
+        f"{t('col_boleto', idioma)} N° {d['numero']}",
     )
     cnv.restoreState()
 
     # ── Dibujar cada ticket en su Frame ──────────────────────────────────────
-    # Los frames se numeran de arriba (i=0) a abajo (i=n-1).
-    # y1 es la esquina inferior del frame en coordenadas ReportLab (origen abajo).
     for i in range(n):
         y1_frame = mg_bot + (n - 1 - i) * (alto_frame + gap)
 
@@ -874,7 +836,7 @@ def _build_pdf(
             height=alto_frame,
             leftPadding=0, rightPadding=0,
             topPadding=2,  bottomPadding=2,
-            showBoundary=0,  # cambiar a 1 para depuración visual
+            showBoundary=0,
         )
 
         flowables = _build_boleto_simple(
@@ -882,10 +844,10 @@ def _build_pdf(
             mostrar_encabezado=mostrar_encabezado,
             mostrar_detalles=mostrar_detalles,
             compact=compact,
+            idioma=idioma,
         )
         frame.addFromList(flowables, cnv)
 
-        # Línea de corte entre tickets (excepto tras el último)
         if i < n - 1:
             y_corte = y1_frame + alto_frame + gap / 2
             cnv.saveState()
@@ -893,7 +855,7 @@ def _build_pdf(
             cnv.setLineWidth(0.4)
             cnv.setDash(4, 3)
             cnv.line(margen_frame, y_corte, margen_frame + ancho_frame, y_corte)
-            cnv.setDash()  # restaurar línea sólida
+            cnv.setDash()
             cnv.setFont(FUENTE, 8)
             cnv.setFillColor(GRIS_MEDIO)
             cnv.drawString(margen_frame, y_corte + 1 * mm, "✂")
@@ -901,6 +863,7 @@ def _build_pdf(
 
     cnv.save()
     return buf
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -941,13 +904,10 @@ def _build_txt(
     empresa: Empresa | None = None,
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
+    idioma: str = "es",
 ) -> io.BytesIO:
-    """Ticket en texto plano con el mismo layout que el PDF (hoja Carta/A4).
-
-    Referencia: TicketPreviewDialog._buildSingleTicketBlock (Flutter).
-    IMPORTANTE: Si se modifica ese widget, actualizar esta función.
-    """
-    d   = _dato(p)
+    """Ticket en texto plano con el mismo layout que el PDF e i18n."""
+    d   = _dato(p, idioma)
     cab = _empresa_cabecera(empresa)
     anulado = (d["estado"] or "").upper() == "ANULADO"
 
@@ -958,64 +918,64 @@ def _build_txt(
     if mostrar_encabezado and cab["nombre"]:
         lineas.append(_centrar(cab["nombre"].upper()))
         if cab["rif"]:
-            lineas.append(_centrar(f"RIF: {cab['rif']}"))
+            lineas.append(_centrar(f"{t('etiqueta_rif', idioma)}: {cab['rif']}"))
         lineas.append(_linea("="))
 
     # ── 2. Título ─────────────────────────────────────────────────────────────
-    lineas.append(_centrar("BOLETO DE PESAJE DE BALANSOFT"))
+    lineas.append(_centrar(t("titulo_boleto", idioma)))
     lineas.append(_linea("-"))
     lineas.append("")
 
     # ── 3. DATOS ──────────────────────────────────────────────────────────────
-    lineas.append(_campo_txt("Serie - Boleto", d["numero"]))
-    lineas.append(_campo_txt("Fecha/Hora",     d["fecha_hora"]))
-    lineas.append(_campo_txt("Camión",         d["camion"]))
-    lineas.append(_campo_txt("Remolque",       d["remolque"]))
-    lineas.append(_campo_txt("Transporte",     d["transporte"]))
-    lineas.append(_campo_txt("Conductor",      d["conductor"]))
-    lineas.append(_campo_txt("Producto",       d["producto"]))
-    lineas.append(_campo_txt("Almacén",        d["almacen"]))
-    lineas.append(_campo_txt("Selección",      d["seleccion"]))
-    lineas.append(_campo_txt("Razón Social",   d["razon_social"]))
+    lineas.append(_campo_txt(t("serie_boleto", idioma), d["numero"]))
+    lineas.append(_campo_txt(t("fecha_hora", idioma),     d["fecha_hora"]))
+    lineas.append(_campo_txt(t("camion", idioma),         d["camion"]))
+    lineas.append(_campo_txt(t("remolque", idioma),       d["remolque"]))
+    lineas.append(_campo_txt(t("transporte", idioma),     d["transporte"]))
+    lineas.append(_campo_txt(t("conductor", idioma),      d["conductor"]))
+    lineas.append(_campo_txt(t("producto", idioma),       d["producto"]))
+    lineas.append(_campo_txt(t("almacen", idioma),        d["almacen"]))
+    lineas.append(_campo_txt(t("seleccion", idioma),      d["seleccion"]))
+    lineas.append(_campo_txt(t("razon_social", idioma),   d["razon_social"]))
     lineas.append("")
 
     # ── 4. LECTURA DE PESOS (tabla de columnas) ───────────────────────────────
     lineas.append(_linea("="))
-    lineas.append(_centrar("LECTURA DE PESOS"))
+    lineas.append(_centrar(t("lectura_pesos", idioma)))
     lineas.append(_linea("-"))
     lineas.append(
-        f"{'':<34}{'Fecha/Hora':>16} {'Peso Camion':>13} {'Peso Remolque':>13} {'Peso Total':>13}"
+        f"{'':<34}{t('fecha_hora', idioma):>16} {t('peso_camion', idioma):>13} {t('peso_remolque', idioma):>13} {t('peso_total', idioma):>13}"
     )
     lineas.append(_fila_lectura_txt(
-        f"Balanza Entrada: {d['balanza']}".rstrip(),
+        f"{t('balanza_entrada', idioma)}: {d['balanza']}".rstrip(),
         _fmt_dt(d["hora_entrada"]),
-        _fmt(d["pe_v"]), _fmt(d["pe_r"]), _fmt(d["pte"]),
+        _fmt(d["pe_v"], lang=idioma), _fmt(d["pe_r"], lang=idioma), _fmt(d["pte"], lang=idioma),
     ))
     if d["hora_salida"] is not None:
         lineas.append(_fila_lectura_txt(
-            f"Balanza Salida: {d['balanza']}".rstrip(),
+            f"{t('balanza_salida', idioma)}: {d['balanza']}".rstrip(),
             _fmt_dt(d["hora_salida"]),
-            _fmt(d["ps_v"] or Decimal("0")),
-            _fmt(d["ps_r"] or Decimal("0")),
-            _fmt(d["pts"]),
+            _fmt(d["ps_v"] or Decimal("0"), lang=idioma),
+            _fmt(d["ps_r"] or Decimal("0"), lang=idioma),
+            _fmt(d["pts"], lang=idioma),
         ))
     lineas.append(_linea("-"))
 
     # ── 5. Peso Neto / Declarado / Diferencia / Desviación ────────────────────
     neto_val = d["neto"] if d["neto"] is not None else Decimal("0")
-    just = " (DESPACHO)" if neto_val < 0 else (" (INGRESO)" if neto_val > 0 else "")
+    just = f" ({t('despacho', idioma)})" if neto_val < 0 else (f" ({t('ingreso', idioma)})" if neto_val > 0 else "")
     lineas.append(_fila_neto_txt(
-        f"PESO NETO{just}:",
-        _fmt(d["neto_camion"]), _fmt(d["neto_remolque"]), _fmt(neto_val),
+        f"{t('peso_neto', idioma)}{just}:",
+        _fmt(d["neto_camion"], lang=idioma), _fmt(d["neto_remolque"], lang=idioma), _fmt(neto_val, lang=idioma),
     ))
     if d["declarado"] is not None:
         lineas.append(_fila_neto_txt(
-            "PESO DECLARADO / DIFERENCIA:",
-            " ", _fmt(d["declarado"]), _fmt_sig(d["diferencia"]),
+            f"{t('peso_declarado_diferencia', idioma)}:",
+            " ", _fmt(d["declarado"], lang=idioma), _fmt_sig(d["diferencia"], lang=idioma),
         ))
         if d["desviacion"] is not None:
             lineas.append(_fila_neto_txt(
-                "DESVIACIÓN:", " ", " ", f"{_fmt(d['desviacion'])} %",
+                f"{t('desviacion', idioma)}:", " ", " ", f"{_fmt(d['desviacion'], lang=idioma)} %",
             ))
     lineas.append(_linea("="))
     lineas.append("")
@@ -1023,21 +983,21 @@ def _build_txt(
     # ── 6. DATOS ADICIONALES ──────────────────────────────────────────────────
     if d["documento"] or d["unidades_txt"] is not None or d["densidad_txt"] is not None:
         lineas.append(_linea("="))
-        lineas.append(_centrar("DATOS ADICIONALES"))
+        lineas.append(_centrar(t("datos_adicionales", idioma)))
         lineas.append(_linea("-"))
         if d["documento"]:
-            lineas.append(_campo_txt("Documento", d["documento"]))
+            lineas.append(_campo_txt(t("documento", idioma), d["documento"]))
         if d["unidades_txt"] is not None:
-            lineas.append(_campo_txt("Unidades", d["unidades_txt"]))
+            lineas.append(_campo_txt(t("unidades", idioma), d["unidades_txt"]))
         if d["densidad_txt"] is not None:
-            lineas.append(_campo_txt("Densidad", d["densidad_txt"]))
+            lineas.append(_campo_txt(t("densidad", idioma), d["densidad_txt"]))
         lineas.append(_linea("="))
         lineas.append("")
 
     # ── 7. OBSERVACIONES ──────────────────────────────────────────────────────
     if mostrar_detalles and d["observaciones"]:
         lineas.append(_linea("="))
-        lineas.append(_centrar("OBSERVACIONES"))
+        lineas.append(_centrar(t("observaciones", idioma)))
         lineas.append(_linea("-"))
         for obs_linea in d["observaciones"].splitlines():
             for chunk_start in range(0, max(1, len(obs_linea)), ANCHO_TXT - 5):
@@ -1047,9 +1007,9 @@ def _build_txt(
     # ── ANULADO ───────────────────────────────────────────────────────────────
     if anulado:
         lineas.append(_linea("*"))
-        motivo = d["motivo_anulacion"] or "No especificado"
-        lineas.append(_centrar("*** DOCUMENTO ANULADO ***"))
-        lineas.append(_centrar(f"Motivo: {motivo}"))
+        motivo = d["motivo_anulacion"] or t("no_especificado", idioma)
+        lineas.append(_centrar(t("doc_anulado_banner", idioma)))
+        lineas.append(_centrar(f"{t('motivo', idioma)}: {motivo}"))
         lineas.append(_linea("*"))
         lineas.append("")
 
@@ -1059,21 +1019,21 @@ def _build_txt(
         f"{'_' * 24}".center(ancho_col) + f"{'_' * 24}".center(ancho_col)
     )
     lineas.append(
-        "Firma Operador".center(ancho_col) + "Firma Conductor".center(ancho_col)
+        t("firma_operador", idioma).center(ancho_col) + t("firma_conductor", idioma).center(ancho_col)
     )
     lineas.append("")
 
     # ── Pie ───────────────────────────────────────────────────────────────────
     lineas.append(_linea("-"))
-    lineas.append(f"Estado: {d['estado']}")
-    lineas.append(f"Impreso: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    lineas.append(f"{t('estado', idioma)}: {traducir_estado_boleto(d['estado'], idioma)}")
+    lineas.append(f"{t('impreso', idioma)}: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     lineas.append(_linea("-"))
 
     return io.BytesIO("\n".join(lineas).encode("utf-8"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# API pública — firmas NO SE MODIFICAN (llamadas desde pesajes.py)
+# API pública
 # ─────────────────────────────────────────────────────────────────────────────
 def generar_ticket_pdf(
     p: BoletoPesaje,
@@ -1083,8 +1043,9 @@ def generar_ticket_pdf(
     orientacion: str = "portrait",
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
+    idioma: str = "es",
 ) -> StreamingResponse:
-    """Retorna el PDF del boleto con layout fiel a TicketPreviewDialog (Flutter)."""
+    """Retorna el PDF del boleto con layout fiel a TicketPreviewDialog (Flutter) e i18n."""
     buf = _build_pdf(
         p,
         empresa=empresa,
@@ -1093,6 +1054,7 @@ def generar_ticket_pdf(
         orientacion=orientacion,
         mostrar_encabezado=mostrar_encabezado,
         mostrar_detalles=mostrar_detalles,
+        idioma=idioma,
     )
     buf.seek(0)
     nombre = f"ticket_{p.numero_boleto or p.boleto}.pdf"
@@ -1104,10 +1066,12 @@ def generar_ticket_pdf(
 
 
 def generar_ticket_txt(
-    p: BoletoPesaje, empresa: Empresa | None = None
+    p: BoletoPesaje,
+    empresa: Empresa | None = None,
+    idioma: str = "es",
 ) -> StreamingResponse:
-    """Retorna el ticket en texto plano con layout fiel a TicketPreviewDialog (Flutter)."""
-    buf = _build_txt(p, empresa=empresa)
+    """Retorna el ticket en texto plano con layout fiel a TicketPreviewDialog (Flutter) e i18n."""
+    buf = _build_txt(p, empresa=empresa, idioma=idioma)
     buf.seek(0)
     nombre = f"ticket_{p.numero_boleto or p.boleto}.txt"
     return StreamingResponse(

@@ -530,6 +530,36 @@
           })
           .join('') || '<li class="list-group-item text-secondary">Sin credenciales</li>';
 
+        var dispositivos = (d.dispositivos || [])
+          .map(function (x) {
+            var titular = x.hardware_id === d.hardware_titular;
+            var activo = x.activo === false
+              ? '<span class="badge bg-secondary">Inactivo</span>'
+              : '<span class="badge bg-light text-dark">Activo</span>';
+            var accion = titular
+              ? '<span class="badge bg-primary">Titular</span>'
+              : x.activo === false
+              ? ''
+              : '<button class="btn btn-outline-primary btn-sm" data-titular="' +
+                esc(x.hardware_id) + '">Designar titular</button>';
+            return (
+              '<li class="list-group-item d-flex justify-content-between align-items-center gap-2">' +
+              '<div><strong>' + esc(x.nombre_equipo || '—') + '</strong><br>' +
+              '<span class="small text-secondary font-monospace">' + esc(x.hardware_id) + '</span><br>' +
+              '<span class="small text-secondary">Última conexión: ' +
+              (x.ultima_conexion
+                ? window.BalansoftHelpers.fmtFecha(x.ultima_conexion)
+                : '—') + '</span></div>' +
+              '<div class="text-end">' +
+              '<div class="mb-1">' + activo +
+              (titular ? ' <span class="badge bg-primary">Titular</span>' : '') + '</div>' +
+              accion + '</div>' +
+              '</li>'
+            );
+          })
+          .join('') ||
+          '<li class="list-group-item text-secondary">Sin equipos registrados</li>';
+
         bodyModal.innerHTML =
           '<div class="mb-3">' +
           '<h6 class="mb-1">' + esc(d.cuenta.nombre_fiscal || '—') + '</h6>' +
@@ -540,11 +570,52 @@
           '<h6 class="text-uppercase small text-secondary">Licencias</h6>' +
           '<ul class="list-group mb-3">' + licencias + '</ul>' +
           '<h6 class="text-uppercase small text-secondary">Credenciales</h6>' +
-          '<ul class="list-group">' + credenciales + '</ul>';
+          '<ul class="list-group mb-3">' + credenciales + '</ul>' +
+          '<h6 class="text-uppercase small text-secondary">Equipos ' +
+          '<span class="text-lowercase fw-normal">(solo el titular instala como servidor)</span></h6>' +
+          '<ul class="list-group">' + dispositivos + '</ul>';
+
+        bodyModal
+          .querySelectorAll('button[data-titular]')
+          .forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              designarTitular(d.cuenta.id_cuenta, btn.getAttribute('data-titular'));
+            });
+          });
       })
       .catch(function (err) {
         bodyModal.innerHTML =
           '<div class="alert alert-danger alert-box mb-0">' + esc(err.message) + '</div>';
+      });
+  }
+
+  /* ---------- Designar equipo titular de la licencia ---------- */
+  function designarTitular(idCuenta, hardwareId) {
+    if (!confirm(
+      '¿Designar este equipo como TITULAR de la licencia?\n\n' +
+        'Equipo: ' + hardwareId + '\n\n' +
+        'Pasará a SERVIDOR_LOCAL (podrá instalarse como servidor) y el resto de ' +
+        'equipos quedarán como LOCAL (trabajadores).'
+    )) {
+      return;
+    }
+    window.balansoftApi('/panel/cuentas/' + idCuenta + '/titular', {
+      method: 'POST',
+      body: { hardware_id: hardwareId },
+    })
+      .then(function () {
+        detalleCuenta(idCuenta);
+        listarCuentas();
+        if (window.showToast) {
+          window.showToast('Equipo titular actualizado: ' + hardwareId, 'success');
+        }
+      })
+      .catch(function (err) {
+        if (window.showToast) {
+          window.showToast(err.message, 'danger');
+        } else {
+          alert(err.message);
+        }
       });
   }
 
@@ -582,6 +653,11 @@
           '<li><strong>Tier:</strong> ' + esc(lic.licencia_tier || '—') + '</li>' +
           '<li><strong>Máx. equipos:</strong> ' + (lic.max_equipos != null ? lic.max_equipos : '—') + '</li>' +
           '<li><strong>Máx. usuarios:</strong> ' + (lic.max_usuarios != null ? lic.max_usuarios : '—') + '</li>' +
+          '<li><strong>Equipo titular:</strong> ' +
+          (d.hardware_titular
+            ? '<code>' + esc(d.hardware_titular) + '</code>'
+            : '<span class="text-muted">sin asignar — se amarra en la primera activación</span>') +
+          '</li>' +
           '<li><strong>Detalle:</strong> ' + vig.detail + '</li>' +
           '</ul>';
       })
@@ -604,6 +680,18 @@
       };
     }
     var diff = Math.round((fecha.getTime() - hoy.getTime()) / 86400000);
+    // AVAILABLE = licencia VIRGEN en el LM: no está rechazada, simplemente
+    // todavía no se amarró a ningún equipo. Se activa y se ata (como titular
+    // único) en la primera activación de la estación.
+    if (est === 'AVAILABLE' || est === 'DEVICE_NOT_REGISTERED') {
+      return {
+        label: 'Disponible',
+        cls: 'bg-info',
+        detail:
+          'Licencia virgen: el primer equipo que la active queda amarrado a ella ' +
+          'como titular (SERVIDOR_LOCAL) y podrá instalarse como servidor.',
+      };
+    }
     if (est !== 'ACTIVA') {
       return {
         label: est,

@@ -111,7 +111,14 @@ class _CountingRepo implements IWeighingRepository {
   Future<List<Weighing>> listPendientes() async => [];
 
   @override
-  Future<Response> getTicketPdf(String boleto) async =>
+  Future<Response> getTicketPdf(
+    String boleto, {
+    int boletosPorHoja = 1,
+    String tamanoPapel = 'Letter',
+    String orientacion = 'portrait',
+    bool mostrarEncabezado = true,
+    bool mostrarDetalles = true,
+  }) async =>
       Response(requestOptions: RequestOptions(path: ''));
 
   @override

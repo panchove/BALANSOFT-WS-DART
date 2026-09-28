@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
@@ -121,17 +122,53 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
       }
     });
 
-    await _verificarWServer();
-    await _verificarPostgresInstalado();
-    await _verificarEntorno(); // conexión BD + drivers
-
-    if (!mounted) return;
-    setState(() => _verificando = false);
+    // Cada comprobación es independiente: un fallo puntual (binario ausente,
+    // proceso sin permisos, WServer caído) no puede abortar el resto ni dejar
+    // la pantalla en "verificando" para siempre.
+    try {
+      await _verificarWServer();
+      await _verificarPostgresInstalado();
+      await _verificarEntorno(); // conexión BD + drivers
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          for (final item in _items) {
+            if (item.estado == _EstadoCheck.cargando) {
+              item.estado = _EstadoCheck.error;
+              item.detalle = 'No se pudo completar la verificación: $e';
+            }
+          }
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _verificando = false);
+    }
   }
 
   // ─── 1. API local (WServer) ────────────────────────────────────────────
   Future<void> _verificarWServer() async {
-    final ok = await WServerManager.ensureRunning();
+    if (widget.setupMode) {
+      // Solo en instalación se permite arrancar el backend local.
+      final ok = await WServerManager.ensureRunning();
+      if (!mounted) return;
+      setState(() {
+        _actualizar(
+          'wserver',
+          ok ? _EstadoCheck.ok : _EstadoCheck.error,
+          ok
+              ? 'Respondiendo en $_baseLocal'
+              : 'No se detecta el WServer local en $_baseLocal. '
+                  'Verifica que el binario WServer esté junto a la app o '
+                  'definido en WSERVER_PATH.',
+        );
+      });
+      return;
+    }
+
+    // Verificación de integridad desde Ajustes: es un DIAGNÓSTICO de solo
+    // lectura. Arrancar procesos, pedir privilegios (pkexec) o reiniciar el
+    // servicio desde aquí congelaba la sesión del operador.
+    final ok = await WServerManager.isOnline();
     if (!mounted) return;
     setState(() {
       _actualizar(
@@ -139,9 +176,9 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
         ok ? _EstadoCheck.ok : _EstadoCheck.error,
         ok
             ? 'Respondiendo en $_baseLocal'
-            : 'No se detecta el WServer local en $_baseLocal. '
-                'Verifica que el binario WServer esté junto a la app o '
-                'definido en WSERVER_PATH.',
+            : 'La API local no responde en $_baseLocal. Revisa que el WServer '
+                'esté ejecutándose y que la URL de Ajustes → Conexiones sea '
+                'correcta.',
       );
     });
   }
@@ -225,16 +262,10 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
       return;
     }
 
-    // ── DEBUG temporal (diagnóstico) ──────────────────────────────────────
-    debugPrint('🔍 [DEBUG] _baseLocal = $_baseLocal');
-    debugPrint('🔍 [DEBUG] env = $env');
-    debugPrint('🔍 [DEBUG] env.keys = ${env.keys.toList()}');
-    debugPrint('🔍 [DEBUG] env["postgres"] = ${env['postgres']}');
     debugPrint(
         '🔍 [DEBUG] env["postgres"].runtimeType = ${env['postgres'].runtimeType}');
     debugPrint(
         '🔍 [DEBUG] env["postgres"] is Map = ${env['postgres'] is Map}');
-    debugPrint('🔍 [DEBUG] env["hardware"] = ${env['hardware']}');
     debugPrint(
         '🔍 [DEBUG] env["hardware"] is Map = ${env['hardware'] is Map}');
 
@@ -243,20 +274,12 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
     final postgres = postgresRaw is Map
         ? Map<String, dynamic>.from(postgresRaw)
         : <String, dynamic>{};
-    if (postgresRaw != null && postgresRaw is! Map) {
-      debugPrint('🔍 [DEBUG] ADVERTENCIA: env["postgres"] NO es un Map '
-          '(${postgresRaw.runtimeType}); se trata como vacío.');
-    }
     final conectado = postgres['conectado'] == true;
     final esquemaListo = postgres['esquema_listo'] == true;
     final nTablas = postgres['n_tablas'];
     final bd = postgres['bd'] ?? '';
     final sufijoBd = bd.isEmpty ? '' : ' «$bd»';
 
-    debugPrint('🔍 [DEBUG] conectado = $conectado');
-    debugPrint('🔍 [DEBUG] esquemaListo = $esquemaListo');
-    debugPrint('🔍 [DEBUG] nTablas = $nTablas');
-    debugPrint('🔍 [DEBUG] bd = $bd');
 
     if (!mounted) return;
     setState(() {
@@ -280,10 +303,6 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
     final hardware = hardwareRaw is Map
         ? Map<String, dynamic>.from(hardwareRaw)
         : <String, dynamic>{};
-    if (hardwareRaw != null && hardwareRaw is! Map) {
-      debugPrint('🔍 [DEBUG] ADVERTENCIA: env["hardware"] NO es un Map '
-          '(${hardwareRaw.runtimeType}); se trata como vacío.');
-    }
     final pyserial = hardware['pyserial'] == true;
     final nBalanza = hardware['balanzas_configuradas'];
     final puertos = hardware['puertos_serial'];
@@ -323,8 +342,8 @@ class _EnvironmentCheckScreenState extends State<EnvironmentCheckScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: SwsColors.darkCard,
-        title: const Text('Instalar Requisitos',
-            style: TextStyle(color: SwsColors.white)),
+        title: Text('install_requirements'.tr(),
+            style: const TextStyle(color: SwsColors.white)),
 content: Text(
           'Para que esta máquina funcione como Servidor Principal, debes instalar '
           'PostgreSQL (versión 14 o superior).\n\n'
@@ -337,7 +356,7 @@ content: Text(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cerrar'),
+            child: Text('close'.tr()),
           ),
         ],
       ),
@@ -347,8 +366,13 @@ content: Text(
   @override
   Widget build(BuildContext context) {
     return SetupLayoutWrapper(
-      onBack: () =>
-          Navigator.of(context).pushReplacementNamed('/mode_selection'),
+      onBack: () {
+        if (widget.setupMode) {
+          Navigator.of(context).pushReplacementNamed('/mode_selection');
+        } else {
+          Navigator.of(context).pop();
+        }
+      },
       children: [
         _bannerIntro(context),
         const SizedBox(height: 16),
@@ -366,18 +390,17 @@ content: Text(
                 color: SwsColors.success.withValues(alpha: 0.35),
               ),
             ),
-            child: const Padding(
-              padding: EdgeInsets.all(14),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle_outline,
+                  const Icon(Icons.check_circle_outline,
                       color: SwsColors.success, size: 20),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Entorno listo. Continúa para configurar la conexión '
-                      'a la base de datos local.',
-                      style: TextStyle(fontSize: 13, color: Colors.white70),
+                      'env_ready_db'.tr(),
+                      style: const TextStyle(fontSize: 13, color: Colors.white70),
                     ),
                   ),
                 ],
@@ -398,20 +421,16 @@ content: Text(
               padding: const EdgeInsets.all(14),
               child: Column(
                 children: [
-                  const Row(
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.flag_outlined,
+                      const Icon(Icons.flag_outlined,
                           color: SwsColors.warning, size: 20),
-                      SizedBox(width: 10),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Todo listo para instalar. Solo falta crear la base '
-                          'de datos local. Ingresa las credenciales de '
-                          'PostgreSQL (usuario con permisos de superusuario) '
-                          'y el sistema creará «balansoft_ws_local» con su '
-                          'esquema automáticamente.',
-                          style: TextStyle(
+                          'ready_to_install_desc'.tr(),
+                          style: const TextStyle(
                               fontSize: 13, color: Colors.white70),
                         ),
                       ),
@@ -423,7 +442,7 @@ content: Text(
                     child: FilledButton.tonalIcon(
                       onPressed: _irAConfigurarBd,
                       icon: const Icon(Icons.login_outlined, size: 18),
-                      label: const Text('Ingresar credenciales'),
+                      label: Text('enter_credentials'.tr()),
                     ),
                   ),
                 ],
@@ -471,12 +490,12 @@ content: Text(
                         ? FilledButton.tonalIcon(
                             onPressed: _irAConfigurarBd,
                             icon: const Icon(Icons.storage_outlined, size: 18),
-                            label: const Text('Configurar base de datos'),
+                            label: Text('configure_db'.tr()),
                           )
                         : FilledButton.tonalIcon(
                             onPressed: _descargarDependencias,
                             icon: const Icon(Icons.build_outlined, size: 18),
-                            label: const Text('Ver instaladores'),
+                            label: Text('view_installers'.tr()),
                           ),
                   ),
                 ],
@@ -497,7 +516,7 @@ content: Text(
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.refresh),
-                label: const Text('Verificar de nuevo'),
+                label: Text('verify_again'.tr()),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: BorderSide(
@@ -514,7 +533,7 @@ content: Text(
                     ? null
                     : _continuar,
                 icon: const Icon(Icons.arrow_forward),
-                label: const Text('Continuar'),
+                label: Text('continue'.tr()),
                 style: FilledButton.styleFrom(
                   backgroundColor: SwsColors.accent,
                   foregroundColor: Colors.white,
@@ -543,14 +562,16 @@ content: Text(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.verified_outlined, color: SwsColors.accentLight),
-                SizedBox(width: 10),
+                const Icon(Icons.verified_outlined, color: SwsColors.accentLight),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Instalación de Balansoft-WS',
-                    style: TextStyle(
+                    widget.setupMode
+                        ? 'Instalación de Balansoft-WS'
+                        : 'Verificación de integridad del sistema',
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                       color: SwsColors.white,
@@ -560,10 +581,9 @@ content: Text(
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Antes de usar la estación verificamos que el entorno esté listo: '
-              'API local, PostgreSQL, conexión a la BD y drivers de balanza.',
-              style: TextStyle(fontSize: 13, color: Colors.white60),
+            Text(
+              'env_check_intro'.tr(),
+              style: const TextStyle(fontSize: 13, color: Colors.white60),
             ),
             const SizedBox(height: 10),
             Text(
@@ -632,9 +652,9 @@ content: Text(
                             color: Colors.white.withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
-                            'opcional',
-                            style: TextStyle(
+                          child: Text(
+                            'optional'.tr(),
+                            style: const TextStyle(
                               fontSize: 10,
                               color: Colors.white70,
                             ),

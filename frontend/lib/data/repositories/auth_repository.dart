@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/config/company_draft.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/i_auth_repository.dart';
 import '../../core/security/device_info.dart';
@@ -111,6 +112,13 @@ class AuthRepository implements IAuthRepository {
       }
     }
 
+    // En la instalación el usuario pudo definir los datos de la empresa antes
+    // del login: en cuanto hay token se aplica el borrador a la BD local.
+    // Se ESPERA para que al entrar el sistema ya esté operativo, pero un fallo
+    // nunca impide el login (el borrador queda guardado y el wizard post-login
+    // ofrece el reintento al primer ADMIN).
+    await _aplicarBorradorEmpresa(user);
+
     // Best-effort: registrar la identidad local y empujar la cola de usuarios.
     // Nunca debe hacer fallar el login: se captura cualquier error.
     unawaited(_sincronizarIdentidadYUsuarios(
@@ -123,6 +131,35 @@ class AuthRepository implements IAuthRepository {
     ));
 
     return user;
+  }
+
+  /// Aplica el borrador de empresa capturado en la instalación.
+  ///
+  /// Envía los datos a `PUT /api/v1/empresa` (solo `ADMIN`), sube el logo
+  /// pendiente y marca el onboarding como cerrado para que no vuelva a
+  /// aparecer el wizard posterior al login.
+  Future<void> _aplicarBorradorEmpresa(UserModel user) async {
+    if (!user.isAdmin) return;
+    final draft = await CompanyDraft.leer();
+    if (draft == null || draft.vacio) return;
+    try {
+      final body = draft.data.toApiBody();
+      final bytes = await CompanyDraft.leerLogoBytes();
+      if (bytes != null) {
+        body['logo_url'] = await _apiClient.uploadPhotoFile(
+          bytes,
+          await CompanyDraft.leerLogoNombre() ?? 'logo.png',
+          carpeta: 'empresa',
+        );
+      }
+      await _apiClient.updateEmpresaPerfil(body);
+      await CompanyDraft.limpiar();
+      await AppConfig.setOnboardingCompletado();
+      await AppConfig.setEmpresaSetupCapturado();
+    } catch (_) {
+      // Se conserva el borrador: el wizard post-login seguirá disponible para
+      // reintentar y el operador no se queda sin datos de empresa.
+    }
   }
 
   /// Login local estándar (valida licencia con el LM) y, si la red cae, cae al

@@ -7,6 +7,7 @@ class ApiClient {
   String _baseUrl;
   String? _serverToken;
   Future<String?> Function()? _refreshTokenHandler;
+  String Function()? _languageProvider;
   bool _refrescando = false;
 
   String get baseUrl => _baseUrl;
@@ -36,10 +37,22 @@ class ApiClient {
     _refreshTokenHandler = handler;
   }
 
+  void setLanguageProvider(String Function() provider) {
+    _languageProvider = provider;
+  }
+
   void _setupInterceptor() {
     _dio.interceptors.add(
       InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final lang = _languageProvider?.call();
+          if (lang != null && lang.isNotEmpty) {
+            options.headers['Accept-Language'] = lang;
+          }
+          return handler.next(options);
+        },
         onError: (error, handler) async {
+
           // No reintentar refresh sobre el propio endpoint de refresh ni en
           // cascada: evita bucles infinitos cuando el refresh token es
           // inválido (p.ej. tras reinstalar/vaciar la BD del backend).
@@ -133,7 +146,13 @@ class ApiClient {
 
   Future<bool> health() async {
     try {
-      final response = await _dio.get('$_baseUrl${ApiConstants.health}');
+      final response = await _dio.get(
+        '$_baseUrl${ApiConstants.health}',
+        options: Options(
+          connectTimeout: const Duration(seconds: 3),
+          receiveTimeout: const Duration(seconds: 3),
+        ),
+      );
       return response.statusCode == 200;
     } on DioException {
       return false;
@@ -381,20 +400,20 @@ class ApiClient {
 
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletos_por_hoja = 1,
-    String tamano_papel = 'Letter',
+    int boletosPorHoja = 1,
+    String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
-    bool mostrar_encabezado = true,
-    bool mostrar_detalles = true,
+    bool mostrarEncabezado = true,
+    bool mostrarDetalles = true,
   }) async {
     final response = await _dio.get(
       '$_baseUrl${ApiConstants.weighingPdf(boleto)}',
       queryParameters: {
-        'boletos_por_hoja': boletos_por_hoja,
-        'tamano_papel': tamano_papel,
+        'boletos_por_hoja': boletosPorHoja,
+        'tamano_papel': tamanoPapel,
         'orientacion': orientacion,
-        'mostrar_encabezado': mostrar_encabezado,
-        'mostrar_detalles': mostrar_detalles,
+        'mostrar_encabezado': mostrarEncabezado,
+        'mostrar_detalles': mostrarDetalles,
       },
       options: Options(responseType: ResponseType.bytes),
     );
@@ -576,6 +595,35 @@ Future<Response> getMonthlyReport(int year, int month) async {
       options: Options(responseType: ResponseType.bytes),
     );
     return response;
+  }
+
+  /// Exporta el reporte de pesajes en PDF (formato_reporte de la empresa).
+  Future<Response> exportPdf(Map<String, dynamic> params) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.reportExportPdf}',
+      queryParameters: params,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response;
+  }
+
+  /// Formatos configurados para la empresa (formato_ticket, formato_reporte,
+  /// idioma) con valores por defecto si la API no responde.
+  Future<Map<String, String>> getPreferenciasEmpresa() async {
+    try {
+      final perfil = await getEmpresaPerfil();
+      return {
+        'formato_ticket': '${perfil['formato_ticket'] ?? 'PDF'}'.toUpperCase(),
+        'formato_reporte': '${perfil['formato_reporte'] ?? 'EXCEL'}'.toUpperCase(),
+        'idioma': '${perfil['idioma'] ?? 'es'}',
+      };
+    } catch (_) {
+      return const {
+        'formato_ticket': 'PDF',
+        'formato_reporte': 'EXCEL',
+        'idioma': 'es',
+      };
+    }
   }
 
   Future<Response> getList(String path) async {

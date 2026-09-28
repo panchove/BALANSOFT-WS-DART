@@ -195,6 +195,60 @@ class TestPesajeEndpoints:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/pdf")
 
+    async def test_pdf_con_parametros_layout(self, client):
+        created = (
+            await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": "LAYOUT-01",
+                    "transporte_nombre": "T",
+                    "conductor_nombre": "C",
+                    "producto_nombre": "P",
+                    "almacen_nombre": "A",
+                    "balanza_nombre": "B",
+                    "tercero_nombre": "X",
+                    "peso_entrada_vehiculo": "42000",
+                },
+            )
+        ).json()
+        boleto = created["boleto"]
+        params = {
+            "boletos_por_hoja": 3,
+            "tamano_papel": "A4",
+            "orientacion": "landscape",
+            "mostrar_encabezado": False,
+            "mostrar_detalles": False,
+        }
+        r = await client.get(f"/api/v1/weighing/{boleto}/pdf", params=params)
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("application/pdf")
+
+    async def test_txt_stream(self, client):
+        created = (
+            await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": "TXT-01",
+                    "transporte_nombre": "T",
+                    "conductor_nombre": "C",
+                    "producto_nombre": "P",
+                    "almacen_nombre": "A",
+                    "balanza_nombre": "B",
+                    "tercero_nombre": "X",
+                    "peso_entrada_vehiculo": "35000",
+                },
+            )
+        ).json()
+        boleto = created["boleto"]
+        r = await client.get(f"/api/v1/weighing/{boleto}/txt")
+        assert r.status_code == 200
+        assert "text/plain" in r.headers["content-type"]
+        assert "TXT-01" in r.text
+
+    async def test_txt_404_boleto_inexistente(self, client):
+        r = await client.get(f"/api/v1/weighing/{uuid.uuid4()}/txt")
+        assert r.status_code == 404
+
     async def test_404_boleto_inexistente(self, client):
         r = await client.get(f"/api/v1/weighing/boleto/{uuid.uuid4()}")
         assert r.status_code == 404

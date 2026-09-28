@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n/translations.dart';
 
 /// Accesos rápidos flotantes compactos (solo icono y badge de atajo).
 class QuickActionsBar extends StatelessWidget {
@@ -34,6 +35,14 @@ class QuickActionsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = Localizations.localeOf(context).languageCode;
+    final lPesajeManual = AppTranslations.tr('qa_pesaje_manual', langCode: lang);
+    final lPesajeAuto = AppTranslations.tr('qa_pesaje_auto', langCode: lang);
+    final lAjustesInv = AppTranslations.tr('qa_ajustes_inv', langCode: lang);
+    final lMovimientos = AppTranslations.tr('qa_movimientos', langCode: lang);
+    final lAuditoria = AppTranslations.tr('qa_auditoria', langCode: lang);
+    final lAyuda = AppTranslations.tr('qa_ayuda', langCode: lang);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
@@ -42,36 +51,36 @@ class QuickActionsBar extends StatelessWidget {
           children: [
             _QuickActionCard(
               icon: Icons.edit_note,
-              label: 'Pesaje Manual',
+              label: lPesajeManual,
               shortcut: 'Ctrl+Shift+N',
-              onTap: () => _handleTap(context, 'Pesaje Manual', onPesajeManual),
+              onTap: () => _handleTap(context, lPesajeManual, onPesajeManual),
             ),
             _QuickActionCard(
               icon: Icons.smart_toy_outlined,
-              label: 'Pesaje Auto',
+              label: lPesajeAuto,
               shortcut: 'Ctrl+N',
-              onTap: () => _handleTap(context, 'Pesaje Auto', onPesajeAuto),
+              onTap: () => _handleTap(context, lPesajeAuto, onPesajeAuto),
             ),
             _QuickActionCard(
               icon: Icons.tune,
-              label: 'Ajustes Inv.',
+              label: lAjustesInv,
               shortcut: 'Ctrl+A',
-              onTap: () => _handleTap(context, 'Ajustes Inv.', onAjustesInventario),
+              onTap: () => _handleTap(context, lAjustesInv, onAjustesInventario),
             ),
             _QuickActionCard(
               icon: Icons.swap_horiz,
-              label: 'Movimientos',
-              onTap: () => _handleTap(context, 'Movimientos', onMovimientos),
+              label: lMovimientos,
+              onTap: () => _handleTap(context, lMovimientos, onMovimientos),
             ),
             _QuickActionCard(
               icon: Icons.fact_check_outlined,
-              label: 'Auditoría',
-              onTap: () => _handleTap(context, 'Auditoría', onAuditoria),
+              label: lAuditoria,
+              onTap: () => _handleTap(context, lAuditoria, onAuditoria),
             ),
             _QuickActionCard(
               icon: Icons.help_outline,
-              label: 'Ayuda',
-              onTap: () => _handleTap(context, 'Ayuda', onAyuda),
+              label: lAyuda,
+              onTap: () => _handleTap(context, lAyuda, onAyuda),
             ),
           ],
         ),

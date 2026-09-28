@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -45,6 +46,7 @@ from app.services.password_reset_service import (
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+logger = logging.getLogger(__name__)
 
 
 def _company_out(e: Empresa) -> CompanyOut:
@@ -57,7 +59,13 @@ def _company_out(e: Empresa) -> CompanyOut:
         licencia_status=e.licencia_status,
         licencia_expira=e.licencia_expira,
         formato_ticket=getattr(e, "formato_ticket", "PDF"),
+        formato_reporte=getattr(e, "formato_reporte", "EXCEL"),
+        idioma=getattr(e, "idioma", "es") or "es",
+        logo_url=getattr(e, "logo_url", None),
         ruta_exportacion_reportes=getattr(e, "ruta_exportacion_reportes", None),
+        direccion=getattr(e, "direccion", None),
+        telefono=getattr(e, "telefono", None),
+        email=getattr(e, "email", None),
     )
 
 
@@ -294,6 +302,15 @@ async def login_central(
             f"{server_url}/api/v1/auth/login", json=cuerpo
         )
     except httpx.TransportError as exc:
+        # Se deja rastro en el log de la estación: si el instalador reporta
+        # "no conecta con el servidor", aquí está la causa real (DNS, TLS,
+        # proxy, central caído).
+        logger.error(
+            "login-central: fallo de red contra %s (%s): %s",
+            server_url,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=502,
             detail=f"No se pudo conectar con el servidor central: {exc}",
@@ -307,13 +324,43 @@ async def login_central(
         except Exception:  # noqa: BLE001 - respuesta no JSON del central
             pass
         codigo = resp.status_code if resp.status_code in (400, 401, 403) else 502
+        # Log obligatorio: el 502 que ve el instalador es genérico, el motivo
+        # exacto del central solo queda aquí.
+        logger.warning(
+            "login-central: el central %s respondió %s para %s: %s",
+            server_url,
+            resp.status_code,
+            payload.email,
+            detalle,
+        )
         raise HTTPException(status_code=codigo, detail=detalle)
 
     central = resp.json()
     usuario_central = central.get("user") or {}
     cuenta = central.get("cuenta") or {}
     licencia = central.get("licencia") or {}
+    dispositivo = central.get("dispositivo") or {}
+    rol_dispositivo = str(dispositivo.get("rol") or "LOCAL").upper()
     now = datetime.now(UTC).replace(tzinfo=None)
+
+    # 1b) Regla del titular: solo el equipo dueño de la licencia puede
+    # instalarse como SERVIDOR. El central ya decidió quién es (primer
+    # dispositivo en activar la licencia); aquí se rechaza al resto con 403
+    # para que la instalación no continúe por un camino que no le corresponde.
+    if payload.modo_solicitado == "SERVIDOR" and rol_dispositivo != "SERVIDOR_LOCAL":
+        hardware = (licencia.get("hardware_id") or "").strip()
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Esta máquina no es la titular de la licencia, por lo que no puede "
+                "instalarse como servidor. Configure el equipo como trabajador local."
+                + (
+                    f" La licencia está atada al equipo {hardware}."
+                    if hardware and hardware != (payload.hardware_id or "")
+                    else ""
+                )
+            ),
+        )
 
     # 2) Espejo local: empresa única por RIF/NIT.
     rif = (cuenta.get("rif_nit") or "").upper()
@@ -327,6 +374,15 @@ async def login_central(
         db.add(empresa)
     empresa.nombre_fiscal = cuenta.get("nombre_fiscal") or empresa.nombre_fiscal or rif
     empresa.nombre_comercial = cuenta.get("nombre_comercial") or empresa.nombre_fiscal
+    # Los datos de contacto que el proveedor ya cargó en la cuenta central
+    # llegan precargados al formulario de empresa de la estación; el operador
+    # solo completa lo que falte (logo, formatos, carpeta de reportes).
+    if cuenta.get("direccion"):
+        empresa.direccion = cuenta["direccion"]
+    if cuenta.get("telefono"):
+        empresa.telefono = cuenta["telefono"]
+    if cuenta.get("email_admin"):
+        empresa.email = cuenta["email_admin"]
     empresa.licencia_key = licencia.get("licencia_key") or empresa.licencia_key
     empresa.licencia_tier = licencia.get("licencia_tier") or empresa.licencia_tier
     empresa.licencia_status = licencia.get("licencia_status") or empresa.licencia_status
@@ -381,6 +437,7 @@ async def login_central(
     identidad.licencia_status = empresa.licencia_status
     identidad.licencia_expira = empresa.licencia_expira
     identidad.hardware_id = payload.hardware_id or obtener_hardware_id()
+    identidad.rol_dispositivo = "SERVIDOR_LOCAL" if rol_dispositivo == "SERVIDOR_LOCAL" else "LOCAL"
     identidad.ultima_validacion = now
     identidad.modo_offline = False
 
@@ -403,6 +460,11 @@ async def login_central(
             "max_equipos": licencia.get("max_equipos"),
             "max_sesiones": licencia.get("max_sesiones"),
         },
+        # Rol que el central asignó a ESTA máquina: eltitular puede instalarse
+        # como servidor, el resto solo como trabajador (docs/MANEJO_DB.md §13).
+        "dispositivo_rol": rol_dispositivo,
+        "puede_ser_servidor": rol_dispositivo == "SERVIDOR_LOCAL",
+        "id_cuenta": str(identidad.id_cuenta),
         "message": "Cuenta validada en el servidor central",
     }
     return LoginResponse(
@@ -499,7 +561,7 @@ async def validate_license(
         os_version=payload.os_version,
     )
     return {
-        "valid": (identidad.licencia_status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE"),
+        "valid": (identidad.licencia_status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE", "AVAILABLE"),
         "status": identidad.licencia_status,
         "tier": identidad.licencia_tier,
         "expires_at": identidad.licencia_expira.isoformat() if identidad.licencia_expira else None,
@@ -546,7 +608,7 @@ async def licencia_empresa(
     key = empresa.licencia_key or ""
     key_masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else ("••••" if key else None)
     return {
-        "valid": (status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE"),
+        "valid": (status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE", "AVAILABLE"),
         "status": status,
         "tier": tier,
         "expires_at": expira.isoformat() if expira else None,

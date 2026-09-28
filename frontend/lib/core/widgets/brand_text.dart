@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../i18n/translations.dart';
 import '../theme/app_theme.dart';
 
 /// Wordmark de marca `baLnsoft` + sufijo `WS` (Estación de Pesaje), al mismo
@@ -48,9 +50,9 @@ class BrandText extends StatelessWidget {
           ),
         ),
         if (withTagline)
-          const Text(
-            'Estación de Pesaje',
-            style: TextStyle(
+          Text(
+            'weighing_station'.tr(),
+            style: const TextStyle(
               fontSize: 12,
               letterSpacing: 6,
               color: SwsColors.gray500,

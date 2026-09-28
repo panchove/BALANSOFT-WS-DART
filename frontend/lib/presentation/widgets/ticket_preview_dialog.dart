@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/number_utils.dart';
 import '../../core/utils/save_file_utils.dart';
@@ -77,11 +78,11 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           ? await repo.getTicketTxt(widget.weighing.boleto)
           : await repo.getTicketPdf(
               widget.weighing.boleto,
-              boletos_por_hoja: _preset.boletosPorHoja,
-              tamano_papel: _preset.tamanoPapel,
+              boletosPorHoja: _preset.boletosPorHoja,
+              tamanoPapel: _preset.tamanoPapel,
               orientacion: _preset.orientacion,
-              mostrar_encabezado: _preset.mostrarEncabezado,
-              mostrar_detalles: _preset.mostrarDetalles,
+              mostrarEncabezado: _preset.mostrarEncabezado,
+              mostrarDetalles: _preset.mostrarDetalles,
             );
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
@@ -109,7 +110,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al imprimir ticket: $e'),
+            content: Text('${'ticket_print_error'.tr()}$e'),
             backgroundColor: SwsColors.danger,
           ),
         );
@@ -194,12 +195,12 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                     isDense: true,
                     style: const TextStyle(fontSize: 12),
                     underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(value: '80mm', child: Text('80mm Térmico')),
-                      DropdownMenuItem(value: '58mm', child: Text('58mm Térmico')),
-                      DropdownMenuItem(value: 'HalfLetter', child: Text('Media Carta')),
-                      DropdownMenuItem(value: 'Letter', child: Text('Carta')),
-                      DropdownMenuItem(value: 'A4', child: Text('A4')),
+                    items: [
+                      DropdownMenuItem(value: '80mm', child: Text('paper_thermal_80'.tr())),
+                      DropdownMenuItem(value: '58mm', child: Text('paper_thermal_58'.tr())),
+                      const DropdownMenuItem(value: 'HalfLetter', child: Text('Media Carta')),
+                      const DropdownMenuItem(value: 'Letter', child: Text('Carta')),
+                      const DropdownMenuItem(value: 'A4', child: Text('A4')),
                     ],
                     onChanged: (val) {
                       if (val != null) setState(() => _preset = _preset.copyWith(tamanoPapel: val));
@@ -209,17 +210,17 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Por Hoja: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text('ticket_per_sheet'.tr(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                       DropdownButton<int>(
                         value: _preset.boletosPorHoja,
                         isDense: true,
                         underline: const SizedBox(),
                         style: const TextStyle(fontSize: 12),
-                        items: const [
-                          DropdownMenuItem(value: 1, child: Text('1 por hoja')),
-                          DropdownMenuItem(value: 2, child: Text('2 por hoja')),
-                          DropdownMenuItem(value: 3, child: Text('3 por hoja')),
-                          DropdownMenuItem(value: 4, child: Text('4 por hoja')),
+                        items:[
+                          DropdownMenuItem(value: 1, child: Text('sheet_1_short'.tr())),
+                          DropdownMenuItem(value: 2, child: Text('sheet_2_short'.tr())),
+                          DropdownMenuItem(value: 3, child: Text('sheet_3_short'.tr())),
+                          DropdownMenuItem(value: 4, child: Text('sheet_4_short'.tr())),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _preset = _preset.copyWith(boletosPorHoja: val));
@@ -229,9 +230,9 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                   ),
                   // Orientación
                   SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'portrait', icon: Icon(Icons.crop_portrait, size: 14), label: Text('Vertical', style: TextStyle(fontSize: 11))),
-                      ButtonSegment(value: 'landscape', icon: Icon(Icons.crop_landscape, size: 14), label: Text('Horizontal', style: TextStyle(fontSize: 11))),
+                    segments: [
+                      ButtonSegment(value: 'portrait', icon: const Icon(Icons.crop_portrait, size: 14), label: Text('vertical'.tr(), style: const TextStyle(fontSize: 11))),
+                      ButtonSegment(value: 'landscape', icon: const Icon(Icons.crop_landscape, size: 14), label: Text('horizontal'.tr(), style: const TextStyle(fontSize: 11))),
                     ],
                     selected: {_preset.orientacion},
                     onSelectionChanged: (val) {
@@ -255,7 +256,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Copias: ', style: TextStyle(fontSize: 11)),
+                      Text('ticket_copies'.tr(), style: const TextStyle(fontSize: 11)),
                       DropdownButton<int>(
                         value: _preset.copias,
                         isDense: true,
@@ -310,7 +311,8 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                                     color: Colors.grey.shade400,
                                   ),
                                 ),
-                                Text('Corte $i', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                Text('ticket_cut_i'.tr(null, ['$i']),
+                                    style: const TextStyle(fontSize: 9, color: Colors.grey)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -336,13 +338,17 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
+          child: Text('btn_cancel'.tr()),
         ),
         FilledButton.icon(
           icon: _imprimiendo
               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Icon(Icons.print, size: 16),
-          label: Text(_imprimiendo ? 'Imprimiendo...' : 'Confirmar e Imprimir (${_preset.copias})'),
+          label: Text(
+            _imprimiendo
+                ? 'ticket_printing'.tr()
+                : 'ticket_confirm_print'.tr(null, ['${_preset.copias}']),
+          ),
           style: FilledButton.styleFrom(backgroundColor: SwsColors.success),
           onPressed: _imprimiendo ? null : _imprimir,
         ),
@@ -382,19 +388,19 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
         children: [
           // Encabezado
           if (_preset.mostrarEncabezado) ...[
-            const Center(
+            Center(
               child: Text(
-                'VARIEDADES S&S',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                'demo_company'.tr(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
             const Center(child: Text('RIF: J-31490236-2', style: TextStyle(fontSize: 9.5))),
             const Divider(color: Colors.black, thickness: 1, height: 8),
           ],
-          const Center(
+          Center(
             child: Text(
-              'BOLETO DE PESAJE DE BALANSOFT',
-              style: TextStyle(
+              'ticket_title'.tr(),
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
                 letterSpacing: 0.5,
@@ -404,28 +410,39 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           const Divider(color: Colors.black45, height: 6),
 
           // ── DATOS ──
-          _filaPreview('Serie - Boleto:', numBoleto, bold: true),
-          _filaPreview('Fecha/Hora:', _formatDate(w.createdAt)),
-          _filaPreview('Camión:', w.idVehiculo ?? 'Sin Placa'),
-          _filaPreview('Remolque:', w.remolque ? (w.remolquePlaca ?? w.idRemolque ?? 'Sí') : 'No'),
-          _filaPreview('Transporte:', w.transporteNombre ?? w.idTransporte ?? 'N/A'),
-          _filaPreview('Conductor:', w.conductorNombre ?? w.idConductor ?? 'N/A'),
-          _filaPreview('Producto:', w.productoNombre ?? w.idProducto ?? 'N/A'),
-          _filaPreview('Almacén:', w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
-          _filaPreview('Selección:',
+          _filaPreview('ticket_ticket_number'.tr(), numBoleto, bold: true),
+          _filaPreview('ticket_datetime'.tr(), _formatDate(w.createdAt)),
+          _filaPreview('ticket_truck'.tr(), w.idVehiculo ?? 'ticket_no_plate'.tr()),
+          _filaPreview(
+              'ticket_trailer'.tr(),
+              w.remolque
+                  ? (w.remolquePlaca ?? w.idRemolque ?? 'yes'.tr())
+                  : 'no'.tr()),
+          _filaPreview('ticket_transport'.tr(),
+              w.transporteNombre ?? w.idTransporte ?? 'N/A'),
+          _filaPreview('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
+          _filaPreview('ticket_product'.tr(), w.productoNombre ?? w.idProducto ?? 'N/A'),
+          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
+          _filaPreview('ticket_selection'.tr(),
               (w.tipoTercero?.trim().isNotEmpty ?? false) ? w.tipoTercero!.toUpperCase() : 'N/A'),
-          _filaPreview('Razón Social:', w.terceroNombre ?? w.idTercero ?? 'N/A'),
+          _filaPreview('ticket_company_name'.tr(), w.terceroNombre ?? w.idTercero ?? 'N/A'),
 
           const SizedBox(height: 4),
           const Divider(color: Colors.black, thickness: 1, height: 6),
-          const Center(
-            child: Text('LECTURA DE PESOS',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
+          Center(
+            child: Text('ticket_weight_reading'.tr(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
           ),
           const Divider(color: Colors.black45, height: 6),
 
           // ── Tabla: Balanza | Fecha/Hora | Peso Camión | Peso Remolque | Peso Total ──
-          _filaLectura('Balanza', 'Fecha/Hora', 'Peso Camion', 'Peso Remolque', 'Peso Total', bold: true),
+          _filaLectura(
+              'ticket_scale'.tr(),
+              'ticket_datetime'.tr(),
+              'ticket_truck_weight'.tr(),
+              'ticket_trailer_weight'.tr(),
+              'ticket_total_weight'.tr(),
+              bold: true),
           _filaLectura(
             'Balanza Entrada: ${w.balanzaNombre ?? ''}'.trimRight(),
             _formatDate(w.fechaHoraEntrada),
@@ -466,9 +483,9 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
 
           // ── DATOS ADICIONALES ──
           if (tieneDatAdic) ...[
-            const Center(
-              child: Text('DATOS ADICIONALES',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
+            Center(
+              child: Text('ticket_additional_data'.tr(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
             ),
             const Divider(color: Colors.black45, height: 6),
             if (w.documento?.isNotEmpty ?? false) _filaPreview('Documento:', w.documento!),
@@ -480,20 +497,20 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
 
           // ── OBSERVACIONES ──
           if (_preset.mostrarDetalles && w.observaciones != null && w.observaciones!.isNotEmpty) ...[
-            const Center(
-              child: Text('OBSERVACIONES',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
+            Center(
+              child: Text('ticket_observations'.tr(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
             ),
             const Divider(color: Colors.black45, height: 6),
             Text(w.observaciones!, style: const TextStyle(fontSize: 9.5, fontStyle: FontStyle.italic)),
           ],
 
           const SizedBox(height: 10),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _LineaFirma(label: 'Firma Operador'),
-              _LineaFirma(label: 'Firma Conductor'),
+              _LineaFirma(label: 'ticket_sign_operator'.tr()),
+              _LineaFirma(label: 'ticket_sign_driver'.tr()),
             ],
           ),
         ],
@@ -520,10 +537,10 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_preset.mostrarEncabezado) ...[
-            const Center(
+            Center(
               child: Text(
-                'VARIEDADES S&S',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                'demo_company'.tr(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
             const Center(child: Text('RIF: J-31490236-2', style: TextStyle(fontSize: 9))),
@@ -541,32 +558,37 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           _filaPreview('Camión:', w.idVehiculo ?? 'Sin Placa'),
           _filaPreview('Remolque:', w.remolque ? (w.remolquePlaca ?? w.idRemolque ?? 'Sí') : 'No'),
           _filaPreview('Transporte:', w.transporteNombre ?? w.idTransporte ?? 'N/A'),
-          _filaPreview('Conductor:', w.conductorNombre ?? w.idConductor ?? 'N/A'),
-          _filaPreview('Producto:', w.productoNombre ?? w.idProducto ?? 'N/A'),
-          _filaPreview('Almacén:', w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
-          _filaPreview('Cliente/Proveedor:', w.terceroNombre ?? w.idTercero ?? 'N/A'),
+          _filaPreview('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
+          _filaPreview('ticket_product'.tr(), w.productoNombre ?? w.idProducto ?? 'N/A'),
+          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
+          _filaPreview('ticket_customer_supplier'.tr(),
+              w.terceroNombre ?? w.idTercero ?? 'N/A'),
           const SizedBox(height: 4),
           const Divider(color: Colors.black, thickness: 1, height: 4),
-          const Center(
-            child: Text('LECTURA DE PESOS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
+          Center(
+            child: Text('ticket_weight_reading'.tr(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
           ),
           const Divider(color: Colors.black45, height: 4),
-          _filaPreview('Entrada:', '${_formatDate(w.fechaHoraEntrada)}   ${NumberUtils.formatKg(w.pesoTotalEntrada)}'),
+          _filaPreview('ticket_entry'.tr(),
+              '${_formatDate(w.fechaHoraEntrada)}   ${NumberUtils.formatKg(w.pesoTotalEntrada)}'),
           if (w.fechaHoraSalida != null)
-            _filaPreview('Salida:', '${_formatDate(w.fechaHoraSalida)}   ${NumberUtils.formatKg(w.pesoTotalSalida ?? 0)}'),
+            _filaPreview('ticket_exit'.tr(),
+                '${_formatDate(w.fechaHoraSalida)}   ${NumberUtils.formatKg(w.pesoTotalSalida ?? 0)}'),
           const Divider(color: Colors.black45, height: 4),
-          _filaPreview('PESO NETO:', pesoNetoFormateado, bold: true),
+          _filaPreview('ticket_net_weight'.tr(), pesoNetoFormateado, bold: true),
           const Divider(color: Colors.black, thickness: 1, height: 4),
           if (_preset.mostrarDetalles && w.observaciones != null && w.observaciones!.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text('Obs: ${w.observaciones}', style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic)),
+            Text('ticket_obs'.tr(null, ['${w.observaciones}']),
+                style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic)),
           ],
           const SizedBox(height: 8),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _LineaFirma(label: 'Firma Operador'),
-              _LineaFirma(label: 'Firma Conductor'),
+              _LineaFirma(label: 'ticket_sign_operator'.tr()),
+              _LineaFirma(label: 'ticket_sign_driver'.tr()),
             ],
           ),
         ],

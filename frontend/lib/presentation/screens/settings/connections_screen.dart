@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -67,50 +68,68 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
       final accesible = _localUrl.isNotEmpty && ok;
       _wserverOnline = accesible;
       _resultadoLocal = _localUrl.isEmpty
-          ? 'Indica primero la URL de la API local'
-          : (ok ? 'API local accesible ✓' : 'No se pudo conectar a la API local');
+          ? 'connection_hint_url_first'.tr()
+          : (ok
+              ? 'connection_local_ok'.tr()
+              : 'connection_unreachable'.tr());
     });
   }
 
   Future<void> _guardar() async {
-    final localOk = _localUrl.isNotEmpty;
-    if (localOk) {
-      await AppConfig.setApiBaseUrl(_localUrl);
-      di.sl<ApiClient>().setBaseUrl(_localUrl);
+    if (_localUrl.isEmpty) {
+      _avisar('connection_hint_url_first', SwsColors.warning);
+      return;
+    }
+    // La URL solo se persiste si el WServer responde: una URL escrita a mano
+    // pero inaccesible dejaría la estación sin API local.
+    setState(() {
+      _probandoLocal = true;
+      _resultadoLocal = null;
+    });
+    bool ok = false;
+    try {
+      ok = await ApiClient(baseUrl: _localUrl).health();
+    } catch (_) {
+      ok = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _probandoLocal = false;
+      _wserverOnline = ok;
+    });
+    if (!ok) {
+      _avisar('connection_unreachable', SwsColors.danger);
+      return;
     }
 
+    await AppConfig.setApiBaseUrl(_localUrl);
+    di.sl<ApiClient>().setBaseUrl(_localUrl);
+    _avisar('connections_saved', SwsColors.success);
+  }
+
+  void _avisar(String clave, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          localOk ? 'Conexiones guardadas' : 'Guardado: falta configurar la API local',
-        ),
-        backgroundColor: localOk ? SwsColors.success : SwsColors.warning,
+        content: Text(clave.tr()),
+        backgroundColor: color,
       ),
     );
-
-    if (widget.setupMode && localOk && mounted) {
-      Navigator.of(context).pushReplacementNamed('/login');
-    }
   }
 
   Future<void> _reiniciarInstalacion() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reiniciar instalación'),
-        content: const Text(
-          'Se borrará la URL de la API local configurada y la app volverá al '
-          'modo instalación (verificación de entorno). '
-          '¿Deseas continuar?',
-        ),
+        title: Text('connection_reset_installation'.tr()),
+        content: Text('connection_reset_confirm'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text('btn_cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reiniciar'),
+            child: Text('btn_reset'.tr()),
           ),
         ],
       ),
@@ -170,7 +189,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
               child: TextButton.icon(
                 onPressed: _reiniciarInstalacion,
                 icon: const Icon(Icons.settings_backup_restore, size: 18),
-                label: const Text('Volver al inicio de instalación'),
+                label: Text('back_to_setup'.tr()),
               ),
             ),
           ],
@@ -203,7 +222,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           TextButton.icon(
             onPressed: _reiniciarInstalacion,
             icon: const Icon(Icons.settings_backup_restore, size: 18),
-            label: const Text('Volver al inicio de instalación'),
+            label: Text('back_to_setup'.tr()),
           ),
         ],
       ],
@@ -217,14 +236,14 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.dns_outlined, color: SwsColors.accent),
-                SizedBox(width: 8),
+                const Icon(Icons.dns_outlined, color: SwsColors.accent),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'API local (estación)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    'local_api_station'.tr(),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
               ],
@@ -253,7 +272,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                 icon: _probandoLocal
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.wifi_tethering, size: 18),
-                label: const Text('Probar'),
+                label: Text('test'.tr()),
               ),
             ),
             if (_resultadoLocal != null)
@@ -289,11 +308,11 @@ class _SetupBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget estado;
     if (verificando) {
-      estado = const Row(
+      estado = Row(
         children: [
-          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-          SizedBox(width: 8),
-          Text('Comprobando WServer local…', style: TextStyle(fontSize: 12)),
+          const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: 8),
+          Text('checking_wserver'.tr(), style: const TextStyle(fontSize: 12)),
         ],
       );
     } else {
@@ -325,15 +344,14 @@ class _SetupBanner extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.settings_remote_outlined, color: SwsColors.accent),
-                SizedBox(width: 12),
+                const Icon(Icons.settings_remote_outlined, color: SwsColors.accent),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Primera configuración: indica la URL de la API local de '
-                    'esta estación.',
-                    style: TextStyle(fontSize: 13),
+                    'first_config_hint'.tr(),
+                    style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ],

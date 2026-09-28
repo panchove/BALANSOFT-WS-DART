@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/accesos_default.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/accesos_repository.dart';
 import '../../../data/datasources/local/local_storage.dart';
@@ -82,7 +83,7 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Seguridad y Accesos')),
+      appBar: AppBar(title: Text(context.tr('Seguridad y Accesos'))),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -119,20 +120,19 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
                   ),
                 const SizedBox(height: 8),
                 if (!_esAdmin)
-                  const Card(
-                    color: Color(0xFFFff4e5),
+                  Card(
+                    color: const Color(0xFFFff4e5),
                     child: Padding(
-                      padding: EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          Icon(Icons.lock_outline,
+                          const Icon(Icons.lock_outline,
                               color: SwsColors.warning, size: 20),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Modo solo lectura: solo el rol ADMIN puede '
-                              'modificar los accesos.',
-                              style: TextStyle(fontSize: 13),
+                              'readonly_mode_desc'.tr(),
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ),
                         ],
@@ -199,18 +199,18 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 4),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
             child: Text(
-              'Matriz de accesos por rol',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              'access_matrix'.tr(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 0, 14, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             child: Text(
-              'Toca una celda para cambiar el nivel de acceso del rol al módulo.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+              'access_matrix_desc'.tr(),
+              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
           ),
           // Encabezado de columnas (roles).
@@ -308,9 +308,9 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Roles de la estación',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            Text(
+              'station_roles'.tr(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             for (final (nombre, descripcion, codigo) in _descripcionesRoles)
@@ -347,7 +347,7 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Leyenda',
+            Text('legend'.tr(),
                 style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -457,7 +457,7 @@ class _AccesoSegmentado extends StatelessWidget {
     final eleccion = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Nivel de acceso'),
+        title: Text('access_level'.tr()),
         children: [
           for (final (valor, label, color) in const [
             ('ninguno', 'Ninguno (oculto)', SwsColors.gray400),

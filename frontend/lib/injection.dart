@@ -11,6 +11,7 @@ import 'data/datasources/local/local_storage.dart';
 import 'data/datasources/local/database_helper.dart';
 import 'core/security/secure_storage_service.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/activacion_repository.dart';
 import 'data/repositories/weighing_repository.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/accesos_repository.dart';
@@ -25,6 +26,7 @@ import 'presentation/providers/bloc/kardex/kardex_bloc.dart';
 import 'data/services/scale_api_client.dart';
 import 'data/services/scale_tcp_client.dart';
 import 'data/datasources/remote/scale_api_datasource.dart';
+import 'core/i18n/locale_controller.dart';
 
 final sl = GetIt.instance;
 
@@ -40,6 +42,11 @@ Future<void> init() async {
 
   // Repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepository(
+        apiClient: sl(),
+        localStorage: sl(),
+        secureStorage: sl(),
+      ));
+  sl.registerLazySingleton<ActivacionRepository>(() => ActivacionRepository(
         apiClient: sl(),
         localStorage: sl(),
         secureStorage: sl(),
@@ -158,6 +165,8 @@ Future<void> init() async {
   sl.registerLazySingleton<ScaleTcpClient>(() => ScaleTcpClient());
   sl.registerLazySingleton<ScaleApiClient>(
       () => ScaleApiClient(datasource: ScaleApiDatasource(sl<ApiClient>())));
+  sl.registerLazySingleton<LocaleController>(() => LocaleController());
+  sl<ApiClient>().setLanguageProvider(() => sl<LocaleController>().activeLanguageCode);
   // Respaldo TCP: config de báscula/dispositivo guardada en Ajustes.
   final scaleCfg = await sl<LocalStorage>().getScaleConfig();
   sl<ScaleApiClient>().configurarFallbackTcp(scaleCfg.host, scaleCfg.port);

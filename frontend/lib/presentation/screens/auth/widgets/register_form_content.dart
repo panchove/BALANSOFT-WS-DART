@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/i18n/translations.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../providers/bloc/auth/auth_bloc.dart';
 
@@ -82,16 +83,16 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Crear Cuenta',
+            'create_account'.tr(),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Registra tu empresa y primer usuario',
-            style: TextStyle(color: Colors.white60, fontSize: 14),
+          Text(
+            'register_desc'.tr(),
+            style: const TextStyle(color: Colors.white60, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -111,11 +112,11 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
           ),
 
           const SizedBox(height: 20),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Usuario Administrador',
-              style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
+              'admin_user'.tr(),
+              style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(height: 8),
@@ -151,11 +152,11 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
           ),
 
           const SizedBox(height: 20),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Licencia (opcional)',
-              style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
+              'license_optional'.tr(),
+              style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(height: 8),
@@ -194,7 +195,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
             onPressed: widget.onBackToLogin,
             style: TextButton.styleFrom(foregroundColor: Colors.white70),
             icon: const Icon(Icons.arrow_back_outlined, size: 18),
-            label: const Text('Volver a Iniciar Sesión'),
+            label: Text('back_to_login'.tr()),
           ),
         ],
       ),

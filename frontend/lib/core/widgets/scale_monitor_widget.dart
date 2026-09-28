@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../i18n/translations.dart';
 import '../theme/app_theme.dart';
 import '../../data/services/scale_api_client.dart';
 import '../../data/services/scale_tcp_client.dart';
@@ -112,15 +113,15 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
       // Mientras la báscula se manipula el peso cambia ("recibiendo"); al
       // detenerse se marca estable y se usa el peso donde quedó.
       estadoColor = estable ? SwsColors.success : SwsColors.warning;
-      estadoTexto = estable ? 'Estable' : 'Recibiendo peso…';
+      estadoTexto = estable ? context.tr('Estable') : context.tr('Recibiendo peso…');
       estadoIcono = estable ? Icons.wifi : Icons.sync;
     } else if (conectando) {
       estadoColor = SwsColors.warning;
-      estadoTexto = 'Conectando...';
+      estadoTexto = context.tr('Conectando...');
       estadoIcono = Icons.wifi_tethering;
     } else {
       estadoColor = SwsColors.danger;
-      estadoTexto = 'Desconectado';
+      estadoTexto = context.tr('Desconectado');
       estadoIcono = Icons.wifi_off;
     }
 
@@ -156,7 +157,7 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.label,
+                        context.tr(widget.label),
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -225,10 +226,10 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                                 widget.onPesoLeido?.call(p);
                                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Peso capturado de la báscula'),
+                                  SnackBar(
+                                    content: Text(context.tr('Peso capturado de la báscula')),
                                     backgroundColor: SwsColors.success,
-                                    duration: Duration(seconds: 1),
+                                    duration: const Duration(seconds: 1),
                                   ),
                                 );
                               }
@@ -236,7 +237,7 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                           : null,
                       icon: Icon(estable ? Icons.bolt : Icons.hourglass_top,
                           size: 18),
-                      label: Text(estable ? 'Tomar peso' : 'Recibiendo peso…'),
+                      label: Text(estable ? context.tr('Tomar peso') : context.tr('Recibiendo peso…')),
                       style: FilledButton.styleFrom(
                         backgroundColor: SwsColors.success,
                         padding: const EdgeInsets.symmetric(vertical: 10),

@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     email            VARCHAR(255),
     logo_url         VARCHAR(500),
     formato_ticket   VARCHAR(10) DEFAULT 'PDF',
+    formato_reporte  VARCHAR(10) DEFAULT 'EXCEL',
+    idioma           VARCHAR(5) DEFAULT 'es',
     ruta_exportacion_reportes VARCHAR(500),
     -- Snapshot de la licencia (validada contra el servidor central en login)
     licencia_key     VARCHAR(255),
@@ -65,6 +67,10 @@ ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_status VARCHAR(20);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_expira TIMESTAMP;
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_ticket VARCHAR(10);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ruta_exportacion_reportes VARCHAR(500);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS idioma VARCHAR(5) DEFAULT 'es';
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_reporte VARCHAR(10) DEFAULT 'EXCEL';
+UPDATE empresas SET idioma = 'es' WHERE idioma IS NULL;
+UPDATE empresas SET formato_reporte = 'EXCEL' WHERE formato_reporte IS NULL;
 ALTER TABLE empresas ALTER COLUMN id_cuenta DROP NOT NULL;
 
 -- ============================================================

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../i18n/translations.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -268,7 +269,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
         children: [
           Icon(widget.icon, color: SwsColors.primary),
           const SizedBox(width: 12),
-          Expanded(child: Text(widget.titulo)),
+          Expanded(child: Text(context.tr(widget.titulo))),
         ],
       ),
       content: SingleChildScrollView(
@@ -290,7 +291,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
         TextButton(
           onPressed:
               _guardando ? null : () => Navigator.of(context).pop(null),
-          child: const Text('Cancelar'),
+          child: Text(context.tr('Cancelar')),
         ),
         ElevatedButton(
           onPressed: _guardando ? null : _guardar,
@@ -300,16 +301,17 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Crear'),
+              : Text(context.tr('Crear')),
         ),
       ],
     );
   }
 
   Widget _buildCampo(CrearCampoSpec campo) {
+    final labelTraducido = context.tr(campo.label);
     if (campo.tipo == CrearCampoTipo.booleano) {
       return SwitchListTile(
-        title: Text(campo.label),
+        title: Text(labelTraducido),
         value: _boolVals[campo.key] ?? false,
         activeThumbColor: Theme.of(context).colorScheme.primary,
         onChanged: (v) => setState(() => _boolVals[campo.key] = v),
@@ -318,11 +320,12 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
     if (campo.tipo == CrearCampoTipo.dropdown) {
       final opciones = campo.opciones ?? const <String>[];
       final refs = _referencias[campo.catalogoPath] ?? const [];
+      final selectText = context.tr('— Seleccionar —');
       final items = <DropdownMenuItem<String>>[
         if (opciones.isEmpty)
-          const DropdownMenuItem(
+          DropdownMenuItem(
             value: '',
-            child: Text('— Seleccionar —'),
+            child: Text(selectText),
           ),
         for (final op in opciones)
           DropdownMenuItem(value: op, child: Text(op)),
@@ -336,7 +339,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
       final valor = _dropdownVals[campo.key];
       return InputDecorator(
         decoration: InputDecoration(
-          labelText: campo.label + (campo.requerido ? ' *' : ''),
+          labelText: labelTraducido + (campo.requerido ? ' *' : ''),
           prefixIcon: Icon(campo.icon),
         ),
         child: DropdownButtonHideUnderline(
@@ -345,7 +348,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
                 ? valor
                 : (opciones.isEmpty && refs.isEmpty ? null : items.first.value),
             isExpanded: true,
-            hint: const Text('— Seleccionar —'),
+            hint: Text(selectText),
             items: items,
             onChanged: (v) => setState(() {
               if (v != null) _dropdownVals[campo.key] = v;
@@ -383,7 +386,7 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
             ]
           : null,
       decoration: InputDecoration(
-        labelText: campo.label + (campo.requerido ? ' *' : ''),
+        labelText: labelTraducido + (campo.requerido ? ' *' : ''),
         prefixIcon: Icon(campo.icon),
       ),
       validator: validadores.isEmpty

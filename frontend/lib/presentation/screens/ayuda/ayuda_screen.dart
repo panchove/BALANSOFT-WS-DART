@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -13,42 +14,39 @@ class AyudaScreen extends StatelessWidget {
     final api = di.sl<ApiClient>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ayuda')),
+      appBar: AppBar(title: Text('help'.tr())),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Card(
+          Card(
             margin: EdgeInsets.zero,
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(
+                      const CircleAvatar(
                         backgroundColor: SwsColors.blue100,
                         foregroundColor: SwsColors.primary,
                         child: Icon(Icons.headset_mic_outlined, size: 20),
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Text(
-                        'Soporte técnico',
-                        style: TextStyle(
+                        'technical_support'.tr(),
+                        style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
-                  SizedBox(height: 10),
+                  const SizedBox(height: 10),
                   Text(
-                    'El soporte está gestionado por el equipo BALANSOFT. '
-                    'Incluye instalación del cliente, configuración de '
-                    'básculas (serial/TCP), licencias y resolución de '
-                    'incidencias en campo.',
-                    style: TextStyle(color: SwsColors.gray600, height: 1.4),
+                    'support_full'.tr(),
+                    style: const TextStyle(color: SwsColors.gray600, height: 1.4),
                   ),
-                  SizedBox(height: 8),
-                  ListTile(
+                  const SizedBox(height: 8),
+                  const ListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     leading: Icon(Icons.mail_outline,
@@ -58,11 +56,9 @@ class AyudaScreen extends StatelessWidget {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    leading: Icon(Icons.description_outlined,
+                    leading: const Icon(Icons.description_outlined,
                         size: 20, color: SwsColors.primary),
-                    title: Text(
-                        'docs/PRD.md y docs/MODELO_ESTANDAR.md definen el '
-                        'comportamiento esperado del sistema.'),
+                    title: Text('docs_full'.tr()),
                   ),
                 ],
               ),
@@ -77,9 +73,9 @@ class AyudaScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Información del sistema',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  Text(
+                    'system_info'.tr(),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 10),
                   _fila('Producto', 'BALANSOFT-WS'),

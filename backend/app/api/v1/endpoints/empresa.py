@@ -14,8 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_empresa, get_current_user
+from app.api.dependencies import get_current_empresa, get_current_user, idioma_peticion
 from app.core.database import get_db
+from app.core.i18n import t
 from app.models import Empresa, Usuario
 from app.schemas import EmpresaPerfilOut, EmpresaPerfilUpdate
 
@@ -37,12 +38,13 @@ async def update_empresa_perfil(
     current_user: Usuario = Depends(get_current_user),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
+    lang: str = Depends(idioma_peticion),
 ) -> Empresa:
     """Actualiza el perfil empresarial (solo ADMIN)."""
     if current_user.rol != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo el ADMIN puede editar el perfil de la empresa.",
+            detail=t("solo_admin_edita_empresa", lang),
         )
     for campo, valor in payload.model_dump(exclude_unset=True).items():
         setattr(empresa, campo, valor)
@@ -53,7 +55,7 @@ async def update_empresa_perfil(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El RIF/NIT ya está registrado en otra empresa.",
+            detail=t("rif_nit_ya_registrado", lang),
         ) from None
     await db.refresh(empresa)
     return empresa

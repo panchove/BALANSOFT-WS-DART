@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     boleto_prefix: str = "TA-"
     boleto_digitos: int = 8
 
+    # Internacionalización: idioma por defecto del servidor (es|en|pt).
+    # Se usa cuando la petición no trae ?idioma= ni Accept-Language y la
+    # empresa aún no tiene idioma configurado (REQ-NF-I18N-003).
+    idioma_default: str = "es"
+
     # Almacenamiento de fotos/imágenes adjuntas
     media_dir: str = "media"
     max_image_bytes: int = 10 * 1024 * 1024

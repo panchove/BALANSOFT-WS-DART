@@ -1,9 +1,9 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.0
-**Fecha:** 2026-09-15
+**Versión:** 2.3
+**Fecha:** 2026-09-28
 **Estado:** Vigente
-**Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
+**Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
 
 ---
@@ -456,6 +456,14 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
 > elevado al iniciar el sistema por primera vez para que la conexión sea
 > editable en la primera instalación (app lo arranca y espera `/health`).
 
+**Idiomas y configuración inicial (ver `I18N_Y_ONBOARDING.md`):** el modo
+instalación empieza pidiendo **idioma y tema** antes de tocar la API
+(**REQ-NF-ONB-001**), la URL local solo se acepta si `/api/v1/health` responde
+(**REQ-NF-ONB-002**) y tras el primer login del `ADMIN` se muestra la
+configuración inicial: datos de empresa, logo, formato de ticket, carpeta de
+reportes y formato de reportes (**REQ-NF-ONB-003/004**). El idioma viaja a la
+BD local en `empresas.idioma` y el tema es preferencia del dispositivo.
+
 ---
 
 ## 10. Plan de Implementación
@@ -570,7 +578,8 @@ CORS_ORIGINS=["http://localhost:8003"]
 
 | Documento | Estado | Descripción |
 |-----------|:------:|-------------|
-| `MANEJO_DB.md` | **Este documento** | Arquitectura de dos BDs, setup de desarrollo, login, estado y plan |
+| `MANEJO_DB.md` | **Este documento** | Arquitectura de dos BDs, setup de desarrollo, login, modelo de cuenta/dispositivos (§13), estado y plan |
+| `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/trabajador) y preferencias persistidas |
 | `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
 | `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (22 tablas) |
 | `ARCH.md` | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE` |
@@ -585,7 +594,126 @@ CORS_ORIGINS=["http://localhost:8003"]
 
 ---
 
-## 13. Referencias
+## 13. Modelo de Cuenta y Dispositivos (Servidor Local / Trabajador Local)
+
+> Referenciado por el código de instalación (`AppConfig.modoEstacion`,
+> `rol_dispositivo`, `puede_ser_servidor`) y por los comentarios de
+> `app/api/v1/endpoints/servidor.py` y `auth.py`.
+
+### 13.1 Regla del titular
+
+| Concepto | Dónde vive | Quién lo asigna |
+|----------|-----------|-----------------|
+| Cuenta | `balansoft_ws_server.cuentas` | Panel del proveedor |
+| Licencia | `balansoft_ws_server.licencias` (`hardware_id`) | Panel / activación |
+| Dispositivo | `balansoft_ws_server.dispositivos` (`rol`) | Backend en cada login (ver 13.1) |
+| Espejo local | `balansoft_ws_local.identidad_local` (`rol_dispositivo`) | `POST /api/v1/auth/login-central` |
+| Datos de empresa | `balansoft_ws_local.empresas` | Espejo del central + `PUT /api/v1/empresa` |
+
+`POST /api/v1/auth/login` del rol `server` asigna el rol del dispositivo
+(`app/api/v1/endpoints/servidor.py::_dispositivo`), pero la fuente de verdad es
+**la máquina a la que quedó atada la licencia** (`licencias.hardware_id`):
+
+- El dispositivo cuyo `hardware_id` **coincide** con `licencias.hardware_id` →
+  `rol = 'SERVIDOR_LOCAL'`.
+- **Cualquier otro** → `rol = 'LOCAL'`.
+
+El rol se **recalcula en cada login** (`_sincronizar_roles_dispositivos`), no
+solo al crear la fila: así una cuenta cuyo titular quedó mal (filas antiguas,
+equipos de pruebas, licencia reatada) se corrige sola en el siguiente login, sin
+editar la base a mano. Nunca puede haber dos `SERVIDOR_LOCAL` en una cuenta.
+
+Ese rol viaja en `dispositivos.rol` y el login central lo copia a
+`identidad_local.rol_dispositivo`; además la respuesta expone
+`license.puede_ser_servidor` y `license.dispositivo_rol`.
+
+`licencias.hardware_id` sigue atando la licencia a su equipo: una segunda máquina
+que intente activar la cuenta debe autenticarse con una credencial global que
+**no** sea la del `ADMIN` (típicamente `OPERADOR`).
+
+**Licencia virgen (`AVAILABLE`)**: `AVAILABLE` es el estado del **LM** para una
+licencia que todavía no se amarró a ningún equipo; no es un estado de la cuenta.
+Para el central equivale a `ACTIVA` (la cuenta está habilitada) y lo que decide
+si ya fue activada es `licencias.hardware_id`:
+
+- Sin `hardware_id` → **virgen**: el primer equipo que valida la cuenta (el
+  `ADMIN`, o cualquier credencial en `DEMO`/`MONOPUESTO`) se amarra a la licencia
+  como **titular único** y la licencia queda `ACTIVA`.
+- Con `hardware_id` → ya activada: ese equipo es el `SERVIDOR_LOCAL` y el resto
+  son trabajadores.
+
+Por eso `_normalizar_estado_lm()` convierte `AVAILABLE`/`DEVICE_NOT_REGISTERED`
+en `ACTIVA` antes de escribir en la BD: si se guardaba tal cual, `_licencia_activa()`
+(exige estado vigente) rechazaba la cuenta y el panel la mostraba como
+"rechazada o inactiva", dejando al equipo sin poder instalarse como servidor.
+
+**Corregir o cambiar el equipo titular** (p. ej. el equipo se daño o la máquina
+del cliente cambió) lo hace el proveedor desde el panel, sin tocar la BD:
+
+- `POST /api/v1/panel/cuentas/{id_cuenta}/titular` con `{"hardware_id": "..."}` →
+  reata la licencia a ese equipo registrado en la cuenta y recalcula los roles.
+- `GET /api/v1/panel/cuentas/{id_cuenta}` devuelve `dispositivos[]` y
+  `hardware_titular`, para ver quién quedó como titular.
+- En la UI (`panel/js/panel.js`) es el botón **"Designar titular"** del detalle
+  de cuenta.
+
+### 13.2 Regla de instalación en la app
+
+`POST /api/v1/auth/login-central` recibe `modo_solicitado: SERVIDOR | TRABAJADOR`:
+
+- Si se pide `SERVIDOR` y el rol del dispositivo **no** es `SERVIDOR_LOCAL` →
+  `403` con la instrucción de instalarse como Trabajador.
+- Si el central no responde o la licencia no está activa → la instalación del
+  modo Servidor no continúa.
+
+### 13.3 Flujo por modo
+
+**Servidor Local** (titular, levanta WServer + PostgreSQL propios):
+
+1. `/setup_preferences` — idioma y tema.
+2. `/mode_selection` — elige `SERVIDOR` (persiste `AppConfig.modoEstacion`).
+3. `/setup` — verificación de entorno (WServer, PostgreSQL, red).
+4. `/db_config` — alta de la base local; valida la API en `localhost`.
+5. `/activation` — correo y contraseña entregados por el proveedor contra el
+   central (`modo_solicitado: SERVIDOR`). Deja la sesión abierta
+   (`access_token`/`refresh_token` en `SecureStorageService`) y guarda
+   `CuentaActivada` con los datos de la cuenta.
+6. `/company_setup` — formulario **precargado** con razón social, RIF, nombre
+   comercial, dirección, teléfono y correo del central. Razón social y RIF
+   quedan de solo lectura (identidad de la cuenta); el operador completa logo,
+   formatos y carpeta de reportes. Se guarda con `PUT /api/v1/empresa` usando la
+   sesión ya abierta.
+7. `/dashboard` — sin volver a escribir la contraseña.
+
+**Trabajador Local** (cliente delgado, sin BD ni WServer propios):
+
+1. `/setup_preferences` — idioma y tema.
+2. `/mode_selection` — elige `TRABAJADOR`.
+3. `/worker_connection` — IP/URL y puerto del Servidor de la cuenta; verifica
+   la API (`GET /health`) y guarda `AppConfig.apiBaseUrl`.
+4. `/login` — credenciales de `balansoft_ws_local.usuarios`, creadas por el
+   administrador del Servidor. `LoginScreen` **no** llama
+   `WServerManager.ensureRunning()` en este modo.
+
+### 13.4 Estado persistido de la instalación
+
+| Preferencia (`AppConfig`) | Clave SharedPreferences | Significa |
+|---------------------------|-------------------------|-----------|
+| `setupPreferenciasCompletado` | `setup_preferencias_completado` | Paso 1 cerrado |
+| `modoEstacion` | `modo_estacion` | `SERVIDOR` o `TRABAJADOR` |
+| `licenciaVerificada` | `licencia_verificada` | Cuenta validada en el central |
+| `esTitularLicencia` | `es_titular_licencia` | Esta máquina es `SERVIDOR_LOCAL` |
+| `empresaSetupCapturado` | `empresa_setup_capturado` | Datos de empresa en la BD local |
+| `onboardingCompletado` | `onboarding_completado` | Wizard post-login sin pendientes |
+
+`AppConfig.instalacionCompletada` es **por modo**: el trabajador termina al
+guardar su conexión; el servidor exige `licenciaVerificada` **y**
+`empresaSetupCapturado`. `_rutaInicial()` (`frontend/lib/main.dart`) usa estos
+flags para reanudar la instalación donde quedó tras un reinicio.
+
+---
+
+## 14. Referencias
 
 - `backend/balansoft-ws-server.sql` — Schema canónico del servidor
 - `backend/balansoft-ws-local.sql` — Schema canónico local

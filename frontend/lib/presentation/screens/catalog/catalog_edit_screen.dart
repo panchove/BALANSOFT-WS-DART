@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/catalog_resources.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/photo_picker_field.dart';
@@ -226,7 +227,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.recurso.singular} guardado'),
+          content: Text('${context.tr(widget.recurso.singular)} ${context.tr("guardado")}'),
           backgroundColor: SwsColors.success,
         ),
       );
@@ -242,7 +243,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
   @override
   Widget build(BuildContext context) {
     final titulo =
-        '${_esNuevo ? 'Nuevo' : 'Editar'} ${widget.recurso.singular}';
+        '${context.tr(_esNuevo ? 'Nuevo' : 'Editar')} ${context.tr(widget.recurso.singular)}';
     final contenido = Form(
       key: _formKey,
       child: Column(
@@ -264,7 +265,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(_esNuevo ? 'Guardar' : 'Actualizar'),
+                : Text(context.tr(_esNuevo ? 'Guardar' : 'Actualizar')),
           ),
         ],
       ),
@@ -302,7 +303,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Cerrar',
+                    tooltip: context.tr('Cerrar'),
                     onPressed: () => Navigator.of(context).pop(false),
                     icon: const Icon(Icons.close),
                   ),
@@ -362,9 +363,9 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
           ? [FilteringTextInputFormatter.digitsOnly]
           : null,
       decoration: InputDecoration(
-        labelText: campo.label + (campo.requerido ? ' *' : ''),
+        labelText: context.tr(campo.label) + (campo.requerido ? ' *' : ''),
         prefixIcon: Icon(campo.icono),
-        hintText: campo.hint,
+        hintText: campo.hint != null ? context.tr(campo.hint!) : null,
       ),
       validator: validadores.isEmpty
           ? null
@@ -538,10 +539,10 @@ class _CampoFotoState extends State<_CampoFoto> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: SwsColors.gray200),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
-                'Sin foto',
-                style: TextStyle(color: SwsColors.gray400),
+                'no_photo'.tr(),
+                style: const TextStyle(color: SwsColors.gray400),
               ),
             ),
           ),

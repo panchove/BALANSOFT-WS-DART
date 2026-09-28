@@ -18,7 +18,7 @@ abstract final class SwsColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [gradientStart, gradientEnd],
-    stops: const [0.0, 1.0],
+    stops: [0.0, 1.0],
   );
 
   // ─── Estados ───────────────────────────────────────────────────────────

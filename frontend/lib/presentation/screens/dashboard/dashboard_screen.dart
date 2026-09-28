@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/widgets/section_header.dart';
@@ -66,7 +67,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: EdgeInsets.all(isWide ? 32 : 16),
                   children: [
                     Text(
-                      'Resumen',
+                      'summary'.tr(),
                       style: TextStyle(
                         fontSize: isWide ? 20 : 16,
                         fontWeight: FontWeight.w700,
@@ -483,9 +484,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Navigator.of(context).push(MaterialPageRoute(builder: destino));
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Text(
-                  'Configuración: disponible en el menú lateral (Ctrl+,)',
+                  'config_hint'.tr(),
                 ),
               ),
             );
@@ -725,13 +726,13 @@ class _PesajesFallidosSectionState extends State<_PesajesFallidosSection> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.error_outline, size: 18, color: SwsColors.danger),
-                      SizedBox(width: 8),
+                      const Icon(Icons.error_outline, size: 18, color: SwsColors.danger),
+                      const SizedBox(width: 8),
                       Text(
-                        'Pesajes no sincronizados',
-                        style: TextStyle(
+                        'unsynced_weighings'.tr(),
+                        style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                           color: SwsColors.danger,
@@ -750,9 +751,9 @@ class _PesajesFallidosSectionState extends State<_PesajesFallidosSection> {
                       ),
                     ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Se agotaron los reintentos. Corrija y elimine el pesaje local.',
-                    style: TextStyle(fontSize: 11, color: SwsColors.gray600),
+                  Text(
+                    'sync_retries_exhausted'.tr(),
+                    style: const TextStyle(fontSize: 11, color: SwsColors.gray600),
                   ),
                 ],
               ),
@@ -803,11 +804,11 @@ class _VehEnPlantaSectionState extends State<_VehEnPlantaSection> {
         }
         final lista = snap.data ?? [];
         if (lista.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'No hay vehículos en planta.',
-              style: TextStyle(fontSize: 13, color: SwsColors.gray600),
+              'no_vehicles_in_yard'.tr(),
+              style: const TextStyle(fontSize: 13, color: SwsColors.gray600),
             ),
           );
         }

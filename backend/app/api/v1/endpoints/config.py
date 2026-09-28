@@ -7,7 +7,6 @@ que la pantalla de Configuración del Flutter refleje la información real.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -18,10 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_empresa, get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.hardware import obtener_hardware_id
-from app.core.license_client import LicenseError, LicenseInfo, get_license_client
-from app.core.monitoring import inc_license_error
-from app.models import BoletoPesaje, Empresa, IdentidadLocal, Usuario
+from app.models import BoletoPesaje, Empresa, Usuario
 
 router = APIRouter(prefix="/api/v1/config", tags=["Config"])
 
@@ -85,7 +81,7 @@ async def get_account_info(
     tier_local = (identidad.licencia_tier or empresa.licencia_tier or "").upper()
     max_registros = settings.demo_max_records if tier_local == "DEMO" else None
 
-    licencia_valida = (identidad.licencia_status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE")
+    licencia_valida = (identidad.licencia_status or "").upper() in ("ACTIVE", "ACTIVA", "VIGENTE", "AVAILABLE")
     licencia_en_linea = not identidad.modo_offline
 
     return _AccountLicenseInfo(

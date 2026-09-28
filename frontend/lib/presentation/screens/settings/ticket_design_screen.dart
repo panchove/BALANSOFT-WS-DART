@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/local/local_storage.dart';
 import '../../../domain/entities/printer_preset.dart';
@@ -45,8 +46,8 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
       await di.sl<LocalStorage>().savePrinterPreset(_preset);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Diseño y estilización del boleto guardados exitosamente'),
+          SnackBar(
+            content: Text('ticket_design_saved'.tr()),
             backgroundColor: SwsColors.success,
           ),
         );
@@ -118,7 +119,7 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Diseño y Estilización del Ticket'),
+        title: Text('ticket_design_title'.tr()),
         actions: [
           IconButton(
             tooltip: 'Probar e Imprimir Boleto',
@@ -138,13 +139,13 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.aspect_ratio, color: SwsColors.accent),
-                      SizedBox(width: 8),
+                      const Icon(Icons.aspect_ratio, color: SwsColors.accent),
+                      const SizedBox(width: 8),
                       Text(
-                        'Dimensiones del Boleto y Distribución por Hoja',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        'ticket_dimensions'.tr(),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -164,12 +165,12 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                             labelText: 'Tamaño de Papel',
                             prefixIcon: Icon(Icons.insert_drive_file_outlined),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'Letter', child: Text('Carta / Letter (216x279 mm)')),
-                            DropdownMenuItem(value: 'HalfLetter', child: Text('Media Carta (216x140 mm)')),
-                            DropdownMenuItem(value: 'A4', child: Text('A4 (210x297 mm)')),
-                            DropdownMenuItem(value: '80mm', child: Text('Rollo Térmico 80mm')),
-                            DropdownMenuItem(value: '58mm', child: Text('Rollo Térmico 58mm')),
+                          items:[
+                            DropdownMenuItem(value: 'Letter', child: Text('paper_letter'.tr())),
+                            DropdownMenuItem(value: 'HalfLetter', child: Text('paper_half_letter'.tr())),
+                            DropdownMenuItem(value: 'A4', child: Text('paper_a4'.tr())),
+                            DropdownMenuItem(value: '80mm', child: Text('paper_roll_80'.tr())),
+                            DropdownMenuItem(value: '58mm', child: Text('paper_roll_58'.tr())),
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _preset = _preset.copyWith(tamanoPapel: val));
@@ -188,11 +189,11 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                             prefixIcon: Icon(Icons.view_stream_outlined),
                             helperText: 'Copias apiladas por página',
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 1, child: Text('1 boleto por hoja')),
-                            DropdownMenuItem(value: 2, child: Text('2 boletos por hoja')),
-                            DropdownMenuItem(value: 3, child: Text('3 boletos por hoja (Tercio)')),
-                            DropdownMenuItem(value: 4, child: Text('4 boletos por hoja')),
+                          items:[
+                            DropdownMenuItem(value: 1, child: Text('per_sheet_1'.tr())),
+                            DropdownMenuItem(value: 2, child: Text('per_sheet_2'.tr())),
+                            DropdownMenuItem(value: 3, child: Text('per_sheet_3'.tr())),
+                            DropdownMenuItem(value: 4, child: Text('per_sheet_4'.tr())),
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _preset = _preset.copyWith(boletosPorHoja: val));
@@ -211,13 +212,13 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                             prefixIcon: Icon(Icons.height_outlined),
                             helperText: '0.0 = Distribuido aut.',
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 0.0, child: Text('Auto (Distribuido equitativo)')),
-                            DropdownMenuItem(value: 70.0, child: Text('70 mm')),
-                            DropdownMenuItem(value: 90.0, child: Text('90 mm (Estándar 3/hoja)')),
-                            DropdownMenuItem(value: 100.0, child: Text('100 mm')),
-                            DropdownMenuItem(value: 120.0, child: Text('120 mm (Estándar 2/hoja)')),
-                            DropdownMenuItem(value: 140.0, child: Text('140 mm')),
+                          items:[
+                            DropdownMenuItem(value: 0.0, child: Text('auto_distributed'.tr())),
+                            const DropdownMenuItem(value: 70.0, child: Text('70 mm')),
+                            DropdownMenuItem(value: 90.0, child: Text('width_90'.tr())),
+                            const DropdownMenuItem(value: 100.0, child: Text('100 mm')),
+                            DropdownMenuItem(value: 120.0, child: Text('width_120'.tr())),
+                            const DropdownMenuItem(value: 140.0, child: Text('140 mm')),
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _preset = _preset.copyWith(altoBoletoMm: val));
@@ -231,12 +232,12 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Orientación del Boleto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text('ticket_orientation'.tr(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 6),
                             SegmentedButton<String>(
-                              segments: const [
-                                ButtonSegment(value: 'portrait', icon: Icon(Icons.crop_portrait), label: Text('Vertical')),
-                                ButtonSegment(value: 'landscape', icon: Icon(Icons.crop_landscape), label: Text('Horizontal')),
+                              segments:[
+                                ButtonSegment(value: 'portrait', icon: const Icon(Icons.crop_portrait), label: Text('vertical'.tr())),
+                                ButtonSegment(value: 'landscape', icon: const Icon(Icons.crop_landscape), label: Text('horizontal'.tr())),
                               ],
                               selected: {_preset.orientacion},
                               onSelectionChanged: (val) {
@@ -253,7 +254,7 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Formato por Defecto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text('default_format'.tr(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 6),
                             SegmentedButton<String>(
                               segments: const [
@@ -303,26 +304,26 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.palette_outlined, color: SwsColors.accent),
-                      SizedBox(width: 8),
+                      const Icon(Icons.palette_outlined, color: SwsColors.accent),
+                      const SizedBox(width: 8),
                       Text(
-                        'Estilización Visual y Contenido',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        'visual_styling'.tr(),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
-                    title: const Text('Encabezado y Datos de Empresa'),
-                    subtitle: const Text('Muestra el título de la empresa, RIF y número de boleto'),
+                    title: Text('header_company'.tr()),
+                    subtitle: Text('header_company_desc'.tr()),
                     value: _preset.mostrarEncabezado,
                     onChanged: (val) => setState(() => _preset = _preset.copyWith(mostrarEncabezado: val)),
                   ),
                   SwitchListTile(
-                    title: const Text('Observaciones y Detalles del Peso'),
-                    subtitle: const Text('Muestra observaciones adicionales, transporte y conductor'),
+                    title: Text('obs_details'.tr()),
+                    subtitle: Text('obs_details_desc'.tr()),
                     value: _preset.mostrarDetalles,
                     onChanged: (val) => setState(() => _preset = _preset.copyWith(mostrarDetalles: val)),
                   ),
@@ -410,7 +411,7 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                     children: [
                       OutlinedButton.icon(
                         icon: const Icon(Icons.preview),
-                        label: const Text('Probar e Imprimir Boleto'),
+                        label: Text('test_print_ticket'.tr()),
                         onPressed: _probarImpresion,
                       ),
                       const SizedBox(width: 12),
@@ -449,10 +450,10 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_preset.mostrarEncabezado) ...[
-            const Center(
+            Center(
               child: Text(
-                'VARIEDADES S&S',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                'demo_company'.tr(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
               ),
             ),
             const Center(child: Text('RIF: J-31490236-2', style: TextStyle(fontSize: 9.5))),
@@ -503,9 +504,9 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
           ),
           const Divider(color: Colors.black45, height: 6),
           if (_preset.mostrarDetalles) ...[
-            const Text(
-              'Prueba de diseño y estilización del boleto de pesaje',
-              style: TextStyle(fontSize: 9.0, fontStyle: FontStyle.italic),
+            Text(
+              'test_ticket_caption'.tr(),
+              style: const TextStyle(fontSize: 9.0, fontStyle: FontStyle.italic),
             ),
           ],
           const SizedBox(height: 8),

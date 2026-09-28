@@ -7,5 +7,5 @@ class AppConstants {
   static const int syncBatchSize = 50;
   static const int maxSyncRetries = 3;
   static const int syncIntervalMinutes = 2;
-  static const int healthCheckSeconds = 30;
+  static const int healthCheckSeconds = 10;
 }

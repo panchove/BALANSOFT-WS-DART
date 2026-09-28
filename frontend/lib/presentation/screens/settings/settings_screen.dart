@@ -17,10 +17,17 @@ import 'connections_screen.dart';
 import 'usuarios_screen.dart';
 import '../setup/environment_check_screen.dart';
 import '../../../core/utils/save_file_utils.dart';
+import '../../../core/i18n/locale_controller.dart';
+import '../../../core/i18n/translations.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeController themeController;
-  const SettingsScreen({super.key, required this.themeController});
+  final LocaleController? localeController;
+  const SettingsScreen({
+    super.key,
+    required this.themeController,
+    this.localeController,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -28,6 +35,15 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const _scaleDefaultKey = 'scale_default_id';
+
+  LocaleController? _localLocaleController;
+  LocaleController get _localeController {
+    if (widget.localeController != null) return widget.localeController!;
+    if (di.sl.isRegistered<LocaleController>()) {
+      return di.sl<LocaleController>();
+    }
+    return _localLocaleController ??= LocaleController();
+  }
 
   List<Scale> _balanzas = const [];
   Scale? _balanzaDefault;
@@ -99,7 +115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Configuración'),
+        title: Text('settings_title'.tr()),
         actions: [
           IconButton(
             tooltip: 'Recargar',
@@ -154,9 +170,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       _SectionCard(
         icon: Icons.palette_outlined,
-        title: 'Apariencia',
+        title: 'Apariencia e Idioma',
         children: [
           _ThemeSelector(themeController: widget.themeController),
+          const Divider(),
+          _LanguageSelector(localeController: _localeController),
         ],
       ),
     ];
@@ -254,9 +272,11 @@ const _SectionCard(
       ),
       _SectionCard(
         icon: Icons.palette_outlined,
-        title: 'Apariencia',
+        title: 'Apariencia e Idioma',
         children: [
           _ThemeSelector(themeController: widget.themeController),
+          const Divider(),
+          _LanguageSelector(localeController: _localeController),
         ],
       ),
       const SizedBox(height: 8),
@@ -268,18 +288,18 @@ const _SectionCard(
     return [
       SwitchListTile(
         secondary: const Icon(Icons.sync_outlined),
-        title: const Text('Sincronización automática'),
-        subtitle: const Text('Cada 5 minutos'),
+        title: Text('sync_auto'.tr()),
+        subtitle: Text('every_5_minutes'.tr()),
         value: true,
         dense: true,
         onChanged: (v) {},
       ),
       ListTile(
         leading: const Icon(Icons.cloud_upload_outlined),
-        title: const Text('Sincronizar ahora'),
+        title: Text('sync_now'.tr()),
         onTap: () {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sincronizando...')),
+            SnackBar(content: Text('syncing'.tr())),
           );
         },
       ),
@@ -298,12 +318,11 @@ const _SectionCard(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'Selecciona la báscula que el sistema usará por defecto para '
-            'todos los pesajes.',
-            style: TextStyle(fontSize: 12.5, color: SwsColors.gray600),
+            'default_scale_pick_full'.tr(),
+            style: const TextStyle(fontSize: 12.5, color: SwsColors.gray600),
           ),
         ),
         InputDecorator(
@@ -321,19 +340,18 @@ const _SectionCard(
               value: _balanzaDefault,
               isExpanded: true,
               isDense: true,
-              hint: const Text('— Sin seleccionar —'),
+              hint: Text('not_selected'.tr()),
               items: _dropdownItems(),
               onChanged: _onBalanzaSeleccionada,
             ),
           ),
         ),
         if (_balanzas.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 12),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'No hay básculas registradas. Añádelas desde '
-              'Dispositivos → Añadir báscula.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+              'no_scales_hint_full'.tr(),
+              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
           ),
       ],
@@ -342,18 +360,18 @@ const _SectionCard(
 
   List<DropdownMenuItem<Scale?>> _dropdownItems() {
     if (_balanzas.isEmpty) {
-      return const [
+      return [
         DropdownMenuItem<Scale?>(
           value: null,
           enabled: false,
-          child: Text('Sin básculas disponibles'),
+          child: Text('no_scales_available'.tr()),
         ),
       ];
     }
     return [
-      const DropdownMenuItem<Scale?>(
+      DropdownMenuItem<Scale?>(
         value: null,
-        child: Text('— Sin seleccionar —'),
+        child: Text('not_selected'.tr()),
       ),
       for (final b in _balanzas)
         if (b.activo)
@@ -375,20 +393,20 @@ const _SectionCard(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
         leading: const Icon(Icons.logout, color: SwsColors.danger),
-        title: const Text(
-          'Cerrar Sesión',
-          style: TextStyle(color: SwsColors.danger),
+        title: Text(
+          'logout'.tr(),
+          style: const TextStyle(color: SwsColors.danger),
         ),
         onTap: () {
           showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('Cerrar Sesión'),
-              content: const Text('¿Está seguro que desea cerrar sesión?'),
+              title: Text('logout'.tr()),
+              content: Text('confirm_logout'.tr()),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar'),
+                  child: Text('cancel'.tr()),
                 ),
                 TextButton(
                   onPressed: () {
@@ -396,9 +414,9 @@ const _SectionCard(
                     context.read<AuthBloc>().add(const LogoutEvent());
                     Navigator.pushReplacementNamed(context, '/login');
                   },
-                  child: const Text(
-                    'Cerrar',
-                    style: TextStyle(color: SwsColors.danger),
+                  child: Text(
+                    'close'.tr(),
+                    style: const TextStyle(color: SwsColors.danger),
                   ),
                 ),
               ],
@@ -731,13 +749,13 @@ class _AccountInfoTile extends StatelessWidget {
         height: 24,
         child: Icon(Icons.person_outlined),
       ),
-      title: const Text('Perfil'),
+      title: Text('profile'.tr()),
       subtitle: BlocBuilder<AuthBloc, AuthState>(
         builder: (context, state) {
           if (state is AuthAuthenticated) {
             return Text('${state.user.nombre} — ${state.user.email}');
           }
-          return const Text('No autenticado');
+          return Text('not_authenticated'.tr());
         },
       ),
     );
@@ -794,7 +812,7 @@ class _IdentidadTileState extends State<_IdentidadTile> {
         height: 24,
         child: Icon(Icons.account_balance_outlined),
       ),
-      title: const Text('Identidad de la estación'),
+      title: Text('station_identity'.tr()),
       subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
       trailing: IconButton(
         icon: const Icon(Icons.refresh, size: 20),
@@ -822,7 +840,7 @@ class _UsuariosTile extends StatelessWidget {
         height: 24,
         child: Icon(esAdmin ? Icons.group_outlined : Icons.lock_outline),
       ),
-      title: const Text('Usuarios y roles'),
+      title: Text('users_and_roles_hint'.tr()),
       subtitle: Text(
         esAdmin
             ? 'Crear, editar y desactivar operadores'
@@ -858,7 +876,7 @@ class _LicenseTile extends StatelessWidget {
           esAdmin ? Icons.card_membership_outlined : Icons.lock_outline,
         ),
       ),
-      title: const Text('Administración de licencias'),
+      title: Text('license_admin'.tr()),
       subtitle: Text(
         esAdmin
             ? 'Tier, vencimiento y renovación'
@@ -1011,13 +1029,13 @@ class _WServerPanelState extends State<_WServerPanel> {
                 FilledButton.icon(
                   onPressed: _trabajando ? null : _encender,
                   icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('Encender'),
+                  label: Text('turn_on'.tr()),
                 )
               else ...[
                 OutlinedButton.icon(
                   onPressed: _trabajando ? null : _apagar,
                   icon: const Icon(Icons.stop, size: 18),
-                  label: const Text('Apagar'),
+                  label: Text('turn_off'.tr()),
                 ),
               ],
             ],
@@ -1027,10 +1045,10 @@ class _WServerPanelState extends State<_WServerPanel> {
         SwitchListTile(
           dense: true,
           secondary: const Icon(Icons.power_settings_new_outlined),
-          title: const Text('Iniciar al encender la computadora'),
-          subtitle: const Text(
-            'La estación arranca el WServer automáticamente para operar sin abrir el sistema.',
-            style: TextStyle(fontSize: 11.5),
+          title: Text('start_with_computer'.tr()),
+          subtitle: Text(
+            'autostart_desc'.tr(),
+            style: const TextStyle(fontSize: 11.5),
           ),
           value: _autostart,
           onChanged: _trabajando ? null : _toggleAutostart,
@@ -1054,10 +1072,10 @@ class _ConexionesTile extends StatelessWidget {
         height: 24,
         child: Icon(Icons.settings_ethernet),
       ),
-      title: const Text('Conexión local'),
-      subtitle: const Text(
-        'URL de la API local de esta estación y verificación de conexión.',
-        style: TextStyle(fontSize: 12),
+      title: Text('local_connection'.tr()),
+      subtitle: Text(
+        'local_connection_desc'.tr(),
+        style: const TextStyle(fontSize: 12),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1083,10 +1101,10 @@ class _IntegridadTile extends StatelessWidget {
         height: 24,
         child: Icon(Icons.health_and_safety_outlined),
       ),
-      title: const Text('Integridad del Sistema'),
-      subtitle: const Text(
-        'Verificar PostgreSQL, puerto y drivers locales.',
-        style: TextStyle(fontSize: 12),
+      title: Text('system_integrity'.tr()),
+      subtitle: Text(
+        'system_integrity_desc'.tr(),
+        style: const TextStyle(fontSize: 12),
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
@@ -1148,7 +1166,7 @@ class _DirectorioTileState extends State<_DirectorioTile> {
     await Clipboard.setData(ClipboardData(text: ruta));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ruta copiada al portapapeles')),
+        SnackBar(content: Text('path_copied'.tr())),
       );
     }
   }
@@ -1159,14 +1177,14 @@ class _DirectorioTileState extends State<_DirectorioTile> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ruta de exportación de reportes'),
+        title: Text('reports_export_path'.tr()),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Esta carpeta se utilizará para almacenar las exportaciones de Excel, PDF y Kardex en todas las sesiones y estaciones de esta cuenta.',
-              style: TextStyle(fontSize: 13),
+            Text(
+              'reports_export_path_desc'.tr(),
+              style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -1188,15 +1206,15 @@ class _DirectorioTileState extends State<_DirectorioTile> {
                 ctrl.text = '';
                 Navigator.of(ctx).pop(true);
               },
-              child: const Text('Restablecer por defecto'),
+              child: Text('reset_default'.tr()),
             ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Guardar'),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -1263,9 +1281,9 @@ class _DirectorioTileState extends State<_DirectorioTile> {
             overflow: TextOverflow.ellipsis,
           ),
           if (_esPersonalizada)
-            const Text(
-              'Configurada por el administrador para todas las sesiones',
-              style: TextStyle(fontSize: 10.5, color: SwsColors.primary, fontWeight: FontWeight.w600),
+            Text(
+              'set_by_admin'.tr(),
+              style: const TextStyle(fontSize: 10.5, color: SwsColors.primary, fontWeight: FontWeight.w600),
             ),
         ],
       ),
@@ -1325,6 +1343,104 @@ class _ThemeSelector extends StatelessWidget {
         return 'Oscuro';
       case TemaApp.sistema:
         return 'Sistema (automático)';
+    }
+  }
+}
+
+class _LanguageSelector extends StatelessWidget {
+  final LocaleController localeController;
+  const _LanguageSelector({required this.localeController});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: localeController,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.language_outlined, size: 18, color: SwsColors.accent),
+                const SizedBox(width: 8),
+                Text(
+                  AppTranslations.of(context, 'language_title', localeController),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          RadioGroup<AppLanguage>(
+            groupValue: localeController.language,
+            onChanged: (v) {
+              if (v != null) {
+                localeController.setLanguage(v);
+                // El idioma de la empresa manda en boletos y reportes impresos
+                // (REQ-NF-ONB-003): se sincroniza en segundo plano.
+                _sincronizarIdiomaEmpresa(v);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${AppTranslations.of(context, 'language_changed', localeController)}${_label(v)}',
+                    ),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: SwsColors.success,
+                  ),
+                );
+              }
+            },
+            child: Column(
+              children: AppLanguage.values.map((lang) {
+                return RadioListTile<AppLanguage>(
+                  title: Text(_label(lang)),
+                  subtitle: lang == AppLanguage.system
+                      ? Text(
+                          'Activo: ${localeController.activeLanguageCode.toUpperCase()}',
+                          style: const TextStyle(fontSize: 11),
+                        )
+                      : null,
+                  value: lang,
+                  dense: true,
+                  activeColor: SwsColors.accent,
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _label(AppLanguage lang) {
+    switch (lang) {
+      case AppLanguage.system:
+        return 'language_system'.tr();
+      case AppLanguage.es:
+        return 'language_es'.tr();
+      case AppLanguage.en:
+        return 'language_en'.tr();
+      case AppLanguage.pt:
+        return 'language_pt'.tr();
+    }
+  }
+
+  /// Propaga el idioma elegido al perfil de la empresa (solo ADMIN y solo si
+  /// la API local responde). Nunca interrumpe el cambio de idioma local.
+  Future<void> _sincronizarIdiomaEmpresa(AppLanguage lang) async {
+    final codigo = lang == AppLanguage.system ? 'system' : lang.name;
+    try {
+      final api = di.sl<ApiClient>();
+      if (AppConfig.apiBaseUrl == null || AppConfig.apiBaseUrl!.isEmpty) return;
+      final perfil = await api.getEmpresaPerfil();
+      await api.updateEmpresaPerfil({
+        'idioma': codigo,
+        'nombre_fiscal': perfil['nombre_fiscal'],
+        'rif_nit': perfil['rif_nit'],
+      });
+    } catch (_) {
+      // Sin sincronización (p. ej. sin permiso ADMIN o API caída): el idioma
+      // local ya quedó aplicado y se reintentará al guardar desde Ajustes.
     }
   }
 }

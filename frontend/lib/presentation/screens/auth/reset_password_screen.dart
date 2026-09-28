@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/brand_text.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
@@ -82,8 +83,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               });
             } else if (state is AuthPasswordChanged) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Contraseña actualizada, inicia sesión'),
+                SnackBar(
+                  content: Text('password_updated'.tr()),
                   backgroundColor: SwsColors.success,
                 ),
               );
@@ -121,14 +122,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Nueva Contraseña',
+                                  'new_password'.tr(),
                                   style:
                                       Theme.of(context).textTheme.titleLarge,
                                 ),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  'Crea una nueva contraseña para tu cuenta',
-                                  style: TextStyle(
+                                Text(
+                                  'new_password_desc'.tr(),
+                                  style: const TextStyle(
                                       color: SwsColors.gray500, fontSize: 13),
                                   textAlign: TextAlign.center,
                                 ),
@@ -202,7 +203,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                       Navigator.of(context).pop(),
                                   icon: const Icon(
                                       Icons.arrow_back_outlined, size: 18),
-                                  label: const Text('Volver'),
+                                  label: Text('back'.tr()),
                                 ),
                               ],
                             ),

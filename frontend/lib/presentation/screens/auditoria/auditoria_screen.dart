@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../domain/entities/weighing.dart';
@@ -95,9 +96,9 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
                     ),
                     Expanded(
                       child: filtrados.isEmpty
-                          ? const Center(
-                              child: Text('Sin registros',
-                                  style: TextStyle(color: SwsColors.gray500)),
+                          ? Center(
+                              child: Text('no_records'.tr(),
+                                  style: const TextStyle(color: SwsColors.gray500)),
                             )
                           : ListView.separated(
                               padding: const EdgeInsets.all(16),

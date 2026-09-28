@@ -18,9 +18,11 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   final Future<bool> Function()? _healthCheck;
   final Duration _autoSyncInterval;
 
-  /// Cantidad de fallos de health consecutivos: se marca OFFICIALMENTE offline
-  /// solo después de 2 fallos seguidos, para no parpadear con un timeout suelto
-  /// (p.ej. mientras el backend procesa el sync al refrescar).
+  /// Estado de conexión preservado entre eventos de sync
+  bool _isOnline = true;
+
+  /// Cantidad de fallos de health consecutivos: se marca OFICIALMENTE offline
+  /// solo después de 2 fallos seguidos, para no parpadear con un timeout suelto.
   int _healthFallas = 0;
 
   Timer? _timer;
@@ -38,7 +40,7 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
         _healthCheck = healthCheck,
         _autoSyncInterval =
             autoSyncInterval ?? const Duration(minutes: AppConstants.syncIntervalMinutes),
-        super(SyncInitial()) {
+        super(const SyncInitial(isOnline: true)) {
     on<SyncWeighingsEvent>(_onSync);
     on<SyncStatusEvent>(_onStatus);
     on<HealthCheckEvent>(_onHealth);
@@ -61,13 +63,16 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
 
   Future<void> _onSync(
       SyncWeighingsEvent event, Emitter<SyncState> emit) async {
-    emit(SyncInProgress());
+    emit(SyncInProgress(isOnline: _isOnline));
     try {
       final count = await _syncUseCase.execute();
       final failed = await _failedCountUseCase?.execute() ?? 0;
-      emit(SyncComplete(syncedCount: count, failedCount: failed));
+      // Si la sincronización tuvo éxito, el backend está en línea indiscutiblemente.
+      _isOnline = true;
+      _healthFallas = 0;
+      emit(SyncComplete(syncedCount: count, failedCount: failed, isOnline: true));
     } catch (e) {
-      emit(SyncError(e.toString()));
+      emit(SyncError(e.toString(), isOnline: _isOnline));
     }
   }
 
@@ -75,9 +80,9 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
       SyncStatusEvent event, Emitter<SyncState> emit) async {
     try {
       final count = await _pendingCountUseCase.execute();
-      emit(SyncStatusLoaded(pendingCount: count));
+      emit(SyncStatusLoaded(pendingCount: count, isOnline: _isOnline));
     } catch (e) {
-      emit(SyncError(e.toString()));
+      emit(SyncError(e.toString(), isOnline: _isOnline));
     }
   }
 
@@ -86,10 +91,12 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     final ok = await _healthCheck?.call() ?? true;
     if (ok) {
       _healthFallas = 0;
+      _isOnline = true;
       emit(HealthOnline(DateTime.now()));
     } else {
       _healthFallas++;
       if (_healthFallas >= 2) {
+        _isOnline = false;
         emit(HealthOffline(DateTime.now()));
       }
     }

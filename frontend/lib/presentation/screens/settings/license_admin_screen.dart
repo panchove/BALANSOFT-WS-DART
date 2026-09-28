@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/security/device_info.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/mensaje_error.dart';
@@ -89,7 +90,7 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     if (d == null) return 'Sin vencimiento';
     final dias = d.difference(DateTime.now().toUtc()).inDays;
     if (dias < 0) return 'Vencida el ${_fmtFecha(iso)}';
-    final meses = const [
+    const meses = [
       'ene', 'feb', 'mar', 'abr', 'may', 'jun',
       'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
     ];
@@ -222,7 +223,7 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh, size: 18),
-              label: const Text('Renovar / Verificar licencia'),
+              label: Text('renew_verify_license'.tr()),
             ),
           ],
         ),
@@ -248,7 +249,7 @@ class _LicenseAdminScreenState extends State<LicenseAdminScreen> {
     return Card(
       child: ListTile(
         leading: Icon(icono, color: color),
-        title: const Text('Caché local'),
+        title: Text('local_cache'.tr()),
         subtitle: Text(subtitulo, style: const TextStyle(fontSize: 12)),
         trailing: IconButton(
           tooltip: 'Limpiar caché',
@@ -290,11 +291,11 @@ class _SinDatos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    return Card(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Center(
-          child: Text('Sin información de licencia disponible'),
+          child: Text('no_license_info'.tr()),
         ),
       ),
     );

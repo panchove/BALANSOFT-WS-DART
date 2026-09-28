@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/accesos_repository.dart';
 import '../../injection.dart' as di;
@@ -320,6 +321,41 @@ class _AppSidebarState extends State<AppSidebar> {
     return result;
   }
 
+  String _traducir(BuildContext context, String label) {
+    String lang = 'es';
+    try {
+      lang = Localizations.localeOf(context).languageCode;
+    } catch (_) {}
+    const map = {
+      'INFORMACIÓN': 'menu_informacion',
+      'Inicio': 'menu_inicio',
+      'Terceros': 'menu_terceros',
+      'Flota y Transporte': 'menu_flota_transporte',
+      'Camiones / Vehículos': 'menu_camiones',
+      'Conductores': 'menu_conductores',
+      'Empresas de Transporte': 'menu_transportes',
+      'Inventario Base': 'menu_inventario_base',
+      'Categorías': 'menu_categorias',
+      'Productos': 'menu_productos',
+      'Almacenes': 'menu_almacenes',
+      'Kardex': 'menu_kardex',
+      'REPORTES': 'menu_reportes',
+      'Ingresos (Entradas)': 'menu_entradas',
+      'Despachos (Salidas)': 'menu_salidas',
+      'Inventario (Stock Físico)': 'menu_stock',
+      'MANTENIMIENTO Y CONFIGURACIÓN': 'menu_mantenimiento',
+      'Usuarios del Sistema': 'menu_usuarios',
+      'Dispositivos de Campo': 'menu_dispositivos',
+      'Seguridad y Accesos': 'menu_seguridad',
+      'Empresa y Documentos': 'menu_documentos_empresa',
+      'Diseño de Ticket': 'menu_diseno_ticket',
+      'Configuración General': 'menu_configuracion',
+      'Cerrar Sesión': 'logout_btn',
+    };
+    final key = map[label];
+    return key != null ? AppTranslations.tr(key, langCode: lang) : label;
+  }
+
   List<Widget> _buildNodes(
     List<_MenuNode> nodes, {
     required String rol,
@@ -327,12 +363,13 @@ class _AppSidebarState extends State<AppSidebar> {
     final widgets = <Widget>[];
 
     for (final node in nodes) {
+      final labelTraducido = _traducir(context, node.label);
       if (node.isSectionHeader) {
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(top: 22, bottom: 8, left: 8),
             child: Text(
-              node.label,
+              labelTraducido,
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
@@ -355,7 +392,7 @@ class _AppSidebarState extends State<AppSidebar> {
           _SidebarLeafTile(
             icon: node.icon!,
             activeIcon: node.activeIcon ?? node.icon!,
-            label: node.label,
+            label: labelTraducido,
             isSelected: isSelected,
             isSubItem: node.isSubItem,
             onTap: () => widget.onItemSelected(idx),
@@ -367,7 +404,7 @@ class _AppSidebarState extends State<AppSidebar> {
 
         widgets.add(
           _SidebarGroupHeader(
-            label: node.label,
+            label: labelTraducido,
             icon: node.icon,
             isCollapsed: isCollapsed,
             onTap: () => setState(() {
@@ -379,6 +416,7 @@ class _AppSidebarState extends State<AppSidebar> {
             }),
           ),
         );
+
 
         if (!isCollapsed && node.children != null) {
           widgets.add(

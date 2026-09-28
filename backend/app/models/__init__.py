@@ -78,6 +78,12 @@ class Empresa(Base):
     formato_ticket: Mapped[str | None] = mapped_column(
         String(10), nullable=True, default="PDF", server_default="PDF"
     )
+    formato_reporte: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, default="EXCEL", server_default="EXCEL"
+    )
+    idioma: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="es", server_default="es"
+    )
     ruta_exportacion_reportes: Mapped[str | None] = mapped_column(
         String(500), nullable=True
     )

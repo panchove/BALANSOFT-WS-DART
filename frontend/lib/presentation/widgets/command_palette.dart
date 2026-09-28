@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
+
+import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Paleta de comandos global (Ctrl+K).
@@ -298,11 +301,11 @@ class _CommandPaletteState extends State<CommandPalette> {
                       ),
                       const Divider(height: 1),
                       if (filtered.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
+                        Padding(
+                          padding: const EdgeInsets.all(24),
                           child: Text(
-                            'Sin resultados',
-                            style: TextStyle(
+                            'no_results'.tr(),
+                            style: const TextStyle(
                               color: SwsColors.gray500,
                             ),
                           ),

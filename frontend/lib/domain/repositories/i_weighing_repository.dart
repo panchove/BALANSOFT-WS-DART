@@ -21,7 +21,14 @@ abstract class IWeighingRepository {
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data);
   Future<Weighing> anularWeighing(String boleto, String motivo);
   Future<List<Weighing>> listPendientes();
-  Future<Response> getTicketPdf(String boleto);
+  Future<Response> getTicketPdf(
+    String boleto, {
+    int boletosPorHoja = 1,
+    String tamanoPapel = 'Letter',
+    String orientacion = 'portrait',
+    bool mostrarEncabezado = true,
+    bool mostrarDetalles = true,
+  });
   Future<Response> getTicketTxt(String boleto);
   Future<int> countWeighingsToday();
   Future<List<Weighing>> getPendingWeighings();

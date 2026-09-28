@@ -199,17 +199,48 @@ def _aplicar_sql(cur, ruta_absoluta: Path, etiqueta: str) -> None:
     print(f"[WServer] Esquema aplicado: {etiqueta}")
 
 
-def asegurar_db(db_url_sync: str) -> None:
-    """Crea la BD si falta y aplica el esquema local + migraciones.
+def _migraciones_pendientes(cur, mig_dir: Path) -> list[Path]:
+    """Devuelve los archivos de migración que aún no se han aplicado.
 
-    Idempotente: si el esquema ya está aplicado (hay tablas) se omite el paso
-    para arrancar rápido en cada inicio. Para un vaciado real:
+    Las instalaciones existentes (creadas antes de este registro) se marcan
+    como aplicadas para no reejecutar el esquema canónico; a partir de ahí
+    cada arranque aplica solo lo nuevo (REQ-NF-CFG-001 → migración 017).
+    """
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+        "version TEXT PRIMARY KEY, aplicada_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    cur.execute("SELECT version FROM schema_migrations")
+    aplicadas = {fila[0] for fila in cur.fetchall()}
+    if not mig_dir.exists():
+        return []
+    archivos = sorted(mig_dir.glob("*.sql"))
+    if not aplicadas:
+        # Instalación previa sin registro: se reejecutan TODAS (son
+        # idempotentes) y quedan registradas, para que las columnas nuevas
+        # lleguen a estaciones ya instaladas.
+        return archivos
+    return [mig for mig in archivos if mig.name not in aplicadas]
+
+
+def _registrar_migracion(cur, version: str) -> None:
+    cur.execute(
+        "INSERT INTO schema_migrations (version) VALUES (%s) ON CONFLICT DO NOTHING",
+        (version,),
+    )
+
+
+def asegurar_db(db_url_sync: str) -> None:
+    """Crea la BD si falta y aplica el esquema local + migraciones pendientes.
+
+    Idempotente: el esquema canónico solo se aplica cuando la BD está vacía;
+    las migraciones de ``migrations/*.sql`` se aplican **en cada arranque**
+    usando el registro ``schema_migrations``, para que las estaciones ya
+    instaladas reciban las columnas nuevas. Para un vaciado real:
     ``scripts/reset_db.sh``.
     """
     c = _descomponer_url(db_url_sync)
-    if _existe_esquema(db_url_sync):
-        print("[WServer] Esquema local ya aplicado (no se re-esquemera).")
-        return
+    esquema_previo = _existe_esquema(db_url_sync)
 
     import psycopg2
 
@@ -224,17 +255,36 @@ def asegurar_db(db_url_sync: str) -> None:
             dbname=c["db"],
             connect_timeout=5,
         ) as conn:
+            mig_dir = ROOT / MIGRACIONES_DIR
             with conn.cursor() as cur:
-                # Esquema canónico (incluye una transacción propia implicita).
-                _aplicar_sql(cur, ROOT / SCHEMA_LOCAL, SCHEMA_LOCAL)
+                if esquema_previo:
+                    pendientes = _migraciones_pendientes(cur, mig_dir)
+                else:
+                    pendientes = []
+            if esquema_previo:
+                print("[WServer] Esquema local ya aplicado (no se re-esquemera).")
+            else:
+                with conn.cursor() as cur:
+                    # Esquema canónico (incluye una transacción propia implicita).
+                    _aplicar_sql(cur, ROOT / SCHEMA_LOCAL, SCHEMA_LOCAL)
+                    conn.commit()
+                with conn.cursor() as cur:
+                    pendientes = _migraciones_pendientes(cur, mig_dir)
+            for mig in pendientes:
+                with conn.cursor() as mcur:
+                    _aplicar_sql(mcur, mig, mig.name)
+                    _registrar_migracion(mcur, mig.name)
                 conn.commit()
-                mig_dir = ROOT / MIGRACIONES_DIR
-                if mig_dir.exists():
-                    for mig in sorted(mig_dir.glob("*.sql")):
-                        with conn.cursor() as mcur:
-                            _aplicar_sql(mcur, mig, mig.name)
-                            conn.commit()
-                print("[WServer] Base de datos local lista (esquema + migraciones).")
+            if not esquema_previo and not pendientes:
+                # BD recién creada: registrar el estado para los próximos arranques.
+                with conn.cursor() as cur:
+                    for mig in sorted(mig_dir.glob("*.sql")) if mig_dir.exists() else []:
+                        _registrar_migracion(cur, mig.name)
+                conn.commit()
+            print(
+                "[WServer] Base de datos local lista "
+                f"(migraciones aplicadas: {len(pendientes)})."
+            )
     except Exception as exc:  # noqa: BLE001
         print(
             f"[WServer] ⚠ No se pudo inicializar la BD local '{c['db']}': {exc}",

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../presentation/widgets/atajo_nuevo.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -198,7 +199,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
     return AtajoNuevo(
       onNuevo: () => _mostrarFormulario(),
       child: Scaffold(
-        appBar: AppBar(title: const Text('Usuarios y roles')),
+        appBar: AppBar(title: Text('users_and_roles_hint'.tr())),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _mostrarFormulario(),
           icon: const Icon(Icons.person_add_alt_1),
@@ -229,7 +230,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
       );
     }
     if (_usuarios.isEmpty) {
-      return const Center(child: Text('No hay usuarios. Crea el primero.'));
+      return Center(child: Text('no_users_yet'.tr()));
     }
     return RefreshIndicator(
       onRefresh: _cargar,

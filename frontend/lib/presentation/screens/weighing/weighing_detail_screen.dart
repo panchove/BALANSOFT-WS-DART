@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/save_file_utils.dart';
@@ -44,12 +45,12 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
   Widget build(BuildContext context) {
     if (widget.boleto.trim().isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Detalle del Pesaje')),
-        body: const Center(
+        appBar: AppBar(title: Text('detail_weighing'.tr())),
+        body: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Text(
-              'No se puede cargar el pesaje: identificador vacío.',
+              'cannot_load_weighing'.tr(),
               textAlign: TextAlign.center,
             ),
           ),
@@ -61,20 +62,20 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
         (authState.user.isAdmin || authState.user.isSupervisor);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle del Pesaje')),
+      appBar: AppBar(title: Text('detail_weighing'.tr())),
       body: BlocConsumer<WeighingBloc, WeighingState>(
         listener: (context, state) {
           if (state is WeighingClosed) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Pesaje cerrado exitosamente'),
+              SnackBar(
+                content: Text('weighing_closed_ok'.tr()),
                 backgroundColor: SwsColors.success,
               ),
             );
           } else if (state is WeighingAnulado) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Pesaje anulado exitosamente'),
+              SnackBar(
+                content: Text('weighing_voided_ok'.tr()),
                 backgroundColor: SwsColors.danger,
               ),
             );
@@ -135,7 +136,7 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
                     FilledButton.icon(
                       onPressed: () => context.read<WeighingBloc>().add(GetWeighingEvent(widget.boleto)),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Reintentar'),
+                      label: Text('retry'.tr()),
                     ),
                   ],
                 ),
@@ -218,8 +219,8 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
             if (w.observaciones != null && w.observaciones!.isNotEmpty)
               Text(w.observaciones!, style: const TextStyle(fontSize: 13))
             else
-              const Text('Sin observaciones',
-                  style: TextStyle(color: SwsColors.gray500, fontSize: 13)),
+              Text('no_observations'.tr(),
+                  style: const TextStyle(color: SwsColors.gray500, fontSize: 13)),
           ],
         ),
         if (w.motivoAnulacion != null) ...[
@@ -379,14 +380,14 @@ class _AccionBar extends StatelessWidget {
           const SizedBox(width: 6),
           _ToolbarButton(
             icon: Icons.receipt_long,
-            label: 'Ticket TXT',
+            label: 'ticket_txt'.tr(),
             onTap: onImprimirTxt,
           ),
           if (puedeAnular && !peso.isAnulado) ...[
             const SizedBox(width: 6),
             _ToolbarButton(
               icon: Icons.block,
-              label: 'Anular',
+              label: 'void'.tr(),
               onTap: () => _confirmarAnulacion(context, boleto),
               color: SwsColors.danger,
             ),
@@ -465,7 +466,7 @@ class _AccionBar extends StatelessWidget {
               Navigator.pop(ctx);
               context.read<WeighingBloc>().add(AnularWeighingEvent(boleto, motivo));
             },
-            child: const Text('Anular'),
+            child: Text('void'.tr()),
           ),
         ],
       ),
@@ -787,8 +788,8 @@ class _CloseWeighingSheetState extends State<_CloseWeighingSheet> {
                   const Icon(Icons.local_shipping_outlined,
                       size: 20, color: SwsColors.accent),
                   const SizedBox(width: 8),
-                  const Text('Cerrar Pesaje — Salida',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  Text('close_weighing_exit'.tr(),
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -796,8 +797,8 @@ class _CloseWeighingSheetState extends State<_CloseWeighingSheet> {
                       color: SwsColors.warning.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const Text('Boleto pendiente',
-                        style: TextStyle(
+                    child: Text('pending_ticket'.tr(),
+                        style: const TextStyle(
                             fontSize: 11, color: SwsColors.warning, fontWeight: FontWeight.w600)),
                   ),
                 ],
@@ -833,10 +834,10 @@ class _CloseWeighingSheetState extends State<_CloseWeighingSheet> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  title: const Text('Registro manual del peso',
-                      style: TextStyle(fontSize: 12.5)),
-                  subtitle: const Text('Solo Supervisor/Admin',
-                      style: TextStyle(fontSize: 11)),
+                  title: Text('weighing_manual_record'.tr(),
+                      style: const TextStyle(fontSize: 12.5)),
+                  subtitle: Text('weighing_supervisor_admin_only'.tr(),
+                      style: const TextStyle(fontSize: 11)),
                   value: _esPesoManual,
                   activeThumbColor: Theme.of(context).colorScheme.primary,
                   onChanged: (v) => setState(() => _esPesoManual = v),
@@ -973,7 +974,7 @@ class _CloseWeighingSheetState extends State<_CloseWeighingSheet> {
                           ? const SizedBox(
                               width: 22, height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text('Confirmar Cierre'),
+                          : Text('confirm_close'.tr()),
                     ),
                   );
                 },
@@ -1045,14 +1046,14 @@ class _FotosBoletoState extends State<_FotosBoleto> {
         }
         final fotos = snapshot.data ?? const <_FotoRemote>[];
         if (fotos.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.photo_library_outlined, size: 18, color: SwsColors.gray400),
-                SizedBox(width: 8),
-                Text('Este boleto no tiene fotos',
-                    style: TextStyle(color: SwsColors.gray500, fontSize: 13)),
+                const Icon(Icons.photo_library_outlined, size: 18, color: SwsColors.gray400),
+                const SizedBox(width: 8),
+                Text('no_photos'.tr(),
+                    style: const TextStyle(color: SwsColors.gray500, fontSize: 13)),
               ],
             ),
           );

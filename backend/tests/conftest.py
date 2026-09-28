@@ -7,21 +7,10 @@ tablas para aislar las pruebas entre sí.
 
 from __future__ import annotations
 
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore", category=DeprecationWarning)
-    try:
-        import starlette.testclient
-    except ImportError:
-        pass
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", module=".*anyio.*")
-warnings.filterwarnings("ignore", module=".*starlette.*")
-
 import asyncio
 import os
 import uuid
+import warnings
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -32,6 +21,10 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.models import Base, Empresa
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", module=".*anyio.*")
+warnings.filterwarnings("ignore", module=".*starlette.*")
 
 
 def _url_para_bbdd(url: str, nombre: str) -> str:

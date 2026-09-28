@@ -16,10 +16,10 @@ from __future__ import annotations
 import glob
 import os
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
@@ -46,6 +46,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_empresa
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.formato import formatear_fecha, formatear_numero
+from app.core.i18n import resolve_lang, t, traducir_estado_boleto
 from app.models import BoletoPesaje, Conductor, Empresa, Producto
 from app.services.report_service import ReportService
 
@@ -104,30 +106,14 @@ def _registrar_ttf() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers de formato
 # ─────────────────────────────────────────────────────────────────────────────
-def _fmt(v: Decimal | float | int | str | None, decimales: int = 2) -> str:
-    """Formato latino: 1.234,56."""
-    if v is None or v == "":
-        return "0,00"
-    try:
-        num = float(v)
-    except (ValueError, InvalidOperation, TypeError):
-        return str(v)
-    formato = f"{{:,.{decimales}f}}"
-    return formato.format(num).replace(",", "X").replace(".", ",").replace("X", ".")
+def _fmt(v: Decimal | float | int | str | None, decimales: int = 2, lang: str = "es") -> str:
+    """Número con los separadores del idioma: 1.234,56 (es/pt) · 1,234.56 (en)."""
+    return formatear_numero(v, decimales, lang)
 
 
-def _fmt_fecha(v: str | datetime | date | None, con_hora: bool = False) -> str:
-    """Devuelve dd/mm/YYYY [HH:MM]."""
-    if v is None or v == "":
-        return "—"
-    if isinstance(v, str):
-        try:
-            v = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError:
-            return v[:19] if len(v) >= 10 else v
-    if isinstance(v, date) and not isinstance(v, datetime):
-        v = datetime(v.year, v.month, v.day)
-    return v.strftime("%d/%m/%Y %H:%M" if con_hora else "%d/%m/%Y")
+def _fmt_fecha(v: str | datetime | date | None, con_hora: bool = False, lang: str = "es") -> str:
+    """Devuelve dd/mm/YYYY [HH:MM] en el formato regional de los 3 idiomas."""
+    return formatear_fecha(v, lang, con_hora)
 
 
 def _empresa_info(empresa: Empresa | None) -> dict:
@@ -153,14 +139,15 @@ def _empresa_info(empresa: Empresa | None) -> dict:
     }
 
 
-def _nombre_movimiento(id_mov) -> str:
-    """'INGRESO (10)' / 'DESPACHO (60)' a partir de int o str."""
+def _nombre_movimiento(id_mov, idioma: str = "es") -> str:
+    """'INGRESO (10)' / 'DESPACHO (60)' a partir de int o str con i18n."""
     try:
         n = int(id_mov)
     except (TypeError, ValueError):
         return str(id_mov)
-    tipo = "INGRESO" if n < 50 else "DESPACHO"
+    tipo = t("ingreso", idioma) if n < 50 else t("despacho", idioma)
     return f"{tipo} ({n})"
+
 
 
 def _resolver_periodo(
@@ -192,6 +179,7 @@ def _excel_header_institucional(
     titulo: str,
     subtitulo: str | None = None,
     num_columnas: int = 7,
+    lang: str = "es",
 ) -> int:
     """Escribe encabezado institucional. Devuelve fila donde empieza la tabla."""
     fila_inicio_tabla = 1
@@ -210,8 +198,8 @@ def _excel_header_institucional(
     celda.alignment = Alignment(horizontal="left", vertical="center")
 
     linea = " | ".join(filter(None, [
-        f"RIF: {empresa_info['rif']}" if empresa_info["rif"] else "",
-        f"Tel: {empresa_info['telefono']}" if empresa_info["telefono"] else "",
+        f"{t('etiqueta_rif', lang)}: {empresa_info['rif']}" if empresa_info["rif"] else "",
+        f"{t('etiqueta_telefono', lang)}: {empresa_info['telefono']}" if empresa_info["telefono"] else "",
         empresa_info["email"] or "",
     ]))
     if linea:
@@ -325,16 +313,21 @@ def _pdf_estilos() -> dict[str, ParagraphStyle]:
     }
 
 
-def _pdf_header_institucional(empresa_info: dict, st: dict, is_landscape: bool = False) -> Table:
+def _pdf_header_institucional(
+    empresa_info: dict,
+    st: dict,
+    is_landscape: bool = False,
+    lang: str = "es",
+) -> Table:
     """Encabezado con logo + datos empresa."""
     izq: list = []
     if empresa_info["nombre"]:
         izq.append(Paragraph(empresa_info["nombre"], st["empresa"]))
     for etiqueta, valor in [
-        ("RIF", empresa_info["rif"]),
-        ("Dirección", empresa_info["direccion"]),
-        ("Teléfono", empresa_info["telefono"]),
-        ("Email", empresa_info["email"]),
+        (t("etiqueta_rif", lang), empresa_info["rif"]),
+        (t("etiqueta_direccion", lang), empresa_info["direccion"]),
+        (t("etiqueta_telefono", lang), empresa_info["telefono"]),
+        (t("etiqueta_email", lang), empresa_info["email"]),
     ]:
         if valor:
             izq.append(Paragraph(f"<b>{etiqueta}:</b> {valor}", st["info"]))
@@ -344,9 +337,9 @@ def _pdf_header_institucional(empresa_info: dict, st: dict, is_landscape: bool =
             logo = Image(empresa_info["logo"], width=22 * mm, height=16 * mm,
                          kind="proportional")
         except Exception:
-            logo = Paragraph("", st["info"])
+            logo = Paragraph("", st["info"])  # type: ignore[assignment]
     else:
-        logo = Paragraph("", st["info"])
+        logo = Paragraph("", st["info"])  # type: ignore[assignment]
 
     text_width = (219.4 * mm if is_landscape else 156 * mm)
     tabla = Table([[logo, izq]], colWidths=[24 * mm, text_width])
@@ -364,27 +357,25 @@ def _pdf_header_institucional(empresa_info: dict, st: dict, is_landscape: bool =
 # ─────────────────────────────────────────────────────────────────────────────
 # RUTA: Excel de pesajes
 # ─────────────────────────────────────────────────────────────────────────────
-@router.get("/export/excel")
-async def export_to_excel(
-    fecha: date | None = Query(None, description="Fecha para reporte diario (YYYY-MM-DD)"),
-    fecha_desde: date | None = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
-    fecha_hasta: date | None = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    vehicle_id: str | None = Query(None, description="Filtrar por placa"),
-    empresa: Empresa = Depends(get_current_empresa),
-    db: AsyncSession = Depends(get_db),
-) -> StreamingResponse:
-    """Exporta pesajes a un archivo Excel (.xlsx)."""
-    start, end, desde_txt, hasta_txt = _resolver_periodo(fecha, fecha_desde, fecha_hasta)
-
-    # Join con Producto y Conductor para mostrar nombres humanos
+async def _consultar_pesajes(
+    db: AsyncSession,
+    empresa: Empresa,
+    start: datetime,
+    end: datetime,
+    vehicle_id: str | None = None,
+) -> list:
+    """Pesajes del período con nombre de producto y conductor (Excel y PDF)."""
     stmt = (
         select(
             BoletoPesaje,
             Producto.nombre.label("nombre_producto"),
-            Conductor.nombre.label("nombre_conductor"),
+            Conductor.nombre.label("nombre_conductor"),  # type: ignore[attr-defined]
         )
         .outerjoin(Producto, BoletoPesaje.id_producto == Producto.id_producto)
-        .outerjoin(Conductor, BoletoPesaje.id_conductor == Conductor.id_conductor)
+        .outerjoin(
+            Conductor,
+            BoletoPesaje.id_conductor == Conductor.id_conductor,  # type: ignore[attr-defined]
+        )
         .where(
             BoletoPesaje.id_empresa == empresa.id_empresa,
             BoletoPesaje.fecha_hora_entrada >= start,
@@ -395,7 +386,25 @@ async def export_to_excel(
     if vehicle_id:
         stmt = stmt.where(BoletoPesaje.id_vehiculo == vehicle_id)
     stmt = stmt.order_by(BoletoPesaje.fecha_hora_entrada.desc())
-    rows = (await db.execute(stmt)).all()
+    return list((await db.execute(stmt)).all())
+
+
+@router.get("/export/excel")
+async def export_to_excel(
+    request: Request,
+    fecha: date | None = Query(None, description="Fecha para reporte diario (YYYY-MM-DD)"),
+    fecha_desde: date | None = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_hasta: date | None = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    vehicle_id: str | None = Query(None, description="Filtrar por placa"),
+    idioma: str | None = Query(None, description="Idioma: es, en, pt"),
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Exporta pesajes a un archivo Excel (.xlsx) con i18n."""
+    lang = resolve_lang(request, idioma, empresa.idioma)
+    start, end, desde_txt, hasta_txt = _resolver_periodo(fecha, fecha_desde, fecha_hasta)
+
+    rows = await _consultar_pesajes(db, empresa, start, end, vehicle_id)
 
     emp = _empresa_info(empresa)
     wb = Workbook()
@@ -404,23 +413,32 @@ async def export_to_excel(
 
     fila_tabla = _excel_header_institucional(
         ws, emp,
-        titulo="REPORTE DE PESAJE DE VEHÍCULOS",
-        subtitulo=f"Período: {_fmt_fecha(desde_txt)} al {_fmt_fecha(hasta_txt)} | "
-                  f"Total: {len(rows)} pesajes",
+        titulo=t("reporte_pesajes_vehiculos", lang),
+        subtitulo=f"{t('periodo', lang)}: {_fmt_fecha(desde_txt, lang=lang)} {t('al', lang)} {_fmt_fecha(hasta_txt, lang=lang)} | "
+                  f"{t('total', lang)}: {len(rows)} {t('pesajes', lang)}",
         num_columnas=12,
     )
 
     headers = [
-        "Boleto", "Fecha Entrada", "Fecha Salida", "Vehículo", "Conductor",
-        "Producto", "Peso Entrada", "Peso Salida", "Peso Bruto", "Peso Tara",
-        "Peso Neto", "Estado",
+        t("col_boleto", lang),
+        t("fecha_entrada", lang),
+        t("fecha_salida", lang),
+        t("vehiculo", lang),
+        t("col_conductor", lang),
+        t("col_producto", lang),
+        t("peso_camion", lang),
+        t("peso_remolque", lang),
+        t("peso_bruto", lang),
+        t("peso_tara", lang),
+        t("col_neto", lang),
+        t("col_estado", lang),
     ]
     filas = []
     for p, nombre_producto, nombre_conductor in rows:
         filas.append([
             p.numero_boleto or str(p.boleto)[:8].upper(),
-            _fmt_fecha(p.fecha_hora_entrada, con_hora=True),
-            _fmt_fecha(p.fecha_hora_salida, con_hora=True),
+            _fmt_fecha(p.fecha_hora_entrada, con_hora=True, lang=lang),
+            _fmt_fecha(p.fecha_hora_salida, con_hora=True, lang=lang),
             p.id_vehiculo or "—",
             nombre_conductor or (p.id_conductor or "—"),
             nombre_producto or (str(p.id_producto) if p.id_producto else "—"),
@@ -429,12 +447,13 @@ async def export_to_excel(
             float(p.peso_bruto) if p.peso_bruto else 0.0,
             float(p.peso_tara) if p.peso_tara else 0.0,
             float(p.peso_neto) if p.peso_neto else 0.0,
-            p.estado_boleto or "—",
+            traducir_estado_boleto(p.estado_boleto, lang) or "—",
         ])
     _excel_escribir_tabla(
         ws, fila_tabla, headers, filas,
         anchos=[14, 18, 18, 12, 22, 24, 14, 14, 14, 14, 14, 12],
     )
+
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -444,6 +463,129 @@ async def export_to_excel(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RUTA: PDF de pesajes (mismo juego de datos que /export/excel)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/export/pdf")
+async def export_to_pdf(
+    request: Request,
+    fecha: date | None = Query(None, description="Fecha para reporte diario (YYYY-MM-DD)"),
+    fecha_desde: date | None = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_hasta: date | None = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    vehicle_id: str | None = Query(None, description="Filtrar por placa"),
+    orientacion: str = Query("H", description="Orientacion: V o H"),
+    idioma: str | None = Query(None, description="Idioma: es, en, pt"),
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Exporta pesajes a PDF con i18n (respeta ``empresas.idioma``)."""
+    lang = resolve_lang(request, idioma, empresa.idioma)
+    start, end, desde_txt, hasta_txt = _resolver_periodo(fecha, fecha_desde, fecha_hasta)
+
+    rows = await _consultar_pesajes(db, empresa, start, end, vehicle_id)
+
+    _registrar_ttf()
+    st = _pdf_estilos()
+    emp = _empresa_info(empresa)
+    is_landscape = orientacion.upper() == "H"
+    page_size = landscape(letter) if is_landscape else letter
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=page_size,
+        leftMargin=12 * mm,
+        rightMargin=12 * mm,
+        topMargin=12 * mm,
+        bottomMargin=14 * mm,
+        title=t("reporte_pesajes_vehiculos", lang),
+        author=emp["nombre"] or t("sistema", lang),
+    )
+
+    elementos: list = []
+    elementos.append(_pdf_header_institucional(emp, st, is_landscape, lang=lang))
+    elementos.append(Spacer(1, 4 * mm))
+    elementos.append(Paragraph(t("reporte_pesajes_vehiculos", lang), st["titulo"]))
+    elementos.append(Spacer(1, 1.5 * mm))
+    elementos.append(Paragraph(
+        f"{t('periodo', lang)}: {_fmt_fecha(desde_txt, lang=lang)} {t('al', lang)} "
+        f"{_fmt_fecha(hasta_txt, lang=lang)} &nbsp;|&nbsp; {t('total', lang)}: "
+        f"{len(rows)} {t('pesajes', lang)}",
+        st["subtitulo"],
+    ))
+    elementos.append(Spacer(1, 4 * mm))
+
+    headers = [
+        t("col_boleto", lang),
+        t("fecha_entrada", lang),
+        t("col_vehiculo", lang),
+        t("col_conductor", lang),
+        t("col_producto", lang),
+        t("peso_bruto", lang),
+        t("peso_tara", lang),
+        t("col_neto", lang),
+        t("col_estado", lang),
+    ]
+    filas: list = [[Paragraph(h, st["celda_enc"]) for h in headers]]
+    for p, nombre_producto, nombre_conductor in rows:
+        filas.append([
+            Paragraph(p.numero_boleto or str(p.boleto)[:8].upper(), st["celda"]),
+            Paragraph(_fmt_fecha(p.fecha_hora_entrada, True, lang=lang), st["celda"]),
+            Paragraph(p.id_vehiculo or "—", st["celda"]),
+            Paragraph(nombre_conductor or (p.id_conductor or "—"), st["celda"]),
+            Paragraph(nombre_producto or (str(p.id_producto) if p.id_producto else "—"), st["celda"]),
+            Paragraph(_fmt(p.peso_bruto, lang=lang), st["celda_r"]),
+            Paragraph(_fmt(p.peso_tara, lang=lang), st["celda_r"]),
+            Paragraph(_fmt(p.peso_neto, lang=lang), st["celda_r"]),
+            Paragraph(traducir_estado_boleto(p.estado_boleto, lang) or "—", st["celda"]),
+        ])
+
+    if is_landscape:
+        col_widths = [22 * mm, 28 * mm, 24 * mm, 30 * mm, 40 * mm, 26 * mm, 26 * mm, 26 * mm, 22 * mm]
+    else:
+        col_widths = [20 * mm, 22 * mm, 18 * mm, 20 * mm, 26 * mm, 20 * mm, 20 * mm, 20 * mm, 18 * mm]
+
+    tabla = Table(filas, colWidths=col_widths, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), AZUL_MARINO),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, GRIS_BORDE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, GRIS_SUAVE]),
+        ("ALIGN", (5, 1), (7, -1), "RIGHT"),
+    ]))
+    elementos.append(tabla)
+    elementos.append(Spacer(1, 4 * mm))
+    elementos.append(Paragraph(
+        f"{t('total', lang)} {t('pesajes', lang)}: <b>{len(rows)}</b> &nbsp;|&nbsp; "
+        f"{t('peso_neto_total', lang)}: <b>{_fmt(sum((r[0].peso_neto or Decimal('0')) for r in rows), lang=lang)}</b>",
+        st["seccion"],
+    ))
+
+    def _on_page(cnv, d_):
+        cnv.saveState()
+        cnv.setFont(FUENTE, 7)
+        cnv.setFillColor(colors.HexColor("#718096"))
+        cnv.drawString(12 * mm, 8 * mm,
+                       f"{t('impreso', lang)}: {formatear_fecha(datetime.now(), lang, True)}")
+        cnv.drawRightString(page_size[0] - 12 * mm, 8 * mm, f"{t('pagina', lang)} {d_.page}")
+        cnv.restoreState()
+
+    doc.build(elementos, onFirstPage=_on_page, onLaterPages=_on_page)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="pesajes_{desde_txt}_{hasta_txt}.pdf"'
+        },
     )
 
 
@@ -459,14 +601,17 @@ def _kardex_desde_hasta(fecha_desde: date, fecha_hasta: date) -> tuple[datetime,
 
 @router.get("/export/kardex/excel")
 async def export_kardex_excel(
+    request: Request,
     fecha_desde: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_hasta: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     id_producto: str | None = Query(None),
     id_almacen: str | None = Query(None),
+    idioma: str | None = Query(None, description="Idioma: es, en, pt"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Exporta movimientos de kardex del período a Excel (.xlsx)."""
+    """Exporta movimientos de kardex del período a Excel (.xlsx) con i18n."""
+    lang = resolve_lang(request, idioma, empresa.idioma)
     desde, hasta = _kardex_desde_hasta(fecha_desde, fecha_hasta)
     data = await _SERVICE.kardex_detalle(db, empresa, desde, hasta, id_producto, id_almacen)
 
@@ -476,28 +621,34 @@ async def export_kardex_excel(
     ws.title = "Kardex"
 
     subtitulo = (
-        f"Período: {_fmt_fecha(fecha_desde)} al {_fmt_fecha(fecha_hasta)} | "
-        f"Saldo inicial: {_fmt(data['saldo_inicial'])} | "
-        f"Saldo actual: {_fmt(data['saldo_actual'])} | "
-        f"Movimientos: {len(data['movimientos'])}"
+        f"{t('periodo', lang)}: {_fmt_fecha(fecha_desde, lang=lang)} {t('al', lang)} {_fmt_fecha(fecha_hasta, lang=lang)} | "
+        f"{t('saldo_inicial', lang)}: {_fmt(data['saldo_inicial'], lang=lang)} | "
+        f"{t('saldo_actual', lang)}: {_fmt(data['saldo_actual'], lang=lang)} | "
+        f"{t('movimientos', lang).capitalize()}: {len(data['movimientos'])}"
     )
     fila_tabla = _excel_header_institucional(
         ws, emp,
-        titulo="KARDEX DE INVENTARIO",
+        titulo=t("kardex_inventario", lang),
         subtitulo=subtitulo,
         num_columnas=8,
     )
 
     headers = [
-        "Fecha", "Movimiento", "Código", "Producto",
-        "Almacén", "Valor", "Stock", "Referencia",
+        t("col_fecha_corta", lang),
+        t("col_movimiento", lang),
+        t("codigo", lang),
+        t("col_producto", lang),
+        t("col_almacen", lang),
+        t("valor", lang),
+        t("stock", lang),
+        t("referencia", lang),
     ]
     filas = []
     for m in data["movimientos"]:
         ref = m.get("numero_boleto") or m.get("documento") or "—"
         filas.append([
-            _fmt_fecha(m.get("fecha"), con_hora=False),
-            _nombre_movimiento(m.get("id_movimiento")),
+            _fmt_fecha(m.get("fecha"), con_hora=False, lang=lang),
+            _nombre_movimiento(m.get("id_movimiento"), idioma=lang),
             m.get("codigo_producto") or "—",
             m.get("nombre_producto") or "—",
             m.get("nombre_almacen") or "—",
@@ -526,15 +677,18 @@ async def export_kardex_excel(
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/export/kardex/pdf")
 async def export_kardex_pdf(
+    request: Request,
     fecha_desde: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_hasta: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     id_producto: str | None = Query(None),
     id_almacen: str | None = Query(None),
     orientacion: str = Query("V", description="Orientacion: V o H"),
+    idioma: str | None = Query(None, description="Idioma: es, en, pt"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Exporta movimientos de kardex del período a PDF."""
+    """Exporta movimientos de kardex del período a PDF con i18n."""
+    lang = resolve_lang(request, idioma, empresa.idioma)
     desde, hasta = _kardex_desde_hasta(fecha_desde, fecha_hasta)
     data = await _SERVICE.kardex_detalle(db, empresa, desde, hasta, id_producto, id_almacen)
 
@@ -553,42 +707,49 @@ async def export_kardex_pdf(
         rightMargin=12 * mm,
         topMargin=12 * mm,
         bottomMargin=14 * mm,
-        title="Kardex de Inventario",
-        author=emp["nombre"] or "Sistema",
+        title=t("kardex_inventario", lang),
+        author=emp["nombre"] or t("sistema", lang),
     )
 
     elementos: list = []
-    elementos.append(_pdf_header_institucional(emp, st, is_landscape))
+    elementos.append(_pdf_header_institucional(emp, st, is_landscape, lang=lang))
     elementos.append(Spacer(1, 4 * mm))
-    elementos.append(Paragraph("KARDEX DE INVENTARIO", st["titulo"]))
+    elementos.append(Paragraph(t("kardex_inventario", lang), st["titulo"]))
     elementos.append(Spacer(1, 1.5 * mm))
     subtitulo = (
-        f"Período: {_fmt_fecha(fecha_desde)} al {_fmt_fecha(fecha_hasta)} &nbsp;|&nbsp; "
-        f"Saldo inicial: <b>{_fmt(data['saldo_inicial'])}</b> &nbsp;|&nbsp; "
-        f"Saldo actual: <b>{_fmt(data['saldo_actual'])}</b> &nbsp;|&nbsp; "
-        f"Movimientos: {len(data['movimientos'])}"
+        f"{t('periodo', lang)}: {_fmt_fecha(fecha_desde, lang=lang)} {t('al', lang)} {_fmt_fecha(fecha_hasta, lang=lang)} &nbsp;|&nbsp; "
+        f"{t('saldo_inicial', lang)}: <b>{_fmt(data['saldo_inicial'], lang=lang)}</b> &nbsp;|&nbsp; "
+        f"{t('saldo_actual', lang)}: <b>{_fmt(data['saldo_actual'], lang=lang)}</b> &nbsp;|&nbsp; "
+        f"{t('movimientos', lang).capitalize()}: {len(data['movimientos'])}"
     )
     elementos.append(Paragraph(subtitulo, st["subtitulo"]))
     elementos.append(Spacer(1, 4 * mm))
 
-    headers = ["Fecha", "Movimiento", "Código", "Producto",
-               "Almacén", "Valor", "Stock", "Referencia"]
+    headers = [
+        t("col_fecha_corta", lang),
+        t("col_movimiento", lang),
+        t("codigo", lang),
+        t("col_producto", lang),
+        t("col_almacen", lang),
+        t("valor", lang),
+        t("stock", lang),
+        t("referencia", lang),
+    ]
     filas: list = [[Paragraph(h, st["celda_enc"]) for h in headers]]
     for m in data["movimientos"]:
         ref = m.get("numero_boleto") or m.get("documento") or "—"
         filas.append([
-            Paragraph(_fmt_fecha(m.get("fecha")), st["celda"]),
-            Paragraph(_nombre_movimiento(m.get("id_movimiento")), st["celda"]),
+            Paragraph(_fmt_fecha(m.get("fecha"), lang=lang), st["celda"]),
+            Paragraph(_nombre_movimiento(m.get("id_movimiento"), idioma=lang), st["celda"]),
             Paragraph(m.get("codigo_producto") or "—", st["celda"]),
             Paragraph(m.get("nombre_producto") or "—", st["celda"]),
             Paragraph(m.get("nombre_almacen") or "—", st["celda"]),
-            Paragraph(_fmt(m.get("valor")), st["celda_r"]),
-            Paragraph(_fmt(m.get("stock")), st["celda_r"]),
+            Paragraph(_fmt(m.get("valor"), lang=lang), st["celda_r"]),
+            Paragraph(_fmt(m.get("stock"), lang=lang), st["celda_r"]),
             Paragraph(str(ref), st["celda"]),
         ])
 
     if is_landscape:
-        # Anchos para Letter Horizontal (279.4mm - 24mm de márgenes = 255mm)
         col_widths = [
             24 * mm,   # Fecha
             28 * mm,   # Movimiento
@@ -599,10 +760,8 @@ async def export_kardex_pdf(
             22 * mm,   # Stock
             30 * mm,   # Referencia
         ]
-        # Ajuste de las columnas del pie para landscape
         pie_widths = [85 * mm, 85 * mm, 85 * mm]
     else:
-        # Anchos para Letter Vertical (215.9mm - 24mm de márgenes = 191.9mm)
         col_widths = [
             18 * mm,   # Fecha
             22 * mm,   # Movimiento
@@ -633,9 +792,9 @@ async def export_kardex_pdf(
 
     pie = Table(
         [[
-            Paragraph(f"<b>Saldo inicial:</b> {_fmt(data['saldo_inicial'])}", st["seccion"]),
-            Paragraph(f"<b>Saldo actual:</b> {_fmt(data['saldo_actual'])}", st["seccion"]),
-            Paragraph(f"<b>Movimientos:</b> {len(data['movimientos'])}", st["seccion"]),
+            Paragraph(f"<b>{t('saldo_inicial', lang)}:</b> {_fmt(data['saldo_inicial'], lang=lang)}", st["seccion"]),
+            Paragraph(f"<b>{t('saldo_actual', lang)}:</b> {_fmt(data['saldo_actual'], lang=lang)}", st["seccion"]),
+            Paragraph(f"<b>{t('movimientos', lang).capitalize()}:</b> {len(data['movimientos'])}", st["seccion"]),
         ]],
         colWidths=pie_widths,
     )
@@ -654,8 +813,8 @@ async def export_kardex_pdf(
         cnv.setFont(FUENTE, 7)
         cnv.setFillColor(colors.HexColor("#718096"))
         cnv.drawString(12 * mm, 8 * mm,
-                       f"Impreso: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-        cnv.drawRightString(page_size[0] - 12 * mm, 8 * mm, f"Página {d_.page}")
+                       f"{t('impreso', lang)}: {formatear_fecha(datetime.now(), lang, True)}")
+        cnv.drawRightString(page_size[0] - 12 * mm, 8 * mm, f"{t('pagina', lang)} {d_.page}")
         cnv.restoreState()
 
     doc.build(elementos, onFirstPage=_on_page, onLaterPages=_on_page)

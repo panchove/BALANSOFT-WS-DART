@@ -76,6 +76,10 @@ class ServerLicenciaOut(BaseModel):
     max_usuarios: int | None = None
     max_equipos: int | None = None
     max_sesiones: int | None = None
+    # Máquina a la que está atada la licencia: la única SERVIDOR_LOCAL. La
+    # estación la usa para explicar en el 403 cuál equipo ES el titular
+    # (docs/MANEJO_DB.md §13).
+    hardware_id: str | None = None
 
 
 class ServerLoginResponse(BaseModel):
@@ -137,6 +141,36 @@ class PanelCuentaDetalleOut(BaseModel):
     licencias: list[ServerLicenciaOut] = Field(default_factory=list)
     credenciales: list[PanelCredencialOut] = Field(default_factory=list)
     total_dispositivos: int = 0
+    # Equipos registrados y a cuál máquina quedó atada la licencia (la titular,
+    # la única que puede instalarse como SERVIDOR). Ver docs/MANEJO_DB.md §13.
+    dispositivos: list[PanelDispositivoOut] = Field(default_factory=list)
+    hardware_titular: str | None = None
+
+
+class PanelDispositivoOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id_dispositivo: uuid.UUID
+    hardware_id: str
+    nombre_equipo: str | None = None
+    rol_dispositivo: str = "LOCAL"
+    activo: bool = True
+    ultima_conexion: datetime | None = None
+
+
+class PanelTitularRequest(BaseModel):
+    """Designa qué equipo registrado es el TITULAR de la licencia.
+
+    Reata ``licencias.hardware_id`` al equipo indicado y recalcula los roles
+    (``SERVIDOR_LOCAL`` para el titular, ``LOCAL`` para el resto). Es la vía
+    soportada para corregir una cuenta cuyo equipo titular quedó mal
+    (p. ej. registros de pruebas anteriores) sin tocar la base a mano.
+    """
+
+    hardware_id: str = Field(..., min_length=3, max_length=255)
+
+
+PanelCuentaDetalleOut.model_rebuild()
 
 
 class PanelCuentaUpdateRequest(BaseModel):

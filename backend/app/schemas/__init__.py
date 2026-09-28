@@ -49,6 +49,10 @@ class LoginCentralRequest(BaseModel):
     nombre_equipo: str | None = None
     sistema_operativo: str | None = None
     version_app: str | None = None
+    #: Rol que la estación quiere tomar en la instalación. ``SERVIDOR`` solo se
+    #: acepta si el central reconoce a este equipo como titular de la licencia
+    #: (``dispositivo.rol_dispositivo = SERVIDOR_LOCAL``). ``None`` = login normal.
+    modo_solicitado: Literal["SERVIDOR", "TRABAJADOR"] | None = None
 
 
 class ValidateLicenseRequest(BaseModel):
@@ -94,7 +98,15 @@ class CompanyOut(BaseModel):
     licencia_status: str | None
     licencia_expira: datetime | None
     formato_ticket: str | None = "PDF"
+    formato_reporte: str | None = "EXCEL"
+    idioma: str = "es"
+    logo_url: str | None = None
     ruta_exportacion_reportes: str | None = None
+    # Datos de contacto: los trae el central al validar la cuenta y son los
+    # que la estación precarga en el formulario de empresa (paso 4).
+    direccion: str | None = None
+    telefono: str | None = None
+    email: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -665,6 +677,8 @@ class EmpresaPerfilOut(BaseModel):
     email: str | None = None
     logo_url: str | None = None
     formato_ticket: str | None = "PDF"
+    formato_reporte: str | None = "EXCEL"
+    idioma: Literal["es", "en", "pt"] = "es"
     ruta_exportacion_reportes: str | None = None
     updated_at: datetime
 
@@ -678,6 +692,8 @@ class EmpresaPerfilUpdate(BaseModel):
     email: EmailStr | None = None
     logo_url: str | None = Field(None, max_length=500)
     formato_ticket: Literal["PDF", "TXT"] | None = Field(None)
+    formato_reporte: Literal["EXCEL", "PDF"] | None = Field(None)
+    idioma: Literal["es", "en", "pt"] | None = Field(None)
     ruta_exportacion_reportes: str | None = Field(None, max_length=500)
 
 

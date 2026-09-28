@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../settings/initial_setup_screen.dart';
+
+import '../../../core/i18n/locale_controller.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/photo_picker_field.dart';
 import '../../../data/datasources/local/local_storage.dart';
@@ -189,10 +193,9 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar serie'),
-        content: const Text(
-          '¿Eliminar la serie activa? Los boletos existentes conservan su '
-          'número; solo deja de usarse para nuevos boletos.',
+        title: Text('delete_series'.tr()),
+        content: Text(
+          'delete_series_confirm'.tr(),
         ),
         actions: [
           TextButton(
@@ -266,12 +269,40 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Documentos y Empresa')),
+      appBar: AppBar(
+        title: Text(context.tr('Empresa y Documentos')),
+        actions: [
+          // Permite volver al wizard de configuración inicial en cualquier
+          // momento (REQ-NF-ONB-002).
+          IconButton(
+            tooltip: 'initial_setup_reopen'.tr(),
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: _abrirConfiguracionInicial,
+          ),
+        ],
+      ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _buildError()
               : _buildContenido(),
+    );
+  }
+
+  /// Abre el wizard de configuración inicial (empresa, formatos, reportes).
+  Future<void> _abrirConfiguracionInicial() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        child: InitialSetupScreen(
+          localeController: di.sl<LocaleController>(),
+          onFinish: () {
+            Navigator.of(ctx).pop();
+            _cargar();
+          },
+        ),
+      ),
     );
   }
 
@@ -329,16 +360,16 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
                             fontSize: 15, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Se muestra en tickets y reportes de pesaje.',
-                        style: TextStyle(
+                      Text(
+                        'shown_in_tickets'.tr(),
+                        style: const TextStyle(
                             fontSize: 12.5, color: SwsColors.gray600),
                       ),
                       if (!_esAdmin) ...[
                         const SizedBox(height: 6),
-                        const Text(
-                          'Solo el ADMIN puede editarlo.',
-                          style: TextStyle(
+                        Text(
+                          'admin_only_edit'.tr(),
+                          style: const TextStyle(
                               fontSize: 12, color: SwsColors.gray500),
                         ),
                       ],
@@ -400,9 +431,9 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Perfil de la empresa',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            Text(
+              'company_profile'.tr(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             _campo('Nombre fiscal', _nombreFiscalCtrl),
@@ -443,7 +474,7 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined, size: 18),
-                label: const Text('Guardar cambios'),
+                label: Text('save_changes'.tr()),
               ),
             ),
           ],
@@ -488,10 +519,10 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
                   child: Icon(Icons.tag_outlined, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Numeración de documentos',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    'doc_numbering'.tr(),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
                 if (_seriesCargando)
@@ -509,12 +540,9 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Los boletos y tickets se numeran de forma correlativa con la '
-              'serie seleccionada. Ejemplo: TA-00000001, TA-00000002, …. '
-              'La numeración es única por empresa y el siguiente número se '
-              'reserva al instante (FOR UPDATE), sin salteos ni duplicados.',
-              style: TextStyle(color: SwsColors.gray600, height: 1.4),
+            Text(
+              'doc_numbering_desc'.tr(),
+              style: const TextStyle(color: SwsColors.gray600, height: 1.4),
             ),
             if (_errorSeries != null) ...[
               const SizedBox(height: 10),
@@ -557,26 +585,23 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
             ),
             if (_series.isEmpty && !_seriesCargando) ...[
               const SizedBox(height: 10),
-              const Text(
-                'Aún no hay series. Crea la primera abajo (solo ADMIN) para '
-                'que los boletos puedan numerarse.',
-                style: TextStyle(color: SwsColors.danger, fontSize: 12.5),
+              Text(
+                'no_series_yet_desc'.tr(),
+                style: const TextStyle(color: SwsColors.danger, fontSize: 12.5),
               ),
             ],
             if (_esAdmin) ...[
               const SizedBox(height: 18),
               const Divider(),
               const SizedBox(height: 6),
-              const Text(
-                'Series personalizadas',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              Text(
+                'custom_series'.tr(),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Cada serie es un modelo: nombre, prefijo y cantidad de '
-                'dígitos. Al guardar, queda activa y pasa a numerar los '
-                'próximos boletos.',
-                style: TextStyle(color: SwsColors.gray600, fontSize: 12.5),
+              Text(
+                'custom_series_desc'.tr(),
+                style: const TextStyle(color: SwsColors.gray600, fontSize: 12.5),
               ),
               const SizedBox(height: 12),
               _campoSeria('Nombre de la serie', _serieNombreCtrl,
@@ -608,7 +633,7 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
                                 CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.add_outlined, size: 18),
-                    label: const Text('Guardar serie'),
+                    label: Text('save_series'.tr()),
                   ),
                   const Spacer(),
                   if (_idSerieActiva != null)

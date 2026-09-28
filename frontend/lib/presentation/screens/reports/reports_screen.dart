@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/save_file_utils.dart';
@@ -34,12 +35,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTime _desde = DateTime.now().subtract(const Duration(days: 30));
   DateTime _hasta = DateTime.now();
   bool _estadoExportando = false;
+  /// Formato de reporte configurado para la empresa (REQ-NF-ONB-004).
+  String _formatoReporte = 'EXCEL';
   late Future<Map<String, dynamic>> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _cargar();
+    _cargarFormatoReporte();
+  }
+
+  Future<void> _cargarFormatoReporte() async {
+    final prefs = await di.sl<ApiClient>().getPreferenciasEmpresa();
+    if (!mounted) return;
+    setState(() => _formatoReporte = prefs['formato_reporte'] ?? 'EXCEL');
   }
 
   String _fmt(DateTime d) =>
@@ -88,24 +98,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _exportExcel() async {
     setState(() => _estadoExportando = true);
     final messenger = ScaffoldMessenger.of(context);
+    final esPdf = _formatoReporte == 'PDF';
     try {
       final api = di.sl<ApiClient>();
       final params = <String, dynamic>{
         if (_mensual) ...{'year': _year, 'month': _month},
         if (!_mensual) 'fecha': _fmt(_fecha),
       };
-      final response = await api.exportExcel(params);
+      final response =
+          esPdf ? await api.exportPdf(params) : await api.exportExcel(params);
+      final sufijo = esPdf ? 'pdf' : 'xlsx';
       final nombre =
-          'reporte_${_mensual ? '$_year-${_month.toString().padLeft(2, '0')}' : _fmt(_fecha)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+          'reporte_${_mensual ? '$_year-${_month.toString().padLeft(2, '0')}' : _fmt(_fecha)}_${DateTime.now().millisecondsSinceEpoch}.$sufijo';
       final ruta = await SaveFileUtils.save(
           response.data as List<int>, nombre, subcarpeta: 'reportes');
       messenger.showSnackBar(
-        SnackBar(content: Text('Reporte exportado: $ruta')),
+        SnackBar(content: Text('${'reports_exported'.tr()}$ruta')),
       );
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('No se pudo exportar: $e'),
+          content: Text('${'reports_export_error'.tr()}$e'),
           backgroundColor: SwsColors.danger,
         ),
       );
@@ -185,15 +198,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final isWide = MediaQuery.sizeOf(context).width >= 600;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reportes'),
+        title: Text(context.tr('Reportes')),
         actions: [
           IconButton(
-            tooltip: 'Recargar',
+            tooltip: context.tr('Actualizar'),
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(() => _future = _cargar()),
           ),
           IconButton(
-            tooltip: 'Exportar Excel',
+            tooltip: context.tr('Exportar a Excel'),
             icon: Icon(_estadoExportando ? Icons.hourglass_empty : Icons.download),
             onPressed: _estadoExportando ? null : _exportExcel,
           ),
@@ -260,7 +273,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           const Icon(Icons.error_outline,
                               size: 44, color: SwsColors.danger),
                           const SizedBox(height: 12),
-                          const Text('No se pudo obtener el reporte:',
+                          Text('report_error_prefix'.tr(),
                               textAlign: TextAlign.center),
                           const SizedBox(height: 4),
                           Text(msg,
@@ -286,10 +299,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _modoChips() {
     return SegmentedButton<String>(
       showSelectedIcon: false,
-      segments: const [
-        ButtonSegment(value: 'diario', label: Text('Diario')),
-        ButtonSegment(value: 'mensual', label: Text('Mensual')),
-        ButtonSegment(value: 'avanzado', label: Text('Avanzados')),
+      segments: [
+        ButtonSegment(value: 'diario', label: Text('daily'.tr())),
+        ButtonSegment(value: 'mensual', label: Text('monthly'.tr())),
+        ButtonSegment(value: 'avanzado', label: Text('advanced'.tr())),
       ],
       selected: _avanzado
           ? {'avanzado'}
@@ -393,14 +406,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _kpi('Transportistas', '${d['total_transportistas'] ?? 0}',
             Icons.local_shipping_outlined, SwsColors.primary),
         const SizedBox(height: 4),
-        const Text('Volumen movilizado',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+        Text('volume_transported'.tr(),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
                 color: SwsColors.primary)),
         const SizedBox(height: 4),
         if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Sin movimientos de transportistas en el rango.'),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('no_transporters_movements'.tr()),
           ),
         for (final t in items)
           Card(
@@ -427,14 +440,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _kpi('Terceros', '${d['total_terceros'] ?? 0}',
             Icons.group_outlined, SwsColors.primary),
         const SizedBox(height: 4),
-        const Text('Volumen por cliente/proveedor',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+        Text('volume_by_customer'.tr(),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
                 color: SwsColors.primary)),
         const SizedBox(height: 4),
         if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Sin movimientos de terceros en el rango.'),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('no_thirds_movements'.tr()),
           ),
         for (final t in items)
           Card(
@@ -461,14 +474,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _kpi('Pesajes cerrados', '${d['total_pesajes'] ?? 0}',
             Icons.monitor_weight_outlined, SwsColors.primary),
         const SizedBox(height: 4),
-        const Text('Distribución por rango de peso neto',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+        Text('weight_range_distribution'.tr(),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
                 color: SwsColors.primary)),
         const SizedBox(height: 4),
         if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Sin pesajes cerrados en el rango.'),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('no_closed_weighings'.tr()),
           ),
         for (final t in items)
           Card(
@@ -545,8 +558,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Icons.monitor_weight, SwsColors.info),
         if (porProducto.isNotEmpty) ...[
           const SizedBox(height: 8),
-          const Text('Por producto',
-              style: TextStyle(
+          Text('by_product'.tr(),
+              style: const TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w700, color: SwsColors.primary)),
           const SizedBox(height: 4),
           for (final p in porProducto)
@@ -577,8 +590,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Icons.monitor_weight, SwsColors.info),
         if (porDia.isNotEmpty) ...[
           const SizedBox(height: 8),
-          const Text('Por día',
-              style: TextStyle(
+          Text('by_day'.tr(),
+              style: const TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w700, color: SwsColors.primary)),
           const SizedBox(height: 4),
           for (final p in porDia)

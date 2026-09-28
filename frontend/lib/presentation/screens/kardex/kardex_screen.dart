@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/save_file_utils.dart';
@@ -142,27 +143,27 @@ class _KardexScreenState extends State<KardexScreen> {
     final isWide = MediaQuery.sizeOf(context).width >= 700;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kardex - Inventario'),
+        title: Text(context.tr('Kardex - Inventario')),
         actions: [
           IconButton(
-            tooltip: 'Export Excel',
+            tooltip: context.tr('Exportar a Excel'),
             onPressed: _exportandoExcel ? null : _exportarExcel,
             icon: Icon(_exportandoExcel ? Icons.hourglass_empty : Icons.table_chart_outlined),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Export PDF',
+            tooltip: context.tr('Exportar a PDF'),
             icon: Icon(_exportandoPdf ? Icons.hourglass_empty : Icons.picture_as_pdf_outlined),
             onSelected: (String result) {
               if (!_exportandoPdf) _exportarPdf(orientacion: result);
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'V',
-                child: Text('PDF (Vertical)'),
+                child: Text(context.tr('PDF (Vertical)')),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'H',
-                child: Text('PDF (Horizontal)'),
+                child: Text(context.tr('PDF (Horizontal)')),
               ),
             ],
           ),
@@ -203,20 +204,20 @@ class _KardexScreenState extends State<KardexScreen> {
   Widget _filtros(bool isWide) {
     final filtroWidgets = [
       DropdownButton<String>(
-        hint: const Text('Almacén'),
+        hint: Text(context.tr('Almacén')),
         value: _idAlmacen,
         items: [
-          const DropdownMenuItem<String>(value: null, child: Text('Todos')),
+          DropdownMenuItem<String>(value: null, child: Text(context.tr('Todos'))),
           for (final w in _almacenes)
             DropdownMenuItem(value: w.id, child: Text(w.nombre)),
         ],
         onChanged: (v) => setState(() => _idAlmacen = v),
       ),
       DropdownButton<String>(
-        hint: const Text('Producto'),
+        hint: Text(context.tr('Producto')),
         value: _idProducto,
         items: [
-          const DropdownMenuItem<String>(value: null, child: Text('Todos')),
+          DropdownMenuItem<String>(value: null, child: Text(context.tr('Todos'))),
           for (final p in _productos)
             DropdownMenuItem(value: p.id, child: Text(p.nombre)),
         ],
@@ -225,17 +226,17 @@ class _KardexScreenState extends State<KardexScreen> {
       TextButton.icon(
         onPressed: () => _elegirFecha(desde: true),
         icon: const Icon(Icons.calendar_month_outlined, size: 18),
-        label: Text('Desde: ${_fmt(_desde)}'),
+        label: Text('${context.tr("Desde")}: ${_fmt(_desde)}'),
       ),
       TextButton.icon(
         onPressed: () => _elegirFecha(desde: false),
         icon: const Icon(Icons.calendar_month_outlined, size: 18),
-        label: Text('Hasta: ${_fmt(_hasta)}'),
+        label: Text('${context.tr("Hasta")}: ${_fmt(_hasta)}'),
       ),
       FilledButton.icon(
         onPressed: _buscar,
         icon: const Icon(Icons.search),
-        label: const Text('Buscar'),
+        label: Text(context.tr('Buscar')),
       ),
     ];
 
@@ -292,21 +293,21 @@ class _KardexScreenState extends State<KardexScreen> {
         ),
         const SizedBox(height: 8),
         if (detalle.movimientos.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Text('Sin movimientos en el período.',
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text('no_movements_period'.tr(),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: SwsColors.gray600)),
+                style: const TextStyle(color: SwsColors.gray600)),
           )
         else if (isWide)
           DataTable(
-            columns: const [
-              DataColumn(label: Text('Fecha')),
-              DataColumn(label: Text('Movimiento')),
-              DataColumn(label: Text('Producto')),
-              DataColumn(label: Text('Peso (kg)'), numeric: true),
-              DataColumn(label: Text('Saldo'), numeric: true),
-              DataColumn(label: Text('Ref')),
+            columns: [
+              DataColumn(label: Text('date'.tr())),
+              DataColumn(label: Text('movement'.tr())),
+              DataColumn(label: Text('product'.tr())),
+              DataColumn(label: Text('weight_kg'.tr()), numeric: true),
+              DataColumn(label: Text('balance'.tr()), numeric: true),
+              DataColumn(label: Text('ref'.tr())),
             ],
             rows: [
               for (final m in detalle.movimientos)

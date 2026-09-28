@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../i18n/translations.dart';
+
 import '../theme/app_theme.dart';
 
 /// Tarjeta informativa para módulos que aún no cuentan con persistencia
@@ -44,15 +46,15 @@ class ProximaFase extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Chip(
+                Chip(
                   label: Text(
-                    'PRÓXIMA FASE',
-                    style: TextStyle(fontSize: 10, letterSpacing: 0.6),
+                    'next_phase'.tr(),
+                    style: const TextStyle(fontSize: 10, letterSpacing: 0.6),
                   ),
                   backgroundColor: SwsColors.warning,
-                  labelStyle: TextStyle(color: Colors.white),
+                  labelStyle: const TextStyle(color: Colors.white),
                   visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                 ),
               ],
             ),

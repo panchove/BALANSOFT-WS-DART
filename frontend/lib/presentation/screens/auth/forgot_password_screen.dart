@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/brand_text.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
@@ -92,15 +93,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               children: [
                                 if (!_enviado) ...[
                                   Text(
-                                    'Recuperar Contraseña',
+                                    'recover_password'.tr(),
                                     style:
                                         Theme.of(context).textTheme.titleLarge,
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
-                                    'Te enviaremos un enlace para restablecer '
-                                    'tu contraseña',
-                                    style: TextStyle(
+                                  Text(
+                                    'recovery_email_desc'.tr(),
+                                    style: const TextStyle(
                                         color: SwsColors.gray500, fontSize: 13),
                                     textAlign: TextAlign.center,
                                   ),
@@ -154,17 +154,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                       color: SwsColors.success, size: 56),
                                   const SizedBox(height: 16),
                                   Text(
-                                    'Revisa tu correo',
+                                    'check_email'.tr(),
                                     style:
                                         Theme.of(context).textTheme.titleLarge,
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
-                                    'Si existe una cuenta con ese correo, '
-                                    'recibirás un enlace para restablecer tu '
-                                    'contraseña.',
-                                    style: TextStyle(
+                                  Text(
+                                    'recovery_desc'.tr(),
+                                    style: const TextStyle(
                                         color: SwsColors.gray500, fontSize: 13),
                                     textAlign: TextAlign.center,
                                   ),
@@ -179,7 +177,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                         padding: const EdgeInsets.symmetric(
                                             vertical: 14),
                                       ),
-                                      child: const Text('Volver al inicio'),
+                                      child: Text('back_home'.tr()),
                                     ),
                                   ),
                                 ],
@@ -190,7 +188,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                         Navigator.of(context).pop(),
                                     icon: const Icon(
                                         Icons.arrow_back_outlined, size: 18),
-                                    label: const Text('Volver'),
+                                    label: Text('back'.tr()),
                                   ),
                               ],
                             ),

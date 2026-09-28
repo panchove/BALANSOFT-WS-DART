@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.i18n import resolve_lang
 from app.core.security import verify_token
 from app.models import Empresa, Usuario
 from app.schemas import UserOut
@@ -59,6 +60,15 @@ async def get_current_empresa(
     if empresa is None:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
     return empresa
+
+
+def idioma_peticion(request: Request) -> str:
+    """Idioma de la petición (``?idioma=`` > ``Accept-Language`` > servidor).
+
+    Se inyecta con ``Depends(idioma_peticion)`` para traducir los mensajes de
+    error y los rótulos de los exports sin repetir el parseo en cada endpoint.
+    """
+    return resolve_lang(request)
 
 
 async def require_catalog_manager(

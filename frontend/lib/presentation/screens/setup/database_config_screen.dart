@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
@@ -77,12 +78,14 @@ class _DatabaseConfigScreenState extends State<DatabaseConfigScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Conexión exitosa. Base de datos inicializada.'),
+            SnackBar(
+              content: Text('db_conn_ok'.tr()),
               backgroundColor: SwsColors.success,
             ),
           );
-          Navigator.of(context).pushReplacementNamed('/login');
+          // Base lista: sigue validar la cuenta/licencia (paso 3). Los datos
+          // de la empresa llegan precargados del servidor central (paso 4).
+          Navigator.of(context).pushReplacementNamed('/activation');
         }
       } else {
         setState(() {
@@ -109,14 +112,14 @@ class _DatabaseConfigScreenState extends State<DatabaseConfigScreen> {
       onBack: () => Navigator.of(context).pushReplacementNamed('/setup'),
       children: [
         // ─── Encabezado ───────────────────────────────────────────────
-        const Row(
+        Row(
           children: [
-            Icon(Icons.storage_outlined, size: 32, color: SwsColors.accentLight),
-            SizedBox(width: 16),
+            const Icon(Icons.storage_outlined, size: 32, color: SwsColors.accentLight),
+            const SizedBox(width: 16),
             Expanded(
               child: Text(
-                'Conexión al Servidor Local',
-                style: TextStyle(
+                'local_server_connection'.tr(),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: SwsColors.white,
@@ -126,9 +129,9 @@ class _DatabaseConfigScreenState extends State<DatabaseConfigScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Ingresa las credenciales del motor PostgreSQL (rol SuperAdmin o propietario) para que el sistema pueda crear la estructura inicial de la base de datos.',
-          style: TextStyle(color: Colors.white60, fontSize: 13, height: 1.4),
+        Text(
+          'db_creds_desc'.tr(),
+          style: const TextStyle(color: Colors.white60, fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 28),
 

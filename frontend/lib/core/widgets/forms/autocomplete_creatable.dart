@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../i18n/translations.dart';
+
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
 import 'create_item_dialog.dart';
@@ -100,8 +102,8 @@ class _AutocompleteCreatableState<T extends Object>
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo interpretar el registro creado'),
+        SnackBar(
+          content: Text('cant_parse_record'.tr()),
           backgroundColor: SwsColors.danger,
         ),
       );

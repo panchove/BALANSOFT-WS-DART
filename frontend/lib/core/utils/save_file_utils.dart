@@ -29,6 +29,27 @@ class SaveFileUtils {
     } catch (_) {}
   }
 
+  /// Verifica que [ruta] exista (o pueda crearse) y permita escritura.
+  ///
+  /// Se usa en la configuración inicial para avisar al usuario cuando la
+  /// carpeta elegida no es utilizable; en ese caso los reportes se guardarán
+  /// en la carpeta predeterminada del sistema.
+  static Future<bool> esRutaEscribible(String ruta) async {
+    if (ruta.trim().isEmpty) return false;
+    try {
+      final dir = Directory(ruta.trim());
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final prueba = File('${dir.path}${Platform.pathSeparator}.balansoft_rw');
+      await prueba.writeAsString('ok', flush: true);
+      await prueba.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<Directory> _directorioBase() async {
     final custom = getRutaPersonalizada();
     if (custom != null && custom.trim().isNotEmpty) {

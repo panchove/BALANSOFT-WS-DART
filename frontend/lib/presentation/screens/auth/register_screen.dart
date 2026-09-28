@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/brand_text.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
@@ -99,15 +100,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'Crear Cuenta',
+                                    'create_account'.tr(),
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge,
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
-                                    'Registra tu empresa y primer usuario',
-                                    style: TextStyle(
+                                  Text(
+                                    'register_desc'.tr(),
+                                    style: const TextStyle(
                                         color: SwsColors.gray500,
                                         fontSize: 13),
                                     textAlign: TextAlign.center,
@@ -139,11 +140,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             : null,
                                   ),
                                   const SizedBox(height: 20),
-                                  const Align(
+                                  Align(
                                     alignment: Alignment.centerLeft,
                                     child: Text(
-                                      'Usuario Administrador',
-                                      style: TextStyle(
+                                      'admin_user'.tr(),
+                                      style: const TextStyle(
                                         color: SwsColors.gray600,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -201,11 +202,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             : 'Mínimo 6 caracteres',
                                   ),
                                   const SizedBox(height: 20),
-                                  const Align(
+                                  Align(
                                     alignment: Alignment.centerLeft,
                                     child: Text(
-                                      'Licencia (opcional)',
-                                      style: TextStyle(
+                                      'license_optional'.tr(),
+                                      style: const TextStyle(
                                         color: SwsColors.gray600,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -269,7 +270,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     icon: const Icon(
                                         Icons.arrow_back_outlined,
                                         size: 18),
-                                    label: const Text('Volver'),
+                                    label: Text('back'.tr()),
                                   ),
                                 ],
                               ),

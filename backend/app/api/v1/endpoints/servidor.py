@@ -42,8 +42,10 @@ from app.schemas_server import (
     PanelCredencialOut,
     PanelCuentaDetalleOut,
     PanelCuentaUpdateRequest,
+    PanelDispositivoOut,
     PanelLoginRequest,
     PanelLoginResponse,
+    PanelTitularRequest,
     PanelVerificarLicenciaRequest,
     PanelVerificarLicenciaResponse,
     ServerCredencialOut,
@@ -61,8 +63,12 @@ from app.schemas_server import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 log = logging.getLogger(__name__)
+
+#: Rol del dispositivo dueño de la licencia (único que puede ser SERVIDOR).
+ROL_SERVIDOR_LOCAL = "SERVIDOR_LOCAL"
 
 
 def _naive_utc(value: datetime | None) -> datetime | None:
@@ -97,10 +103,29 @@ def _limite_por_tier(tier: str, campo: str) -> int | None:
     return None
 
 
+# Estados con los que la cuenta conserva la licencia. ``AVAILABLE`` no es un
+# estado de la cuenta: es el estado del LM para una licencia VIRGEN (aún sin
+# amarrar a un equipo). La cuenta está habilitada y el primer dispositivo que
+# la use se ata a ella como titular único (docs/MANEJO_DB.md §13).
+_ESTADOS_LICENCIA_VIGENTES = ("ACTIVA", "AVAILABLE")
+
+
+def _licencia_vigente(estado: str | None) -> bool:
+    return (estado or "").strip().upper() in _ESTADOS_LICENCIA_VIGENTES
+
+
 def _normalizar_estado_lm(estado: str | None) -> str:
-    """Convierte un estado del LM (inglés) al estado que entiende el panel."""
+    """Convierte un estado del LM (inglés) al estado que entiende el panel.
+
+    ``AVAILABLE`` (y ``DEVICE_NOT_REGISTERED``) significan licencia VIRGEN: el
+    LM todavía no la amarró a ningún equipo. Para la cuenta eso es lo mismo que
+    una licencia activa, así que se registra como ``ACTIVA``; lo que decide si
+    ya fue activada es ``licencias.hardware_id`` (vacío = sin activar). Antes de
+    normalizar, el estado ``AVAILABLE`` se guardaba tal cual en la BD y el resto
+    del central —y el panel— lo leía como licencia rechazada.
+    """
     e = (estado or "").upper()
-    if e in ("ACTIVE", "ACTIVA", "VIGENTE"):
+    if e in ("ACTIVE", "ACTIVA", "VIGENTE", "AVAILABLE", "DEVICE_NOT_REGISTERED"):
         return "ACTIVA"
     if e in ("SUSPENDED", "SUSPENDIDA"):
         return "SUSPENDIDA"
@@ -186,7 +211,7 @@ async def _licencia_activa(db: AsyncSession, id_cuenta: uuid.UUID) -> Licencia:
         select(Licencia)
         .where(
             Licencia.id_cuenta == id_cuenta,
-            Licencia.licencia_status == "ACTIVA",
+            Licencia.licencia_status.in_(_ESTADOS_LICENCIA_VIGENTES),
             Licencia.fecha_expira >= datetime.now(UTC).replace(tzinfo=None),
         )
         .order_by(Licencia.fecha_expira)
@@ -201,8 +226,43 @@ async def _licencia_activa(db: AsyncSession, id_cuenta: uuid.UUID) -> Licencia:
     return licencia
 
 
+async def _sincronizar_roles_dispositivos(
+    db: AsyncSession, id_cuenta: uuid.UUID, hardware_titular: str | None
+) -> None:
+    """Fija el rol de cada equipo a partir de la máquina titular.
+
+    Invariante (docs/MANEJO_DB.md §13): **la máquina a la que quedó atada la
+    licencia** (``licencias.hardware_id``, la misma que bloquea al ``ADMIN`` en
+    otra máquina) es la única ``SERVIDOR_LOCAL``; todos los demás equipos son
+    ``LOCAL`` (trabajadores).
+
+    Se recalcula en cada login, no solo al crear la fila: así una cuenta cuyo
+    rol quedó mal (equipos de pruebas, filas antiguas, licences reatadas desde
+    el panel) se corrige sola, sin editar la base a mano.
+    """
+    if not hardware_titular:
+        return
+    dispositivos = (
+        await db.execute(select(Dispositivo).where(Dispositivo.id_cuenta == id_cuenta))
+    ).scalars().all()
+    for disp in dispositivos:
+        nuevo = "SERVIDOR_LOCAL" if disp.hardware_id == hardware_titular else "LOCAL"
+        if disp.rol_dispositivo != nuevo:
+            logger.info(
+                "Rol de dispositivo corregido: %s -> %s (equipo %s)",
+                disp.rol_dispositivo,
+                nuevo,
+                disp.nombre_equipo or disp.hardware_id,
+            )
+            disp.rol_dispositivo = nuevo
+
+
 async def _dispositivo(
-    db: AsyncSession, id_cuenta: uuid.UUID, hardware_id: str, payload: ServerLoginRequest
+    db: AsyncSession,
+    id_cuenta: uuid.UUID,
+    hardware_id: str,
+    payload: ServerLoginRequest,
+    hardware_titular: str | None = None,
 ) -> Dispositivo:
     result = await db.execute(
         select(Dispositivo).where(Dispositivo.hardware_id == hardware_id)
@@ -210,6 +270,10 @@ async def _dispositivo(
     disp = result.scalar_one_or_none()
     now = datetime.now(UTC).replace(tzinfo=None)
     if disp is None:
+        # Regla del TITULAR (docs/MANEJO_DB.md §13): el equipo dueño de la
+        # licencia es SERVIDOR_LOCAL; el resto, Local/trabajadores. El rol se
+        # corrige abajo contra `licencias.hardware_id`, que es la fuente de
+        # verdad, para no depender del orden de inserción de las filas.
         disp = Dispositivo(
             id_cuenta=id_cuenta,
             hardware_id=hardware_id,
@@ -227,13 +291,14 @@ async def _dispositivo(
             )
         if disp.id_licencia is not None:
             lic = await db.get(Licencia, disp.id_licencia)
-            if lic is not None and lic.licencia_status != "ACTIVA":
+            if lic is not None and not _licencia_vigente(lic.licencia_status):
                 disp.activo = False
         disp.ultima_conexion = now
         disp.nombre_equipo = payload.nombre_equipo or disp.nombre_equipo
         disp.sistema_operativo = payload.sistema_operativo or disp.sistema_operativo
         disp.version_app = payload.version_app or disp.version_app
     await db.flush()
+    await _sincronizar_roles_dispositivos(db, id_cuenta, hardware_titular)
     return disp
 
 
@@ -447,14 +512,30 @@ async def server_login(
     # Validar o registrar dispositivo titular de la licencia para la cuenta ADMIN
     if cred.rol_global == "ADMIN" or (licencia.licencia_tier or "").upper() in ("MONOPUESTO", "DEMO"):
         if not licencia.hardware_id:
+            # Licencia VIRGEN: este equipo es el primero, así que queda amarrado
+            # a ella como titular único y la licencia deja de estar sin activar
+            # (docs/MANEJO_DB.md §13).
             licencia.hardware_id = payload.hardware_id
+            if (licencia.licencia_status or "").upper() == "AVAILABLE":
+                licencia.licencia_status = "ACTIVA"
+            log.info(
+                "Licencia %s activada y amarrada al equipo %s (titular)",
+                licencia.licencia_key,
+                payload.hardware_id,
+            )
         elif licencia.hardware_id != payload.hardware_id:
             raise HTTPException(
                 status_code=403,
                 detail="La cuenta ADMIN está activada en otro equipo titular. No se permite abrir la sesión de administrador desde este dispositivo.",
             )
 
-    disp = await _dispositivo(db, cuenta.id_cuenta, payload.hardware_id, payload)
+    disp = await _dispositivo(
+        db,
+        cuenta.id_cuenta,
+        payload.hardware_id,
+        payload,
+        hardware_titular=licencia.hardware_id,
+    )
     if licencia.max_equipos is not None:
         equipo_count = (
             await db.execute(
@@ -550,6 +631,9 @@ async def server_login(
             "hardware_id": disp.hardware_id,
             "rol": disp.rol_dispositivo,
             "activo": disp.activo,
+            # Solo el titular de la licencia puede instalar la estación como
+            # SERVIDOR; el resto de equipos son trabajadores (docs §13).
+            "puede_ser_servidor": disp.rol_dispositivo == ROL_SERVIDOR_LOCAL,
         },
     )
 
@@ -749,7 +833,11 @@ async def panel_cuenta_detalle(
         await db.execute(select(Credencial).where(Credencial.id_cuenta == id_cuenta))
     ).scalars().all()
     dispositivos = (
-        await db.execute(select(Dispositivo).where(Dispositivo.id_cuenta == id_cuenta))
+        await db.execute(
+            select(Dispositivo)
+            .where(Dispositivo.id_cuenta == id_cuenta)
+            .order_by(Dispositivo.created_at.asc())
+        )
     ).scalars().all()
     return PanelCuentaDetalleOut(
         cuenta=ServerCuentaOut.model_validate(cuenta),
@@ -758,7 +846,67 @@ async def panel_cuenta_detalle(
             PanelCredencialOut.model_validate(c) for c in credenciales
         ],
         total_dispositivos=len(dispositivos),
+        dispositivos=[
+            PanelDispositivoOut.model_validate(d) for d in dispositivos
+        ],
+        hardware_titular=next(
+            (lic.hardware_id for lic in licencias if lic.hardware_id), None
+        ),
     )
+
+
+@router.post(
+    "/api/v1/panel/cuentas/{id_cuenta}/titular",
+    response_model=PanelCuentaDetalleOut,
+)
+async def panel_designar_titular(
+    id_cuenta: uuid.UUID,
+    payload: PanelTitularRequest,
+    prov: ProveedorUsuario = Depends(get_server_proveedor),
+    db: AsyncSession = Depends(get_server_db),
+) -> PanelCuentaDetalleOut:
+    """Designa (o corrige) el equipo titular de la licencia de una cuenta.
+
+    Reata ``licencias.hardware_id`` al equipo indicado y recalcula los roles:
+    ese equipo queda como ``SERVIDOR_LOCAL`` (el único que puede instalarse
+    como servidor) y el resto como ``LOCAL`` (trabajadores). Es la vía
+    soportada para arreglar cuentas cuyo titular quedó mal registrado, sin
+    editar la base a mano (docs/MANEJO_DB.md §13).
+    """
+    cuenta = await db.get(Cuenta, id_cuenta)
+    if cuenta is None:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+
+    hardware_id = payload.hardware_id.strip()
+    equipo = (
+        await db.execute(select(Dispositivo).where(Dispositivo.hardware_id == hardware_id))
+    ).scalar_one_or_none()
+    if equipo is None or equipo.id_cuenta != id_cuenta:
+        raise HTTPException(
+            status_code=404,
+            detail="Ese equipo no está registrado en esta cuenta",
+        )
+    if not equipo.activo:
+        raise HTTPException(
+            status_code=409,
+            detail="El equipo está inactivo; actívalo antes de designarlo titular",
+        )
+
+    licencia = await _licencia_activa(db, id_cuenta)
+    if licencia is None:
+        raise HTTPException(status_code=404, detail="La cuenta no tiene licencia activa")
+    anterior = licencia.hardware_id
+    licencia.hardware_id = hardware_id
+    await _sincronizar_roles_dispositivos(db, id_cuenta, hardware_id)
+    await db.commit()
+    logger.info(
+        "Titular de la cuenta %s cambiado: %s -> %s (por %s)",
+        id_cuenta,
+        anterior or "(sin atar)",
+        hardware_id,
+        prov.email,
+    )
+    return await panel_cuenta_detalle(id_cuenta, prov, db)
 
 
 @router.put(

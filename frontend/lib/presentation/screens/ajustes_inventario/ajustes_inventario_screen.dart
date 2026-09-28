@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -52,10 +53,10 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ajustes de Inventario'),
+        title: Text(context.tr('Ajustes de Inventario')),
         actions: [
           IconButton(
-            tooltip: 'Ver kardex completo',
+            tooltip: context.tr('Ver kardex completo'),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const KardexScreen()),
             ),
@@ -97,26 +98,26 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
 
                 // ── Tabla existencias por almacén ─────────────────────────
                 if (_almacenes.isNotEmpty) ...[
-                  const Card(
+                  Card(
                     margin: EdgeInsets.zero,
                     color: SwsColors.blue100,
                     child: Padding(
-                      padding: EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       child: Text(
-                        'Existencias por almacén (1 t = 1000 kg)',
-                        style: TextStyle(fontSize: 12.5, color: SwsColors.gray700),
+                        'stocks_by_warehouse'.tr(),
+                        style: const TextStyle(fontSize: 12.5, color: SwsColors.gray700),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
                   if (isWide)
                     DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Almacén')),
-                        DataColumn(label: Text('Código')),
-                        DataColumn(label: Text('Ubicación')),
-                        DataColumn(label: Text('Cap. (ton)'), numeric: true),
-                        DataColumn(label: Text('Stock (ton)'), numeric: true),
+                      columns: [
+                        DataColumn(label: Text('warehouse'.tr())),
+                        DataColumn(label: Text('code'.tr())),
+                        DataColumn(label: Text('location'.tr())),
+                        DataColumn(label: Text('cap_ton'.tr()), numeric: true),
+                        DataColumn(label: Text('stock_ton'.tr()), numeric: true),
                       ],
                       rows: [
                         for (final w in _almacenes)
@@ -241,8 +242,8 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     if (!_formKey.currentState!.validate()) return;
     if (_producto == null || _almacen == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona producto y almacén'),
+        SnackBar(
+          content: Text('select_product_warehouse'.tr()),
           backgroundColor: SwsColors.danger,
         ),
       );
@@ -307,16 +308,16 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
                 children: [
                   const Icon(Icons.tune, color: SwsColors.primary),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Registrar ajuste de inventario',
-                    style: TextStyle(
+                  Text(
+                    'register_inventory_adjust'.tr(),
+                    style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
                   Chip(
-                    label: const Text(
-                      'Solo administrador',
-                      style: TextStyle(fontSize: 11),
+                    label: Text(
+                      'admin_only'.tr(),
+                      style: const TextStyle(fontSize: 11),
                     ),
                     backgroundColor: SwsColors.accent.withValues(alpha: 0.12),
                   ),
@@ -333,18 +334,18 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
               // Tipo de movimiento
               Row(
                 children: [
-                  const Text('Tipo de movimiento:',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text('movement_type'.tr(),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(width: 12),
                   ChoiceChip(
-                    label: const Text('✚ INGRESO'),
+                    label: Text('ingreso'.tr()),
                     selected: _tipoMovimiento == 10,
                     selectedColor: SwsColors.success.withValues(alpha: 0.18),
                     onSelected: (_) => setState(() => _tipoMovimiento = 10),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('✖ DESPACHO'),
+                    label: Text('despacho'.tr()),
                     selected: _tipoMovimiento == 60,
                     selectedColor: SwsColors.danger.withValues(alpha: 0.18),
                     onSelected: (_) => setState(() => _tipoMovimiento = 60),
@@ -458,7 +459,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
         labelText: 'Producto *',
         prefixIcon: Icon(Icons.inventory_2_outlined),
       ),
-      hint: const Text('Seleccionar producto'),
+      hint: Text('select_product'.tr()),
       items: widget.productos
           .map((p) => DropdownMenuItem(value: p, child: Text(p.nombre)))
           .toList(),
@@ -475,7 +476,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
         labelText: 'Almacén *',
         prefixIcon: Icon(Icons.warehouse_outlined),
       ),
-      hint: const Text('Seleccionar almacén'),
+      hint: Text('select_warehouse'.tr()),
       items: widget.almacenes
           .map((w) => DropdownMenuItem(value: w, child: Text(w.nombre)))
           .toList(),

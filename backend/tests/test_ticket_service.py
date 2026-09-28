@@ -263,3 +263,36 @@ class TestFormato:
         assert _fmt_densidad(Decimal("0.92")) == "0,92"
         assert _fmt_densidad(Decimal("1.6")) == "1,6"
         assert _fmt_densidad(None) is None
+
+
+class TestI18nTicket:
+    def test_ticket_txt_ingles(self):
+        buf: BytesIO = _build_txt(_boleto_completo(), idioma="en")
+        txt = buf.getvalue().decode("utf-8")
+        assert "BALANSOFT WEIGHING TICKET" in txt
+        assert "WEIGHT READINGS" in txt
+        assert "Truck Weight" in txt
+        assert "NET WEIGHT" in txt
+        assert "Driver Signature" in txt
+
+    def test_ticket_txt_portugues(self):
+        buf: BytesIO = _build_txt(_boleto_completo(), idioma="pt")
+        txt = buf.getvalue().decode("utf-8")
+        assert "BILHETE DE PESAGEM BALANSOFT" in txt
+        assert "LEITURA DE PESOS" in txt
+        assert "Peso Caminhão" in txt
+        assert "PESO LÍQUIDO" in txt
+        assert "Assinatura do Motorista" in txt
+
+    def test_ticket_pdf_ingles(self):
+        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), idioma="en"))
+        assert "BALANSOFT WEIGHING TICKET" in txt
+        assert "WEIGHT READINGS" in txt
+        assert "NET WEIGHT" in txt
+
+    def test_ticket_pdf_portugues(self):
+        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), idioma="pt"))
+        assert "BILHETE DE PESAGEM BALANSOFT" in txt
+        assert "LEITURA DE PESOS" in txt
+        assert "PESO LÍQUIDO" in txt
+

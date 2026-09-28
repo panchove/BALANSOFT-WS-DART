@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/catalog_resources.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -102,20 +103,20 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar registro'),
+        title: Text(context.tr('Eliminar registro')),
         content: Text(
-            '¿Eliminar "${titulo.isNotEmpty ? titulo : id}"?\nEsta acción no se puede deshacer.'),
+            '${context.tr("¿Eliminar")} "${titulo.isNotEmpty ? titulo : id}"?\n${context.tr("Esta acción no se puede deshacer.")}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(context.tr('Cancelar')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: SwsColors.danger,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Eliminar'),
+            child: Text(context.tr('Eliminar')),
           ),
         ],
       ),
@@ -132,7 +133,7 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
       child: AtajoNuevo(
         onNuevo: () => _abrirEditor(),
         child: Scaffold(
-          appBar: AppBar(title: Text(widget.recurso.plural)),
+          appBar: AppBar(title: Text(context.tr(widget.recurso.plural))),
           body: BlocBuilder<CatalogCrudCubit, CatalogCrudState>(
           builder: (context, state) {
             final cubit = context.read<CatalogCrudCubit>();
@@ -203,18 +204,18 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
                     child: SizedBox(
                       width: double.infinity,
                       child: SegmentedButton<_FiltroTipo>(
-                        segments: const [
+                        segments: [
                           ButtonSegment(
                             value: _FiltroTipo.cliente,
-                            label: Text('Cliente'),
+                            label: Text(context.tr('Cliente')),
                           ),
                           ButtonSegment(
                             value: _FiltroTipo.proveedor,
-                            label: Text('Proveedor'),
+                            label: Text(context.tr('Proveedor')),
                           ),
                           ButtonSegment(
                             value: _FiltroTipo.ambos,
-                            label: Text('Ambos'),
+                            label: Text(context.tr('Ambos')),
                           ),
                         ],
                         selected: {_tipoSeleccionado},
@@ -249,10 +250,10 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
                     child: filtrados.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            children: const [
+                            children: [
                               Padding(
-                                padding: EdgeInsets.all(32),
-                                child: Center(child: Text('Sin coincidencias')),
+                                padding: const EdgeInsets.all(32),
+                                child: Center(child: Text('no_matches'.tr())),
                               ),
                             ],
                           )

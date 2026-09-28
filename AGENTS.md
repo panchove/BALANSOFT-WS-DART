@@ -16,7 +16,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 | Comando                          | Lugar | Notas |
 |----------------------------------|-------|-------|
 | `uv sync`                        | `backend/` | Stack uv (`pyproject.toml` + `uv.lock`) |
-| `uv run pytest -q`               | `backend/` | **154 tests** (~75 s); requiere PostgreSQL real (ver Tests) |
+| `uv run pytest -q`               | `backend/` | **248 tests** (~90 s); requiere PostgreSQL real (ver Tests) |
 | `uv run ruff check app tests`    | `backend/` | line-length 100 |
 | `uv run mypy tests/`             | `backend/` | |
 | `flutter test` / `flutter analyze` | `frontend/` | |
@@ -38,6 +38,9 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 - **Panel administrativo del proveedor** separado: `BALASOFT-UI/panel` (HTML/Bootstrap) contra la API `APP_ROLE=server`. Seed: `backend/scripts/seed_panel_admin.py`. Licencia siempre se valida contra el LM (SGLB, firma Ed25519, `LICENSE_PUBLIC_KEY_PATH`).
 - **HAL de balanza SÍ existe** (`app/core/scale_hal.py`, serial/TCP + `GET /weighing/scale/{id}/live`). Docs legacy que dicen "sin HAL" están desactualizados (ver Documentación).
 - **Permisos por categoría**: `app/core/seguridad_matrix.py` + endpoint `seguridad.py` (migración `012`), en vez de solo roles globales.
+- **Modelo de cuenta y dispositivos** (`docs/MANEJO_DB.md` §13): la primera máquina que activa la cuenta queda `SERVIDOR_LOCAL` en `servidor.dispositivos.rol`; las demás solo `LOCAL` (trabajador). La app instala en dos modos, persistido en `AppConfig.modoEstacion`:
+  - `SERVIDOR` (titular, levanta WServer + BD local): preferencias → modo → entorno → BD → `/activation` (correo+contraseña contra el central con `modo_solicitado: SERVIDOR`; 403 si no es titular) → `/company_setup` **precargado** desde el central → dashboard con la sesión ya abierta.
+  - `TRABAJADOR` (cliente delgado, sin BD ni WServer propios): preferencias → modo → `/worker_connection` (IP/puerto + `/health`) → login contra la API del servidor titular con usuarios locales.
 
 ---
 

@@ -36,6 +36,7 @@ from app.api.dependencies import get_current_empresa, get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.hardware import obtener_hardware_id
+from app.core.i18n import resolve_lang
 from app.core.license_client import LicenseInfo, get_license_client
 from app.core.monitoring import inc_pesaje_anulado, inc_pesaje_cerrado, inc_pesaje_creado
 from app.core.scale_session import get_scale_session_manager
@@ -137,7 +138,7 @@ async def create_weighing(
             )
             lic_info = LicenseInfo(
                 valid=(empresa.licencia_status or "").upper()
-                in ("ACTIVE", "ACTIVA", "VIGENTE"),
+                in ("ACTIVE", "ACTIVA", "VIGENTE", "AVAILABLE"),
                 tier=empresa.licencia_tier,
                 status=empresa.licencia_status,
             )
@@ -352,6 +353,8 @@ async def _enriquecer_pesaje_ticket(db: AsyncSession, pesaje: BoletoPesaje) -> B
 @router.get("/{boleto}/pdf")
 async def get_weighing_pdf(
     boleto: str,
+    request: Request,
+    idioma: str | None = Query(default=None),
     boletos_por_hoja: int = Query(default=1, ge=1, le=4),
     tamano_papel: str = Query(default="Letter"),
     orientacion: str = Query(default="portrait"),
@@ -364,6 +367,7 @@ async def get_weighing_pdf(
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
     pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
+    lang = resolve_lang(request, idioma, empresa.idioma)
     return generar_ticket_pdf(
         pesaje,
         empresa=empresa,
@@ -372,12 +376,15 @@ async def get_weighing_pdf(
         orientacion=orientacion,
         mostrar_encabezado=mostrar_encabezado,
         mostrar_detalles=mostrar_detalles,
+        idioma=lang,
     )
 
 
 @router.get("/{boleto}/txt")
 async def get_weighing_txt(
     boleto: str,
+    request: Request,
+    idioma: str | None = Query(default=None),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -385,7 +392,31 @@ async def get_weighing_txt(
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
     pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
-    return generar_ticket_txt(pesaje, empresa=empresa)
+    lang = resolve_lang(request, idioma, empresa.idioma)
+    return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang)
+
+
+@router.get("/{boleto}/export")
+async def get_weighing_export(
+    boleto: str,
+    request: Request,
+    idioma: str | None = Query(default=None),
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Descarga el boleto en el formato configurado en la empresa.
+
+    Es la ruta que usa la app cuando el usuario no elige formato: aplica
+    ``empresas.formato_ticket`` (PDF por defecto) —REQ-FN-CFG-004.
+    """
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
+    lang = resolve_lang(request, idioma, empresa.idioma)
+    if (empresa.formato_ticket or "PDF").upper() == "TXT":
+        return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang)
+    return generar_ticket_pdf(pesaje, empresa=empresa, idioma=lang)
 
 
 @router.put("/{boleto}", response_model=WeighingOut)

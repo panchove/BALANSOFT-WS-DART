@@ -22,8 +22,16 @@ class WeighingRepository implements IWeighingRepository {
         _connectivity = connectivity;
 
   Future<bool> get _isConnected async {
-    final result = await _connectivity.checkConnectivity();
-    return result != ConnectivityResult.none;
+    final isLocal = _apiClient.baseUrl.contains('localhost') ||
+        _apiClient.baseUrl.contains('127.0.0.1');
+    if (isLocal) return true;
+
+    try {
+      final result = await _connectivity.checkConnectivity();
+      if (result != ConnectivityResult.none) return true;
+    } catch (_) {}
+
+    return await _apiClient.health();
   }
 
   String _extractDioError(DioException e, String fallback) {
@@ -202,19 +210,19 @@ class WeighingRepository implements IWeighingRepository {
     @override
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletos_por_hoja = 1,
-    String tamano_papel = 'Letter',
+    int boletosPorHoja = 1,
+    String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
-    bool mostrar_encabezado = true,
-    bool mostrar_detalles = true,
+    bool mostrarEncabezado = true,
+    bool mostrarDetalles = true,
   }) async {
     return _apiClient.getTicketPdf(
       boleto,
-      boletos_por_hoja: boletos_por_hoja,
-      tamano_papel: tamano_papel,
+      boletosPorHoja: boletosPorHoja,
+      tamanoPapel: tamanoPapel,
       orientacion: orientacion,
-      mostrar_encabezado: mostrar_encabezado,
-      mostrar_detalles: mostrar_detalles,
+      mostrarEncabezado: mostrarEncabezado,
+      mostrarDetalles: mostrarDetalles,
     );
   }
 

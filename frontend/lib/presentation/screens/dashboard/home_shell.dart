@@ -4,8 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/constants/catalog_resources.dart';
+import '../../../core/i18n/locale_controller.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../core/theme/theme_controller.dart';
+import '../../../data/datasources/local/local_storage.dart';
+import '../../../domain/entities/user.dart';
+import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import '../../widgets/app_sidebar.dart';
@@ -22,6 +28,7 @@ import '../empresa/documentos_empresa_screen.dart';
 import '../kardex/kardex_screen.dart';
 import '../reports/reports_screen.dart';
 import '../seguridad/seguridad_screen.dart';
+import '../settings/initial_setup_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/ticket_design_screen.dart';
 import '../settings/usuarios_screen.dart';
@@ -64,7 +71,10 @@ class _HomeShellState extends State<HomeShell> {
     (_) => const DispositivosScreen(),
     (_) => const SeguridadScreen(),
     (_) => const DocumentosEmpresaScreen(),
-    (_) => SettingsScreen(themeController: widget.themeController),
+    (_) => SettingsScreen(
+          themeController: widget.themeController,
+          localeController: di.sl<LocaleController>(),
+        ),
     (_) => const TicketDesignScreen(),
   ];
 
@@ -73,6 +83,33 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     context.read<WeighingBloc>().add(const ListWeighingsEvent());
     ServicesBinding.instance.keyboard.addHandler(_onKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _abrirOnboardingSiFalta());
+  }
+
+  /// Primera instalación: el primer ADMIN completa empresa, formatos de
+  /// exportación y carpeta de reportes (REQ-NF-ONB-002).
+  Future<void> _abrirOnboardingSiFalta() async {
+    if (AppConfig.onboardingCompletado || !mounted) return;
+    final usuario = await di.sl<LocalStorage>().getCachedUser();
+    if (!mounted || usuario == null || !_esAdmin(usuario)) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        child: InitialSetupScreen(
+          localeController: di.sl<LocaleController>(),
+          onFinish: () {
+            Navigator.of(ctx).pop();
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
+
+  bool _esAdmin(User usuario) {
+    final rol = usuario.rol.toString().toUpperCase();
+    return rol == 'ADMIN' || rol == 'PROPIETARIO' || rol == 'SUPERADMIN';
   }
 
   @override
@@ -419,16 +456,16 @@ class _HomeShellState extends State<HomeShell> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Salir del sistema'),
-        content: const Text('¿Deseas cerrar Balansoft-WS?'),
+        title: Text(context.tr('Salir del sistema')),
+        content: Text(context.tr('¿Deseas cerrar Balansoft-WS?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(context.tr('Cancelar')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Salir'),
+            child: Text(context.tr('Salir')),
           ),
         ],
       ),
@@ -503,16 +540,16 @@ class _HomeShellState extends State<HomeShell> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Deseas cerrar la sesión actual?'),
+        title: Text(context.tr('Cerrar sesión')),
+        content: Text(context.tr('¿Deseas cerrar la sesión actual?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(context.tr('Cancelar')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cerrar sesión'),
+            child: Text(context.tr('Cerrar sesión')),
           ),
         ],
       ),
