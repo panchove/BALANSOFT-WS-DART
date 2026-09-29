@@ -114,6 +114,9 @@ CREATE TABLE IF NOT EXISTS transportes (
     created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS transportes_empresa_codigo_uk
+    ON transportes (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 -- ============================================================
 -- 4. FLOTA
@@ -198,6 +201,9 @@ CREATE TABLE IF NOT EXISTS terceros (
     created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS terceros_empresa_codigo_uk
+    ON terceros (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 -- ============================================================
 -- 6. INVENTARIO
@@ -212,6 +218,9 @@ CREATE TABLE IF NOT EXISTS categorias (
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS categorias_empresa_codigo_uk
+    ON public.categorias (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS productos (
     id_producto       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -229,6 +238,9 @@ CREATE TABLE IF NOT EXISTS productos (
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS productos_empresa_codigo_uk
+    ON productos (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS almacenes (
     id_almacen        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -242,6 +254,9 @@ CREATE TABLE IF NOT EXISTS almacenes (
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS almacenes_empresa_codigo_uk
+    ON almacenes (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS balanzas (
     id_balanza    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -261,6 +276,9 @@ CREATE TABLE IF NOT EXISTS balanzas (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX IF NOT EXISTS balanzas_empresa_codigo_uk
+    ON balanzas (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
 
 -- ============================================================
 -- 7. TRANSACCIONAL - BOLETOS DE PESAJE
@@ -292,6 +310,8 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     foto_salida_url          TEXT,
 
     documento                VARCHAR(100),
+    guia_sunagro             VARCHAR(100),
+    medida                   VARCHAR(50),
     flete                    VARCHAR(100),
     costo_flete              NUMERIC(12,2),
     observaciones            TEXT,
@@ -321,6 +341,7 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     unidades                 NUMERIC(12,2),
 
     estado_boleto            VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+    es_peso_manual           BOOLEAN NOT NULL DEFAULT FALSE,
     sincronizado             BOOLEAN NOT NULL DEFAULT FALSE,
     sync_intentos            INTEGER NOT NULL DEFAULT 0,
     created_at               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

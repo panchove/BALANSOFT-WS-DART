@@ -634,6 +634,13 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _boletoSalida = b;
       _numeroBoleto = b.numeroBoleto ?? b.boleto;
       _camionTexto = b.idVehiculo ?? '';
+      _remolqueTexto = b.remolquePlaca ?? '';
+      _transporteTexto = b.transporteNombre ?? '';
+      _conductorTexto = b.conductorNombre ?? '';
+      _productoTexto = b.productoNombre ?? '';
+      _almacenTexto = b.almacenNombre ?? '';
+      _balanzaTexto = b.balanzaNombre ?? '';
+      _terceroTexto = b.terceroNombre ?? '';
       _remolque = b.remolque;
       _pesoEntradaCtrl.text = b.pesoEntradaVehiculo.toStringAsFixed(2);
       _pesoRemolqueCtrl.text = _remolque ? (b.pesoEntradaRemolque ?? 0).toStringAsFixed(2) : '';
@@ -641,6 +648,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _pesoSalidaRemolqueCtrl.clear();
       _pesoNetoDeclaradoCtrl.text = b.pesoNetoDeclarado != null ? b.pesoNetoDeclarado!.toStringAsFixed(2) : '';
       _documentoCtrl.text = b.documento ?? '';
+      _guiaSunagroCtrl.text = b.guiaSunagro ?? '';
+      _medidaCtrl.text = b.medida ?? '';
       _observacionesCtrl.text = b.observaciones ?? '';
       _fleteCtrl.text = b.flete ?? '';
       _costoFleteCtrl.text = b.costoFlete != null ? b.costoFlete!.toStringAsFixed(2) : '';
@@ -714,10 +723,19 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   Future<void> _reimprimirTicket(String boleto, String nombreBoleto, {String formato = 'PDF'}) async {
     try {
+      final preset = await di.sl<LocalStorage>().getPrinterPreset();
       final repo = di.sl<WeighingRepository>();
       final response = formato == 'TXT'
-          ? await repo.getTicketTxt(boleto)
-          : await repo.getTicketPdf(boleto);
+          ? await repo.getTicketTxt(boleto, tipoTicket: preset.tipoTicket)
+          : await repo.getTicketPdf(
+              boleto,
+              boletosPorHoja: preset.boletosPorHoja,
+              tamanoPapel: preset.tamanoPapel,
+              orientacion: preset.orientacion,
+              mostrarEncabezado: preset.mostrarEncabezado,
+              mostrarDetalles: preset.mostrarDetalles,
+              tipoTicket: preset.tipoTicket,
+            );
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
         throw Exception('El servidor no devolvió un $formato válido.');
@@ -770,6 +788,22 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         'es_peso_manual': _esPesoManual,
         if (_observacionesCtrl.text.trim().isNotEmpty)
           'observaciones': _observacionesCtrl.text.trim(),
+        if (_documentoCtrl.text.trim().isNotEmpty)
+          'documento': _documentoCtrl.text.trim(),
+        if (_guiaSunagroCtrl.text.trim().isNotEmpty)
+          'guia_sunagro': _guiaSunagroCtrl.text.trim(),
+        if (_medidaCtrl.text.trim().isNotEmpty)
+          'medida': _medidaCtrl.text.trim(),
+        if (_fleteCtrl.text.trim().isNotEmpty)
+          'flete': _fleteCtrl.text.trim(),
+        if (_costoFleteCtrl.text.isNotEmpty)
+          'costo_flete': double.tryParse(_costoFleteCtrl.text),
+        if (_densidadCtrl.text.isNotEmpty)
+          'densidad': double.tryParse(_densidadCtrl.text),
+        if (_unidadesCtrl.text.isNotEmpty)
+          'unidades': double.tryParse(_unidadesCtrl.text),
+        if (_unidadesCtrl.text.isNotEmpty)
+          'litros': double.tryParse(_unidadesCtrl.text),
       };
       context.read<WeighingBloc>().add(CloseWeighingEvent(_boletoSalida!.boleto, payload));
       return;
@@ -797,10 +831,13 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       pesoEntradaRemolque: _remolque ? double.tryParse(_pesoRemolqueCtrl.text) : null,
       pesoNetoDeclarado: _pesoNetoDeclaradoCtrl.text.isNotEmpty ? double.tryParse(_pesoNetoDeclaradoCtrl.text) : null,
       documento: _documentoCtrl.text.trim().isNotEmpty ? _documentoCtrl.text.trim() : null,
+      guiaSunagro: _guiaSunagroCtrl.text.trim().isNotEmpty ? _guiaSunagroCtrl.text.trim() : null,
+      medida: _medidaCtrl.text.trim().isNotEmpty ? _medidaCtrl.text.trim() : null,
       flete: _fleteCtrl.text.trim().isNotEmpty ? _fleteCtrl.text.trim() : null,
       costoFlete: double.tryParse(_costoFleteCtrl.text),
       densidad: double.tryParse(_densidadCtrl.text),
       litros: double.tryParse(_unidadesCtrl.text),
+      unidades: double.tryParse(_unidadesCtrl.text),
       observaciones: _observacionesCtrl.text.trim().isNotEmpty ? _observacionesCtrl.text.trim() : null,
       createdAt: now,
       updatedAt: now,
@@ -815,8 +852,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       'balanza_nombre': _balanzaSeleccionada?.descripcion ?? _balanzaTexto,
       'tercero_nombre': _terceroSeleccionado?.razonSocial ?? _terceroTexto,
       'es_peso_manual': _esPesoManual,
-      'guia_sunagro': _guiaSunagroCtrl.text.trim().isNotEmpty ? _guiaSunagroCtrl.text.trim() : null,
-      'medida': _medidaCtrl.text.trim().isNotEmpty ? _medidaCtrl.text.trim() : null,
       if (_idSerieSeleccionada != null) 'id_serie': _idSerieSeleccionada,
     };
 
@@ -872,6 +907,11 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               duration: const Duration(seconds: 4),
             ),
           );
+        } else {
+          // Estados globales ajenos a esta pantalla (listado, sync, detalle de
+          // otra operación): se descarta el overlay de "Guardando pesaje" para
+          // no quedar en bucle con un spinner infinito.
+          setState(() => _guardandoPesaje = false);
         }
       },
       child: BlocBuilder<CatalogBloc, CatalogState>(
@@ -893,11 +933,24 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     final remolque = _fotosRemolque.map((f) => (foto: f, tipo: 'otros'));
     final todas = [...camion, ...remolque];
     if (todas.isEmpty) return;
-    try {
-      for (final entrada in todas) {
-        await api.uploadImage(boleto, entrada.foto.bytes, entrada.foto.nombre, tipo: entrada.tipo);
-      }
-    } catch (_) {}
+    var ok = 0;
+    for (final entrada in todas) {
+      try {
+        await api.uploadImage(
+            boleto, entrada.foto.bytes, entrada.foto.nombre, tipo: entrada.tipo);
+        ok++;
+      } catch (_) {}
+    }
+    final total = todas.length;
+    if (ok < total && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'No se pudieron subir las fotos del pesaje ($ok de $total). Verifique la conexión y vuelva a intentar al cerrar el boleto.'),
+          backgroundColor: SwsColors.warning,
+        ),
+      );
+    }
   }
 
   Widget _buildForm(BuildContext context, CatalogData data) {
@@ -1129,10 +1182,18 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         icon: Icons.directions_car,
         hint: 'Placa del camión',
         fieldKey: const Key('placa_field'),
+        initialValue: _camionTexto,
         onFocusNodeReady: (node) => _focos[_idxCamion] = node,
         onSelected: (v) => setState(() {
           _camionSeleccionado = v;
           _confirmarCampo(_idxCamion);
+          final tid = v.transporteId;
+          if (tid != null && tid.isNotEmpty) {
+            final t = data.transports.where((x) => x.id == tid).firstOrNull;
+            _transporteSeleccionado = t;
+            _transporteTexto = t?.razonSocial ?? '';
+            if (t != null) _confirmarCampo(_idxTransporte);
+          }
         }),
         onTextChanged: (text) {
           _camionSeleccionado = null;
@@ -1172,6 +1233,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           fieldName: 'Remolque',
           icon: Icons.local_shipping_outlined,
           hint: 'Placa del remolque',
+          initialValue: _remolqueTexto,
           onFocusNodeReady: (node) => _focos[_idxRemolque] = node,
           onSelected: _onRemolqueSeleccionado,
           onTextChanged: (text) {
@@ -1218,6 +1280,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         fieldName: 'Transporte',
         icon: Icons.fire_truck_outlined,
         hint: 'Razón social del transporte',
+        initialValue: _transporteTexto,
         onFocusNodeReady: (node) => _focos[_idxTransporte] = node,
         onSelected: (t) => setState(() {
           _transporteSeleccionado = t;
@@ -1241,6 +1304,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         fieldName: 'Conductor',
         icon: Icons.person,
         hint: 'Cédula o nombre del conductor',
+        initialValue: _conductorTexto,
         onFocusNodeReady: (node) => _focos[_idxConductor] = node,
         onSelected: (d) => setState(() {
           _conductorSeleccionado = d;
@@ -1279,10 +1343,14 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         fieldName: 'Producto',
         icon: Icons.inventory,
         hint: 'Nombre del producto',
+        initialValue: _productoTexto,
         onFocusNodeReady: (node) => _focos[_idxProducto] = node,
         onSelected: (p) => setState(() {
           _productoSeleccionado = p;
           _confirmarCampo(_idxProducto);
+          if (p.densidadEstandar != null && _densidadCtrl.text.trim().isEmpty) {
+            _densidadCtrl.text = p.densidadEstandar!.toStringAsFixed(2);
+          }
         }),
         onTextChanged: (text) {
           _productoSeleccionado = null;
@@ -1302,6 +1370,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         fieldName: 'Almacén',
         icon: Icons.warehouse,
         hint: 'Nombre del almacén',
+        initialValue: _almacenTexto,
         onFocusNodeReady: (node) => _focos[_idxAlmacen] = node,
         onSelected: (w) => setState(() {
           _almacenSeleccionado = w;
@@ -1325,6 +1394,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         fieldName: 'Balanza',
         icon: Icons.scale,
         hint: 'Descripción de la balanza',
+        initialValue: _balanzaTexto,
         onFocusNodeReady: (node) => _focos[_idxBalanza] = node,
         onSelected: (s) => setState(() {
           _balanzaSeleccionada = s;
@@ -1372,6 +1442,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               fieldName: 'Razón Social',
               icon: Icons.business,
               hint: 'Nombre del tercero',
+              initialValue: _terceroTexto,
               onFocusNodeReady: (node) => _focos[_idxTercero] = node,
               onSelected: (t) => setState(() {
                 _terceroSeleccionado = t;

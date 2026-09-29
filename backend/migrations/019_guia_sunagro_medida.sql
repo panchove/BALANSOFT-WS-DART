@@ -1,0 +1,2 @@
+ALTER TABLE boletos_pesaje ADD COLUMN IF NOT EXISTS guia_sunagro VARCHAR(100);
+ALTER TABLE boletos_pesaje ADD COLUMN IF NOT EXISTS medida VARCHAR(50);

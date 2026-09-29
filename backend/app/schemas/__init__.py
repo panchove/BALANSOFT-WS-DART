@@ -416,14 +416,20 @@ class WeighingCreate(BaseModel):
     balanza_nombre: str | None = None
     tercero_nombre: str | None = None
 
-    # Pesaje
+# Pesaje
     es_peso_manual: bool = False
     fecha_hora_entrada: datetime = Field(default_factory=lambda: datetime.now(UTC))
     peso_entrada_vehiculo: Decimal = Field(..., ge=0)
     peso_entrada_remolque: Decimal | None = None
+    peso_neto_declarado: Decimal | None = None  # PND (peso declarado en la guía)
     documento: str | None = None
+    guia_sunagro: str | None = None
+    medida: str | None = None
     flete: str | None = None
     costo_flete: Decimal | None = None
+    densidad: Decimal | None = None
+    litros: Decimal | None = None
+    unidades: Decimal | None = None
     observaciones: str | None = None
 
     @field_validator("peso_entrada_vehiculo")
@@ -441,9 +447,14 @@ class WeighingClose(BaseModel):
     peso_salida_remolque: Decimal | None = None
     peso_neto_declarado: Decimal | None = None  # PND (peso declarado en la guía)
     densidad: Decimal | None = None
+    litros: Decimal | None = None
     unidades: Decimal | None = None
     costo_flete: Decimal | None = None
     observaciones: str | None = None
+    guia_sunagro: str | None = None
+    medida: str | None = None
+    documento: str | None = None
+    flete: str | None = None
 
 
 class WeighingAnular(BaseModel):
@@ -454,10 +465,15 @@ class WeighingAnular(BaseModel):
 
 class WeighingUpdate(BaseModel):
     documento: str | None = None
+    guia_sunagro: str | None = None
+    medida: str | None = None
     flete: str | None = None
     costo_flete: Decimal | None = None
     observaciones: str | None = None
     peso_neto_declarado: Decimal | None = None
+    densidad: Decimal | None = None
+    litros: Decimal | None = None
+    unidades: Decimal | None = None
 
 
 class WeighingOut(BaseModel):
@@ -497,9 +513,12 @@ class WeighingOut(BaseModel):
     litros: Decimal | None = None
     unidades: Decimal | None = None
     documento: str | None = None
+    guia_sunagro: str | None = None
+    medida: str | None = None
     flete: str | None = None
     costo_flete: Decimal | None = None
     observaciones: str | None = None
+    es_peso_manual: bool = False
     creado_por: str | None = None
     salida_por: str | None = None
     modificado_por: str | None = None

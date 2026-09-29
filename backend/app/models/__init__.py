@@ -11,11 +11,13 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -29,6 +31,23 @@ def _uuid() -> uuid.UUID:
 
 def _now_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _idx_codigo_empresa(nombre: str) -> tuple:
+    """Índice único parcial ``(id_empresa, codigo)`` de "código interno".
+
+    Un mismo código solo puede existir una vez por empresa; los registros sin
+    código (NULL) quedan fuera de la unicidad (al estilo de la migración 018).
+    """
+    return (
+        Index(
+            nombre,
+            "id_empresa",
+            "codigo",
+            unique=True,
+            postgresql_where=text("codigo IS NOT NULL"),
+        ),
+    )
 
 
 class IdentidadLocal(Base):
@@ -225,6 +244,7 @@ class Remolque(Base):
 
 class Transporte(Base):
     __tablename__ = "transportes"
+    __table_args__ = _idx_codigo_empresa("transportes_empresa_codigo_uk")
 
     id_transporte: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -268,6 +288,7 @@ class Conductor(Base):
 
 class Categoria(Base):
     __tablename__ = "categorias"
+    __table_args__ = _idx_codigo_empresa("categorias_empresa_codigo_uk")
 
     id_categoria: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -289,6 +310,7 @@ class Categoria(Base):
 
 class Producto(Base):
     __tablename__ = "productos"
+    __table_args__ = _idx_codigo_empresa("productos_empresa_codigo_uk")
 
     id_producto: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -320,6 +342,7 @@ class Producto(Base):
 
 class Almacen(Base):
     __tablename__ = "almacenes"
+    __table_args__ = _idx_codigo_empresa("almacenes_empresa_codigo_uk")
 
     id_almacen: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -345,6 +368,7 @@ class Almacen(Base):
 
 class Balanza(Base):
     __tablename__ = "balanzas"
+    __table_args__ = _idx_codigo_empresa("balanzas_empresa_codigo_uk")
 
     id_balanza: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -374,6 +398,7 @@ class Balanza(Base):
 
 class Tercero(Base):
     __tablename__ = "terceros"
+    __table_args__ = _idx_codigo_empresa("terceros_empresa_codigo_uk")
 
     id_tercero: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=_uuid
@@ -491,6 +516,8 @@ class BoletoPesaje(Base):
     foto_salida_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     documento: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    guia_sunagro: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    medida: Mapped[str | None] = mapped_column(String(50), nullable=True)
     flete: Mapped[str | None] = mapped_column(String(100), nullable=True)
     costo_flete: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -520,6 +547,8 @@ class BoletoPesaje(Base):
     unidades: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     estado_boleto: Mapped[str] = mapped_column(String(20), default="PENDIENTE")
+    # Marca si el peso se escribió a mano (sin báscula) — se refleja en los tickets.
+    es_peso_manual: Mapped[bool] = mapped_column(Boolean, default=False)
     sincronizado: Mapped[bool] = mapped_column(Boolean, default=False)
     sync_intentos: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

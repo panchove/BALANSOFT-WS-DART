@@ -214,7 +214,7 @@ No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 
 ## 7. Setup de Desarrollo (BD del servidor en la máquina local)
 
-Mientras se prueba, la BD del servidor se crea **también en el PostgreSQL local** del desarrollador. Para no interferir con la BD operativa actual (`balansoft_ws`, usada por el backend single-DB en desarrollo), la DB de servidor de pruebas se llama **`balansoft_ws_server`**:
+Mientras se prueba, la BD del servidor se crea **también en el PostgreSQL local** del desarrollador. Para no interferir con la BD operativa actual (el `.env` de dev apunta hoy a `balansoft_ws_local`), la DB de servidor de pruebas se llama **`balansoft_ws_server`**. (**v1.2.7** doc: `scripts/reset_total.sh` ya respalda estas bases con `pg_dump -Fc` antes de borrarlas y aborta si el respaldo falla.)
 
 ```bash
 # 1. Crear las bases (una vez)
@@ -234,11 +234,29 @@ PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_server -c "\dt"
 PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_local -c "\dt"
 ```
 
-- **`balansoft_ws`** (existente) sigue siendo la BD operativa de desarrollo del backend single-DB actual; no se toca.
-- **`balansoft_ws_server`** es la BD de cuenta/licencia/sync para probar el rol servidor.
+- **`balansoft_ws`** (existente) es la BD operativa legacy del backend single-DB; hoy el `.env` de dev usa `balansoft_ws_local`.
+- **`balansoft_ws_server`** es la BD de cuenta/licencia/sync para probar el rol servidor (central local de desarrollo).
 - **`balansoft_ws_local`** es la BD operativa para probar el rol local.
 - La BD de tests automatizados es `balansoft_ws_test` (PostgreSQL real).
 - En producción: `setup_db.sh` + despliegue (ver `DEPLOY.md`); los instaladores de la app se documentarán más adelante.
+
+### 7.1 Central local de desarrollo (réplica del rol server)
+
+Para validar el flujo titular (login-central → `SERVIDOR_LOCAL`) sin tocar el central de producción (`ws.balansoft.com.ve`):
+
+```bash
+# Arrancar la API con APP_ROLE=server apuntando a balansoft_ws_server
+cd backend
+APP_ROLE=server \
+DATABASE_URL='postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws_server' \
+DATABASE_URL_SYNC='postgresql+psycopg2://sqlman:7767@localhost:5432/balansoft_ws_server' \
+API_PORT=8002 API_HOST=127.0.0.1 \
+  .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8002
+```
+
+- **Seeding del panel** (proveedores_usuarios): `SERVER_DATABASE_URL=...balansoft_ws_server .venv/bin/python scripts/seed_panel_admin.py --email admin@balansoft.ve --password '<pw>' --rol SUPERADMIN`.
+- **Seed de la cuenta titular** (desarrollo): cuenta `801ec560-d33c-44a1-b40f-83c6d60fd67b` (Variedades S&S), licencia `BWS-CMM0-X9MH-5TZC-OCTB` (CENTRAL/ACTIVA) y dispositivo `0287d54b8aac4f0ab700ed83e7e4930b` = `SERVIDOR_LOCAL` (el `hardware_id` de esa máquina es su `/etc/machine-id`). El alta real la hace el proveedor desde el panel (§13); el seed local solo replica el estado para pruebas.
+- **Validación**: `POST /api/v1/auth/login` contra el central local con email/password + `hardware_id` del titular devuelve `dispositivo.rol = SERVIDOR_LOCAL` y `puede_ser_servidor = true`; desde la estación, `POST /api/v1/auth/login-central` con `server_url=http://127.0.0.1:8002` y `modo_solicitado=SERVIDOR` espeja `identidad_local.rol_dispositivo = SERVIDOR_LOCAL`.
 
 ---
 

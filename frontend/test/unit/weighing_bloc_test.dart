@@ -180,12 +180,14 @@ void main() {
 
   group('WeighingBloc sync', () {
     blocTest<WeighingBloc, WeighingState>(
-      'sync emite SyncComplete',
+      'sync emite SyncComplete y recarga automáticamente el listado',
       build: () => _bloc(null),
       act: (b) => b.add(SyncWeighingsEvent()),
       expect: () => [
         isA<WeighingSyncing>(),
         isA<WeighingSyncComplete>(),
+        isA<WeighingLoading>(),
+        isA<WeighingListLoaded>(),
       ],
     );
   });

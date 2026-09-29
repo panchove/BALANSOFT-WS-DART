@@ -203,8 +203,8 @@ class TestValidarOAutoactivar:
         def fake_activate(key, hw, **kw):
             return {"ok": True}
 
-        client.validate = fake_validate  # type: ignore[method-assign]
-        client.activate = fake_activate  # type: ignore[method-assign]
+        client.validate = fake_validate  # type: ignore[method-assign, assignment]
+        client.activate = fake_activate  # type: ignore[method-assign, assignment]
 
         info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
         assert info.valid is True
@@ -228,8 +228,8 @@ class TestValidarOAutoactivar:
         def fake_activate(key, hw, **kw):
             return {"ok": True}
 
-        client.validate = fake_validate  # type: ignore[method-assign]
-        client.activate = fake_activate  # type: ignore[method-assign]
+        client.validate = fake_validate  # type: ignore[method-assign, assignment]
+        client.activate = fake_activate  # type: ignore[method-assign, assignment]
 
         info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
         assert info.valid is True
@@ -252,7 +252,7 @@ class TestValidarOAutoactivar:
             llamado["activado"] = True
             return {"ok": True}
 
-        client.activate = fake_activate  # type: ignore[method-assign]
+        client.activate = fake_activate  # type: ignore[method-assign, assignment]
 
         info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-OTRO")
         assert info is info_original  # debe devolver la info original sin activar
@@ -275,7 +275,7 @@ class TestValidarOAutoactivar:
             llamado["activado"] = True
             return {"ok": True}
 
-        client.activate = fake_activate  # type: ignore[method-assign]
+        client.activate = fake_activate  # type: ignore[method-assign, assignment]
 
         info = client.validate_or_activate("BWS-A1B2-C3D4-E5F6-G7H8", "HW-1")
         assert info is info_original

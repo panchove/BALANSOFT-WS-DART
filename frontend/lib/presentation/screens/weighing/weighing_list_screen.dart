@@ -1,13 +1,9 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
-import '../../../core/utils/save_file_utils.dart';
-import '../../../data/datasources/remote/api_client.dart';
 import '../../../data/repositories/catalog_repository.dart';
-import '../../../data/repositories/weighing_repository.dart' show WeighingRepository;
 import '../../../domain/entities/weighing.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
@@ -15,6 +11,10 @@ import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import 'weighing_form_screen.dart';
 import 'weighing_detail_screen.dart';
+import '../../widgets/ticket_preview_dialog.dart';
+
+final RouteObserver<ModalRoute<void>> weighingListRouteObserver =
+    RouteObserver<ModalRoute<void>>();
 
 class WeighingListScreen extends StatefulWidget {
   /// Estado inicial del filtro (Consultas Entradas/Salidas).
@@ -32,16 +32,21 @@ class WeighingListScreen extends StatefulWidget {
   State<WeighingListScreen> createState() => _WeighingListScreenState();
 }
 
-class _WeighingListScreenState extends State<WeighingListScreen> {
+class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware {
   final _placaCtrl = TextEditingController();
   DateTimeRange? _rango;
   String? _estado;
   bool _soloPendientes = false;
-  /// Formato de boleto configurado para la empresa (REQ-NF-ONB-004).
-  String _formatoDefault = 'PDF';
+
   Product? _producto;
   ThirdParty? _cliente;
   CatalogData _catalogos = CatalogData.empty;
+  /// Última lista cargada: evita el "refresh infinito" cuando el estado global
+  /// de WeighingBloc cambia (detalle/crear/sync) sin ser un listado.
+  List<Weighing>? _items;
+  /// Marca si hay una petición de lista en curso (o encolada en el bloc):
+  /// evita auto-disparos repetidos cuando el listado aún no tiene datos.
+  bool _solicitandoCarga = false;
 
   bool get _soloSalidas => widget.estadoInicial == 'CERRADO';
 
@@ -50,20 +55,40 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
     super.initState();
     _estado = widget.estadoInicial;
     _loadCatalogs();
-    _cargarFormatoTicket();
+    _loadCatalogs();
+    _recargarLista();
+  }
+
+  void _recargarLista() {
+    if (!mounted) return;
+    _solicitandoCarga = true;
+    context.read<WeighingBloc>().add(const ListWeighingsEvent());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      weighingListRouteObserver.subscribe(this, route as ModalRoute<void>);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // Al volver del detalle o del formulario el Bloc queda en otro estado;
+    // se recarga el listado para no quedarse en el spinner indefinido.
+    _recargarLista();
   }
 
   @override
   void dispose() {
+    weighingListRouteObserver.unsubscribe(this);
     _placaCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _cargarFormatoTicket() async {
-    final prefs = await di.sl<ApiClient>().getPreferenciasEmpresa();
-    if (!mounted) return;
-    setState(() => _formatoDefault = prefs['formato_ticket'] ?? 'PDF');
-  }
+
 
   Future<void> _loadCatalogs() async {
     final data = await di.sl<CatalogRepository>().getCachedCatalogs();
@@ -79,52 +104,6 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
       initialDateRange: _rango,
     );
     if (mounted) setState(() => _rango = picked);
-  }
-
-  Future<void> _imprimirTicket(String boleto, String nombreBoleto,
-      {String? formato}) async {
-    final fmt = (formato ?? _formatoDefault).toUpperCase();
-    if (boleto.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ticket_not_synced'.tr()),
-            backgroundColor: SwsColors.warning,
-          ),
-        );
-      }
-      return;
-    }
-    try {
-      final Response response = fmt == 'TXT'
-          ? await di.sl<WeighingRepository>().getTicketTxt(boleto)
-          : await di.sl<WeighingRepository>().getTicketPdf(boleto);
-      final dynamic datos = response.data;
-      final bytes = (datos is List<int>) ? datos : null;
-      if (bytes == null || bytes.isEmpty) {
-        throw Exception('ticket_invalid'.tr());
-      }
-      final ruta = await SaveFileUtils.save(
-          bytes, 'ticket_$nombreBoleto.${fmt == 'TXT' ? 'txt' : 'pdf'}',
-          subcarpeta: 'tickets');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ticket guardado en: $ruta'),
-            backgroundColor: SwsColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al generar ticket: $e'),
-            backgroundColor: SwsColors.danger,
-          ),
-        );
-      }
-    }
   }
 
   @override
@@ -167,10 +146,44 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
             child: _buildFilters(esOperador),
           ),
           Expanded(
-            child: BlocBuilder<WeighingBloc, WeighingState>(
-              builder: (context, state) {
-                if (state is WeighingListLoaded) {
-                  final allItems = state.weighings;
+            child: BlocListener<WeighingBloc, WeighingState>(
+              listenWhen: (_, s) =>
+                  s is WeighingListLoaded ||
+                  s is WeighingError ||
+                  s is WeighingSyncComplete,
+              listener: (context, s) {
+                if (s is WeighingListLoaded) {
+                  _solicitandoCarga = false;
+                  if (!identical(_items, s.weighings)) {
+                    setState(() => _items = s.weighings);
+                  }
+                } else if (s is WeighingError) {
+                  _solicitandoCarga = false;
+                } else if (s is WeighingSyncComplete && _items == null) {
+                  // Tras un sync sin datos cargados aún, se pide el listado de
+                  // nuevo para no quedarse en el spinner infinito.
+                  _recargarLista();
+                }
+              },
+              child: BlocBuilder<WeighingBloc, WeighingState>(
+                builder: (context, state) {
+                  final allItems = _items;
+                  if (allItems == null) {
+                    if (state is WeighingError) {
+                      return _errorVista(context, state.message);
+                    }
+                    if (state is WeighingSyncing ||
+                        state is WeighingLoading ||
+                        _solicitandoCarga) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    // Estado terminal sin listado y sin petición en curso:
+                    // se lanza una recarga para no quedarse cargando en bucle.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && !_solicitandoCarga) _recargarLista();
+                    });
+                    return const Center(child: CircularProgressIndicator());
+                  }
                   var items = allItems.where(_passesFilters).toList();
                   if (_soloPendientes) {
                     items = items.where((w) => w.isOpen).toList();
@@ -226,23 +239,15 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              PopupMenuButton<String>(
-                                tooltip: 'Imprimir ticket (PDF o TXT)',
-                                enabled: w.boleto.isNotEmpty,
-                                icon: const Icon(Icons.print_outlined,
-                                    color: SwsColors.gray600),
-                                onSelected: (formato) => _imprimirTicket(
-                                    w.boleto,
-                                    w.numeroBoleto ?? w.boleto,
-                                    formato: formato),
-                                itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                      value: 'PDF',
-                                      child: Text('ticket_pdf'.tr())),
-                                  PopupMenuItem(
-                                      value: 'TXT',
-                                      child: Text('ticket_txt'.tr())),
-                                ],
+                              IconButton(
+                                tooltip: 'Imprimir / Previsualizar Boleto',
+                                icon: const Icon(Icons.print_outlined, color: SwsColors.gray600),
+                                onPressed: w.boleto.isEmpty ? null : () {
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (ctx) => TicketPreviewDialog(weighing: w),
+                                  );
+                                },
                               ),
                               const Icon(Icons.chevron_right),
                             ],
@@ -259,11 +264,32 @@ class _WeighingListScreenState extends State<WeighingListScreen> {
                     },
                   );
                 }
-                return const Center(child: CircularProgressIndicator());
-              },
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _errorVista(BuildContext context, String mensaje) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off, size: 48, color: SwsColors.danger),
+            const SizedBox(height: 12),
+            Text('Error: $mensaje', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _recargarLista,
+              icon: const Icon(Icons.refresh),
+              label: Text('retry'.tr()),
+            ),
+          ],
+        ),
       ),
     );
   }

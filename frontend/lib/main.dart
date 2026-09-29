@@ -26,6 +26,7 @@ import 'presentation/screens/auth/reset_password_screen.dart';
 import 'presentation/screens/dashboard/home_shell.dart';
 import 'presentation/screens/setup/environment_check_screen.dart';
 import 'presentation/screens/weighing/weighing_detail_screen.dart';
+import 'presentation/screens/weighing/weighing_list_screen.dart' show weighingListRouteObserver;
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/settings/connections_screen.dart';
 
@@ -171,6 +172,7 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
             Locale('en'),
             Locale('pt'),
           ],
+          navigatorObservers: [weighingListRouteObserver],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,

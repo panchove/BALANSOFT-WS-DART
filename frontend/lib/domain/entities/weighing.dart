@@ -31,6 +31,8 @@ class Weighing {
   final double? litros;
   final double? unidades;
   final String? documento;
+  final String? guiaSunagro;
+  final String? medida;
   final String? flete;
   final double? costoFlete;
   final String? observaciones;
@@ -82,6 +84,8 @@ class Weighing {
     this.litros,
     this.unidades,
     this.documento,
+    this.guiaSunagro,
+    this.medida,
     this.flete,
     this.costoFlete,
     this.observaciones,
@@ -147,6 +151,8 @@ class Weighing {
         litros: NumParser.toDoubleOrNull(json['litros']),
         unidades: NumParser.toDoubleOrNull(json['unidades']),
         documento: json['documento'],
+        guiaSunagro: json['guia_sunagro'],
+        medida: json['medida'],
         flete: json['flete'],
         costoFlete: NumParser.toDoubleOrNull(json['costo_flete']),
         observaciones: json['observaciones'],
@@ -198,6 +204,8 @@ class Weighing {
         'litros': litros,
         'unidades': unidades,
         'documento': documento,
+        'guia_sunagro': guiaSunagro,
+        'medida': medida,
         'flete': flete,
         'costo_flete': costoFlete,
         'observaciones': observaciones,

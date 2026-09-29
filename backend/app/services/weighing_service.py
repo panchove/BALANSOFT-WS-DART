@@ -639,9 +639,16 @@ class WeighingService:
             fecha_hora_entrada=data.fecha_hora_entrada.replace(tzinfo=None),
             peso_entrada_vehiculo=_d(data.peso_entrada_vehiculo) or ZERO,
             peso_entrada_remolque=_d(data.peso_entrada_remolque),
+            es_peso_manual=data.es_peso_manual,
+            peso_neto_declarado=_d(data.peso_neto_declarado),
             documento=data.documento,
+            guia_sunagro=data.guia_sunagro,
+            medida=data.medida,
             flete=data.flete,
             costo_flete=_d(data.costo_flete),
+            densidad=_d(data.densidad),
+            litros=_d(data.litros),
+            unidades=_d(data.unidades),
             observaciones=data.observaciones,
             estado_boleto=BoletoPesaje.ESTADO_PENDIENTE,
             creado_por=creado_por,
@@ -651,6 +658,7 @@ class WeighingService:
             pesaje.peso_entrada_remolque,
             None,
             None,
+            peso_neto_declarado=_d(data.peso_neto_declarado),
         )
         for campo, valor in calculos.items():
             setattr(pesaje, campo, valor)
@@ -706,10 +714,21 @@ class WeighingService:
         pesaje.fecha_hora_salida = fecha_salida.replace(tzinfo=None)
         pesaje.peso_salida_vehiculo = _d(data.peso_salida_vehiculo)
         pesaje.peso_salida_remolque = _d(data.peso_salida_remolque)
+        pesaje.es_peso_manual = data.es_peso_manual
         if data.densidad is not None:
             pesaje.densidad = _d(data.densidad)
         if data.unidades is not None:
             pesaje.unidades = _d(data.unidades)
+        if data.litros is not None:
+            pesaje.litros = _d(data.litros)
+        if data.guia_sunagro is not None:
+            pesaje.guia_sunagro = data.guia_sunagro
+        if data.medida is not None:
+            pesaje.medida = data.medida
+        if data.documento is not None:
+            pesaje.documento = data.documento
+        if data.flete is not None:
+            pesaje.flete = data.flete
         if data.observaciones is not None:
             pesaje.observaciones = data.observaciones
         if data.costo_flete is not None:

@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -45,6 +46,36 @@ CATALOGS: dict[str, dict[str, Any]] = {
     "balanzas": {"model": Balanza, "empresa_col": "id_empresa", "id_col": "id_balanza"},
     "terceros": {"model": Tercero, "empresa_col": "id_empresa", "id_col": "id_tercero"},
 }
+
+
+# Etiqueta singular legible por entidad (para mensajes de conflicto).
+_ETIQUETAS_ENTIDAD: dict[str, str] = {
+    "camiones": "vehículo",
+    "remolques": "remolque",
+    "marcas": "marca",
+    "modelos_camion": "modelo de camión",
+    "transportes": "transportista",
+    "conductores": "conductor",
+    "productos": "producto",
+    "almacenes": "almacén",
+    "categorias": "categoría",
+    "balanzas": "báscula",
+    "terceros": "tercero",
+}
+
+
+def _mensaje_conflicto_codigo(name: str, data: dict) -> str:
+    """Mensaje claro cuando se viola la unicidad de `codigo` por empresa.
+
+    Los índices `<tabla>_empresa_codigo_uk` (migración 018) solo exigen
+    unicidad cuando `codigo IS NOT NULL`; si el choque viene de otra
+    restricción única se devuelve un mensaje genérico.
+    """
+    etiqueta = _ETIQUETAS_ENTIDAD.get(name, name)
+    codigo = (data.get("codigo") or "").strip()
+    if codigo:
+        return f"Ya existe un {etiqueta} con el código '{codigo}'"
+    return f"Registro duplicado de {etiqueta}"
 
 
 class CatalogService:
@@ -96,7 +127,11 @@ class CatalogService:
                 ip=ip,
             )
             await db.commit()
-        except Exception as e:  # unique violation etc.
+        except IntegrityError as e:
+            await db.rollback()
+            log.warning("Código duplicado al crear en catálogo '%s': %s", name, e.orig)
+            raise HTTPException(status_code=409, detail=_mensaje_conflicto_codigo(name, values)) from e
+        except Exception as e:
             await db.rollback()
             log.exception("Error creando registro en catálogo '%s'", name)
             raise HTTPException(status_code=400, detail=f"No se pudo crear: {e}") from e
@@ -128,17 +163,26 @@ class CatalogService:
         for k, v in data.items():
             if k != cfg["empresa_col"] and hasattr(obj, k):
                 setattr(obj, k, v)
-        await registrar(
-            db,
-            id_usuario=id_usuario,
-            id_empresa=empresa_id,
-            accion="UPDATE",
-            entidad=name,
-            entidad_id=str(id_value),
-            detalle={"campos_modificados": sorted(data.keys())},
-            ip=ip,
-        )
-        await db.commit()
+        try:
+            await registrar(
+                db,
+                id_usuario=id_usuario,
+                id_empresa=empresa_id,
+                accion="UPDATE",
+                entidad=name,
+                entidad_id=str(id_value),
+                detalle={"campos_modificados": sorted(data.keys())},
+                ip=ip,
+            )
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            log.warning("Código duplicado al actualizar en catálogo '%s': %s", name, e.orig)
+            raise HTTPException(status_code=409, detail=_mensaje_conflicto_codigo(name, data)) from e
+        except Exception as e:
+            await db.rollback()
+            log.exception("Error actualizando registro en catálogo '%s'", name)
+            raise HTTPException(status_code=400, detail=f"No se pudo actualizar: {e}") from e
         await db.refresh(obj)
         return self._dump(obj)
 
@@ -172,8 +216,16 @@ class CatalogService:
             entidad_id=str(id_value),
             ip=ip,
         )
-        await db.delete(obj)
-        await db.commit()
+        from sqlalchemy.exc import IntegrityError
+        try:
+            await db.delete(obj)
+            await db.commit()
+        except IntegrityError as err:
+            await db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar el registro porque está en uso en el sistema (ej. en un pesaje)."
+            ) from err
 
     def _dump(self, obj: Any) -> dict:
         from sqlalchemy.inspection import inspect as sa_inspect

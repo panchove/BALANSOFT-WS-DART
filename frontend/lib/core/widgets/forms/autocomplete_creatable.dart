@@ -40,6 +40,7 @@ class AutocompleteCreatable<T extends Object> extends StatefulWidget {
   final CreatableSpec<T>? crear;
   final String? hint;
   final Key? fieldKey;
+  final String? initialValue;
 
   /// Notifica el [FocusNode] interno del campo (el que el propio
   /// [Autocomplete] usa para abrir el desplegable). Permite enfocar o pedir
@@ -65,6 +66,7 @@ class AutocompleteCreatable<T extends Object> extends StatefulWidget {
     this.crear,
     this.hint,
     this.fieldKey,
+    this.initialValue,
     this.onFocusNodeReady,
     this.onNext,
   });
@@ -78,6 +80,16 @@ class _AutocompleteCreatableState<T extends Object>
     extends State<AutocompleteCreatable<T>> {
   TextEditingController? _controller;
   String _ultimoQuery = '';
+
+  @override
+  void didUpdateWidget(AutocompleteCreatable<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialValue != oldWidget.initialValue && _controller != null) {
+      if (widget.initialValue != _controller!.text) {
+        _controller!.text = widget.initialValue ?? '';
+      }
+    }
+  }
 
   Future<void> _crearNuevo() async {
     final spec = widget.crear;
@@ -145,6 +157,7 @@ class _AutocompleteCreatableState<T extends Object>
   @override
   Widget build(BuildContext context) {
     return Autocomplete<Object>(
+      initialValue: widget.initialValue != null ? TextEditingValue(text: widget.initialValue!) : null,
       displayStringForOption: (option) => option is _CrearSugerencia
           ? option.texto
           : widget.label(option as T),

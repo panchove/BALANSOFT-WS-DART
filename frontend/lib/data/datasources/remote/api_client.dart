@@ -405,6 +405,7 @@ class ApiClient {
     String orientacion = 'portrait',
     bool mostrarEncabezado = true,
     bool mostrarDetalles = true,
+    String tipoTicket = 'simple',
   }) async {
     final response = await _dio.get(
       '$_baseUrl${ApiConstants.weighingPdf(boleto)}',
@@ -414,15 +415,17 @@ class ApiClient {
         'orientacion': orientacion,
         'mostrar_encabezado': mostrarEncabezado,
         'mostrar_detalles': mostrarDetalles,
+        'tipo_ticket': tipoTicket,
       },
       options: Options(responseType: ResponseType.bytes),
     );
     return response;
   }
 
-  Future<Response> getTicketTxt(String boleto) async {
+  Future<Response> getTicketTxt(String boleto, {String tipoTicket = 'simple'}) async {
     final response = await _dio.get(
       '$_baseUrl${ApiConstants.weighingTxt(boleto)}',
+      queryParameters: {'tipo_ticket': tipoTicket},
       options: Options(responseType: ResponseType.bytes),
     );
     return response;

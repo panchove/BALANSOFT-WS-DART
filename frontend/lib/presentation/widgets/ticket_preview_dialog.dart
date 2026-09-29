@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/number_utils.dart';
 import '../../core/utils/save_file_utils.dart';
 import '../../data/datasources/local/local_storage.dart';
+import '../../data/datasources/remote/api_client.dart';
 import '../../data/repositories/weighing_repository.dart';
 import '../../domain/entities/printer_preset.dart';
 import '../../domain/entities/weighing.dart';
@@ -14,12 +15,17 @@ class TicketPreviewDialog extends StatefulWidget {
   final Weighing weighing;
   final PrinterPreset? initialPreset;
   final void Function(String formato, PrinterPreset preset)? onConfirmPrint;
+  // Perfil de la empresa para el encabezado. Si no se inyecta, se descarga del
+  // backend (di.sl<ApiClient>().getEmpresaPerfil()); si se inyecta se usa tal
+  // cual (los tests y los call sites pueden pasarlo sin tocar el GetIt).
+  final Future<Map<String, dynamic>>? empresaPerfilFuture;
 
   const TicketPreviewDialog({
     super.key,
     required this.weighing,
     this.initialPreset,
     this.onConfirmPrint,
+    this.empresaPerfilFuture,
   });
 
   @override
@@ -31,10 +37,17 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
   bool _loadingPreset = true;
   bool _imprimiendo = false;
   late String _formato;
+  // Perfil de la estación: nombre, RIF, teléfono, dirección y logo. El PDF/TXT
+  // los imprime el backend con estos mismos datos, así que el preview y la
+  // impresión salen idénticos.
+  Map<String, dynamic> _empresa = const {};
+  // URL absoluta del logo ya resuelta (evita tocar el GetIt durante el build).
+  String? _empresaLogoAbsoluta;
 
   @override
   void initState() {
     super.initState();
+    _cargarEmpresa();
     if (widget.initialPreset != null) {
       _preset = widget.initialPreset!;
       _formato = _preset.formatoPredeterminado;
@@ -42,6 +55,115 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     } else {
       _cargarPreset();
     }
+  }
+
+  Future<void> _cargarEmpresa() async {
+    try {
+      final perfil = widget.empresaPerfilFuture != null
+          ? await widget.empresaPerfilFuture!
+          : await di.sl<ApiClient>().getEmpresaPerfil();
+      String? logo;
+      try {
+        final url = (perfil['logo_url'] ?? '').toString().trim();
+        logo = url.isEmpty ? null : di.sl<ApiClient>().mediaUrl(url);
+      } catch (_) {
+        logo = null;
+      }
+      if (mounted) {
+        setState(() {
+          _empresa = perfil;
+          _empresaLogoAbsoluta = logo;
+        });
+      }
+    } catch (_) {
+      // Sin perfil no hay encabezado de empresa, pero el boleto se sigue viendo.
+    }
+  }
+
+  String get _empresaNombre {
+    final nombre = (_empresa['nombre_comercial'] ?? _empresa['nombre_fiscal'] ?? '')
+        .toString()
+        .trim();
+    return nombre.isEmpty ? 'demo_company'.tr() : nombre;
+  }
+
+  String get _empresaRif => (_empresa['rif_nit'] ?? '').toString().trim();
+
+  String get _empresaTelefono => (_empresa['telefono'] ?? '').toString().trim();
+
+  String get _empresaDireccion =>
+      (_empresa['direccion'] ?? '').toString().trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Línea de contacto del emisor (teléfono + dirección), como en el PDF.
+  String? get _lineaContactoEmpresa {
+    final partes = <String>[];
+    if (_empresaTelefono.isNotEmpty) {
+      partes.add('${'ticket_company_phone'.tr()} $_empresaTelefono');
+    }
+    if (_empresaDireccion.isNotEmpty) {
+      partes.add('${'ticket_company_address'.tr()} $_empresaDireccion');
+    }
+    return partes.isEmpty ? null : partes.join('  ·  ');
+  }
+
+  /// Encabezado del emisor en layout horizontal, espejo del backend
+  /// (`_build_boleto_simple`): LOGO a la izquierda | nombre+RIF arriba y
+  /// contacto debajo. SIN línea divisoria vertical entre ambas columnas.
+  /// [conLogo] es false en el ticket térmico, donde el logo no cabe.
+  Widget _encabezadoEmpresa({required bool conLogo, required double escala}) {
+    final contacto = _lineaContactoEmpresa;
+    final rifTxt = _empresaRif.isNotEmpty ? 'RIF: $_empresaRif' : '';
+    final linea1 = [_empresaNombre, rifTxt]
+        .where((s) => s.isNotEmpty)
+        .join(' - ');
+
+    // Bloque de texto derecho (nombre + RIF / dirección + contacto).
+    final bloqueDerecho = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          linea1,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12 * escala,
+            color: Colors.black,
+          ),
+        ),
+        if (contacto != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            contacto,
+            style: TextStyle(fontSize: 9 * escala, color: Colors.black54),
+          ),
+        ],
+      ],
+    );
+
+    // Layout horizontal: logo (22%) + espacio + datos (78%). SIN Container gris.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          flex: 22,
+          child: conLogo && _empresaLogoAbsoluta != null
+              ? Center(
+                  child: Image.network(
+                    _empresaLogoAbsoluta!,
+                    height: 38 * escala,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    loadingBuilder: (context, child, progress) => progress ==
+                            null
+                        ? child
+                        : const SizedBox(height: 38, width: 38),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        const SizedBox(width: 10), // solo espacio, sin línea divisoria
+        Expanded(flex: 78, child: bloqueDerecho),
+      ],
+    );
   }
 
   Future<void> _cargarPreset() async {
@@ -75,7 +197,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
       }
       final repo = di.sl<WeighingRepository>();
       final response = _formato == 'TXT'
-          ? await repo.getTicketTxt(widget.weighing.boleto)
+          ? await repo.getTicketTxt(widget.weighing.boleto, tipoTicket: _preset.tipoTicket)
           : await repo.getTicketPdf(
               widget.weighing.boleto,
               boletosPorHoja: _preset.boletosPorHoja,
@@ -83,6 +205,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
               orientacion: _preset.orientacion,
               mostrarEncabezado: _preset.mostrarEncabezado,
               mostrarDetalles: _preset.mostrarDetalles,
+              tipoTicket: _preset.tipoTicket,
             );
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
@@ -252,6 +375,18 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                     },
                     style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                   ),
+                  // Tipo de Ticket
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'simple', label: Text('Simple', style: TextStyle(fontSize: 11))),
+                      ButtonSegment(value: 'avanzado', label: Text('Avanzado', style: TextStyle(fontSize: 11))),
+                    ],
+                    selected: {_preset.tipoTicket},
+                    onSelectionChanged: (val) {
+                      setState(() => _preset = _preset.copyWith(tipoTicket: val.first));
+                    },
+                    style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  ),
                   // Copias
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -374,7 +509,8 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
 
     final bool tieneDatAdic = (w.documento?.isNotEmpty ?? false) ||
         (w.unidades ?? w.litros) != null ||
-        w.densidad != null;
+        w.densidad != null ||
+        (_preset.tipoTicket == 'avanzado' && ((w.guiaSunagro?.isNotEmpty ?? false) || (w.medida?.isNotEmpty ?? false)));
 
     return DefaultTextStyle(
       style: TextStyle(
@@ -386,15 +522,12 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Encabezado
+          // Encabezado de la empresa (logo + nombre + RIF + contacto)
           if (_preset.mostrarEncabezado) ...[
-            Center(
-              child: Text(
-                'demo_company'.tr(),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
+            _encabezadoEmpresa(
+              conLogo: true,
+              escala: widget.initialPreset?.boletosPorHoja == 3 ? 0.9 : 1.0,
             ),
-            const Center(child: Text('RIF: J-31490236-2', style: TextStyle(fontSize: 9.5))),
             const Divider(color: Colors.black, thickness: 1, height: 8),
           ],
           Center(
@@ -416,16 +549,15 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           _filaPreview(
               'ticket_trailer'.tr(),
               w.remolque
-                  ? (w.remolquePlaca ?? w.idRemolque ?? 'yes'.tr())
+                  ? (w.remolquePlaca ?? 'yes'.tr())
                   : 'no'.tr()),
-          _filaPreview('ticket_transport'.tr(),
-              w.transporteNombre ?? w.idTransporte ?? 'N/A'),
+          _filaPreview('ticket_transport'.tr(), w.transporteNombre ?? 'N/A'),
           _filaPreview('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
-          _filaPreview('ticket_product'.tr(), w.productoNombre ?? w.idProducto ?? 'N/A'),
-          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
+          _filaPreview('ticket_product'.tr(), w.productoNombre ?? 'N/A'),
+          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? 'N/A'),
           _filaPreview('ticket_selection'.tr(),
               (w.tipoTercero?.trim().isNotEmpty ?? false) ? w.tipoTercero!.toUpperCase() : 'N/A'),
-          _filaPreview('ticket_company_name'.tr(), w.terceroNombre ?? w.idTercero ?? 'N/A'),
+          _filaPreview('ticket_company_name'.tr(), w.terceroNombre ?? 'N/A'),
 
           const SizedBox(height: 4),
           const Divider(color: Colors.black, thickness: 1, height: 6),
@@ -489,9 +621,15 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
             ),
             const Divider(color: Colors.black45, height: 6),
             if (w.documento?.isNotEmpty ?? false) _filaPreview('Documento:', w.documento!),
+            if (_preset.tipoTicket == 'avanzado' && (w.guiaSunagro?.isNotEmpty ?? false))
+              _filaPreview('Guía SUNAGRO:', w.guiaSunagro!),
+            if (_preset.tipoTicket == 'avanzado' && (w.medida?.isNotEmpty ?? false))
+              _filaPreview('Medida:', w.medida!),
             if ((w.unidades ?? w.litros) != null)
               _filaPreview('Unidades:', _fmtNumero(w.unidades ?? w.litros)),
             if (w.densidad != null) _filaPreview('Densidad:', _fmtDensidad(w.densidad)),
+            if (_preset.tipoTicket == 'avanzado' && (w.unidades ?? w.litros) != null && w.densidad != null)
+              _filaPreview('Resultado:', _fmtNumero((w.unidades ?? w.litros)! * w.densidad!)),
             const Divider(color: Colors.black, thickness: 1, height: 6),
           ],
 
@@ -505,14 +643,16 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
             Text(w.observaciones!, style: const TextStyle(fontSize: 9.5, fontStyle: FontStyle.italic)),
           ],
 
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _LineaFirma(label: 'ticket_sign_operator'.tr()),
-              _LineaFirma(label: 'ticket_sign_driver'.tr()),
-            ],
-          ),
+          if (_preset.tipoTicket == 'avanzado') ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _LineaFirma(label: 'ticket_sign_operator'.tr()),
+                _LineaFirma(label: 'ticket_sign_driver'.tr()),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -537,13 +677,8 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_preset.mostrarEncabezado) ...[
-            Center(
-              child: Text(
-                'demo_company'.tr(),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ),
-            const Center(child: Text('RIF: J-31490236-2', style: TextStyle(fontSize: 9))),
+            // En el rollo térmico no cabe el logo: solo los datos del emisor.
+            _encabezadoEmpresa(conLogo: false, escala: 1.0),
             const Divider(color: Colors.black, thickness: 1, height: 6),
           ],
           const Center(
@@ -556,13 +691,13 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           _filaPreview('Serie - Boleto:', numBoleto, bold: true),
           _filaPreview('Fecha/Hora:', _formatDate(w.createdAt)),
           _filaPreview('Camión:', w.idVehiculo ?? 'Sin Placa'),
-          _filaPreview('Remolque:', w.remolque ? (w.remolquePlaca ?? w.idRemolque ?? 'Sí') : 'No'),
-          _filaPreview('Transporte:', w.transporteNombre ?? w.idTransporte ?? 'N/A'),
+          _filaPreview('Remolque:', w.remolque ? (w.remolquePlaca ?? 'Sí') : 'No'),
+          _filaPreview('Transporte:', w.transporteNombre ?? 'N/A'),
           _filaPreview('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
-          _filaPreview('ticket_product'.tr(), w.productoNombre ?? w.idProducto ?? 'N/A'),
-          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? w.idAlmacen ?? 'N/A'),
+          _filaPreview('ticket_product'.tr(), w.productoNombre ?? 'N/A'),
+          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? 'N/A'),
           _filaPreview('ticket_customer_supplier'.tr(),
-              w.terceroNombre ?? w.idTercero ?? 'N/A'),
+              w.terceroNombre ?? 'N/A'),
           const SizedBox(height: 4),
           const Divider(color: Colors.black, thickness: 1, height: 4),
           Center(
@@ -578,19 +713,39 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           const Divider(color: Colors.black45, height: 4),
           _filaPreview('ticket_net_weight'.tr(), pesoNetoFormateado, bold: true),
           const Divider(color: Colors.black, thickness: 1, height: 4),
+          if ((w.documento?.isNotEmpty ?? false) || (w.unidades ?? w.litros) != null || w.densidad != null || (_preset.tipoTicket == 'avanzado' && ((w.guiaSunagro?.isNotEmpty ?? false) || (w.medida?.isNotEmpty ?? false)))) ...[
+            Center(
+              child: Text('ticket_additional_data'.tr(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
+            ),
+            const Divider(color: Colors.black45, height: 4),
+            if (w.documento?.isNotEmpty ?? false) _filaPreview('Documento:', w.documento!),
+            if (_preset.tipoTicket == 'avanzado' && (w.guiaSunagro?.isNotEmpty ?? false))
+              _filaPreview('Guía SUNAGRO:', w.guiaSunagro!),
+            if (_preset.tipoTicket == 'avanzado' && (w.medida?.isNotEmpty ?? false))
+              _filaPreview('Medida:', w.medida!),
+            if ((w.unidades ?? w.litros) != null)
+              _filaPreview('Unidades:', _fmtNumero(w.unidades ?? w.litros)),
+            if (w.densidad != null) _filaPreview('Densidad:', _fmtDensidad(w.densidad)),
+            if (_preset.tipoTicket == 'avanzado' && (w.unidades ?? w.litros) != null && w.densidad != null)
+              _filaPreview('Resultado:', _fmtNumero((w.unidades ?? w.litros)! * w.densidad!)),
+            const Divider(color: Colors.black, thickness: 1, height: 4),
+          ],
           if (_preset.mostrarDetalles && w.observaciones != null && w.observaciones!.isNotEmpty) ...[
             const SizedBox(height: 2),
             Text('ticket_obs'.tr(null, ['${w.observaciones}']),
                 style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic)),
           ],
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _LineaFirma(label: 'ticket_sign_operator'.tr()),
-              _LineaFirma(label: 'ticket_sign_driver'.tr()),
-            ],
-          ),
+          if (_preset.tipoTicket == 'avanzado') ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _LineaFirma(label: 'ticket_sign_operator'.tr()),
+                _LineaFirma(label: 'ticket_sign_driver'.tr()),
+              ],
+            ),
+          ],
         ],
       ),
     );

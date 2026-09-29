@@ -28,8 +28,8 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa, get_current_user
@@ -44,10 +44,13 @@ from app.models import (
     Almacen,
     Balanza,
     BoletoPesaje,
+    Camion,
+    Categoria,
     Conductor,
     Empresa,
     IdentidadLocal,
     ImagenPesaje,
+    Kardex,
     Producto,
     Remolque,
     Tercero,
@@ -260,7 +263,11 @@ async def list_pendientes(
     db: AsyncSession = Depends(get_db),
 ) -> list[WeighingOut]:
     rows = await _SERVICE.pendientes(db, empresa, skip=skip, limit=limit)
-    return [_resolve_to_weighing_out(r) for r in rows]
+    result = []
+    for r in rows:
+        r = await _enriquecer_pesaje_ticket(db, r)
+        result.append(_resolve_to_weighing_out(r))
+    return result
 
 
 @router.get("/list", response_model=list[WeighingOut])
@@ -305,21 +312,34 @@ async def get_weighing_by_boleto(
 
 
 async def _enriquecer_pesaje_ticket(db: AsyncSession, pesaje: BoletoPesaje) -> BoletoPesaje:
-    """Resuelve entidades relacionadas con nombres y códigos legibles para evitar imprimir UUIDs.
+    """Resuelve entidades relacionadas con nombres, códigos y datos de catálogo
+    para evitar imprimir UUIDs y para que el ticket AVANZADO refleje TODO el
+    formulario y sus entidades maestro (empresa, tercero, conductor, transporte,
+    remolque, categoría, producto, almacén, balanza) más los registros de
+    control derivados (kardex, sincronización).
 
-    Popula atributos dinámicos en el objeto para que ``WeighingOut`` los serialice
-    en los campos ``*_nombre`` / ``remolque_placa`` que el frontend usa en la UI.
+    Popula atributos dinámicos en el objeto; ``WeighingOut`` solo serializa sus
+    campos fijos, así que estos extras los consume el render del ticket.
     """
     if pesaje.id_remolque and not getattr(pesaje, "placa_remolque", None):
-        r = (await db.execute(select(Remolque.placa).where(Remolque.id_remolque == pesaje.id_remolque))).scalar_one_or_none()
-        if r:
-            pesaje.placa_remolque = r  # type: ignore[attr-defined]
-            pesaje.remolque_placa = r  # type: ignore[attr-defined]
-    if pesaje.id_producto and not getattr(pesaje, "producto", None):
-        prod = (await db.execute(select(Producto.nombre).where(Producto.id_producto == pesaje.id_producto))).scalar_one_or_none()
-        if prod:
-            pesaje.producto = prod  # type: ignore[attr-defined]
-            pesaje.producto_nombre = prod  # type: ignore[attr-defined]
+        rem = (await db.execute(select(Remolque).where(Remolque.id_remolque == pesaje.id_remolque))).scalar_one_or_none()
+        if rem:
+            pesaje.placa_remolque = rem.placa  # type: ignore[attr-defined]
+            pesaje.remolque_placa = rem.placa  # type: ignore[attr-defined]
+            pesaje.tipo_remolque = rem.tipo_remolque  # type: ignore[attr-defined]
+            pesaje.tara_habitual = rem.tara_habitual  # type: ignore[attr-defined]
+    if pesaje.id_producto:
+        prod = (await db.execute(select(Producto).where(Producto.id_producto == pesaje.id_producto))).scalar_one_or_none()
+        if prod and not getattr(pesaje, "producto", None):
+            pesaje.producto_nombre = prod.nombre  # type: ignore[attr-defined]
+            pesaje.producto_codigo = prod.codigo  # type: ignore[attr-defined]
+            pesaje.producto_unidad = prod.unidad_medida  # type: ignore[attr-defined]
+            pesaje.producto_kardex = bool(prod.es_kardex)  # type: ignore[attr-defined]
+            if prod.id_categoria and not getattr(pesaje, "categoria_nombre", None):
+                cat = (await db.execute(select(Categoria).where(Categoria.id_categoria == prod.id_categoria))).scalar_one_or_none()
+                if cat:
+                    pesaje.categoria_nombre = cat.nombre  # type: ignore[attr-defined]
+                    pesaje.categoria_codigo = cat.codigo  # type: ignore[attr-defined]
     if pesaje.id_conductor and not getattr(pesaje, "conductor", None):
         cond = (await db.execute(select(Conductor).where(Conductor.cedula_dni == pesaje.id_conductor))).scalar_one_or_none()
         if cond:
@@ -327,26 +347,64 @@ async def _enriquecer_pesaje_ticket(db: AsyncSession, pesaje: BoletoPesaje) -> B
             display = f"{nom} ({cond.cedula_dni})" if nom else cond.cedula_dni
             pesaje.conductor = display  # type: ignore[attr-defined]
             pesaje.conductor_nombre = display  # type: ignore[attr-defined]
+            pesaje.conductor_cedula = cond.cedula_dni  # type: ignore[attr-defined]
+            pesaje.conductor_telefono = cond.telefono  # type: ignore[attr-defined]
+            pesaje.conductor_licencia = cond.licencia_conducir  # type: ignore[attr-defined]
     if pesaje.id_transporte and not getattr(pesaje, "transporte", None):
-        t = (await db.execute(select(Transporte.razon_social).where(Transporte.id_transporte == pesaje.id_transporte))).scalar_one_or_none()
+        t = (await db.execute(select(Transporte).where(Transporte.id_transporte == pesaje.id_transporte))).scalar_one_or_none()
         if t:
-            pesaje.transporte = t  # type: ignore[attr-defined]
-            pesaje.transporte_nombre = t  # type: ignore[attr-defined]
+            pesaje.transporte = t.razon_social  # type: ignore[attr-defined]
+            pesaje.transporte_nombre = t.razon_social  # type: ignore[attr-defined]
+            pesaje.transporte_codigo = t.codigo  # type: ignore[attr-defined]
+            pesaje.transporte_rif = t.identificacion_fiscal  # type: ignore[attr-defined]
     if pesaje.id_tercero and not getattr(pesaje, "razon_social", None):
-        terc = (await db.execute(select(Tercero.razon_social).where(Tercero.id_tercero == pesaje.id_tercero))).scalar_one_or_none()
+        terc = (await db.execute(select(Tercero).where(Tercero.id_tercero == pesaje.id_tercero))).scalar_one_or_none()
         if terc:
-            pesaje.razon_social = terc  # type: ignore[attr-defined]
-            pesaje.tercero_nombre = terc  # type: ignore[attr-defined]
+            pesaje.razon_social = terc.razon_social  # type: ignore[attr-defined]
+            pesaje.tercero_nombre = terc.razon_social  # type: ignore[attr-defined]
+            pesaje.tercero_codigo = terc.codigo  # type: ignore[attr-defined]
+            pesaje.tercero_rif = terc.identificacion_fiscal  # type: ignore[attr-defined]
     if pesaje.id_almacen and not getattr(pesaje, "almacen", None):
-        alm = (await db.execute(select(Almacen.nombre).where(Almacen.id_almacen == pesaje.id_almacen))).scalar_one_or_none()
+        alm = (await db.execute(select(Almacen).where(Almacen.id_almacen == pesaje.id_almacen))).scalar_one_or_none()
         if alm:
-            pesaje.almacen = alm  # type: ignore[attr-defined]
-            pesaje.almacen_nombre = alm  # type: ignore[attr-defined]
+            pesaje.almacen = alm.nombre  # type: ignore[attr-defined]
+            pesaje.almacen_nombre = alm.nombre  # type: ignore[attr-defined]
+            pesaje.almacen_codigo = alm.codigo  # type: ignore[attr-defined]
+            pesaje.almacen_capacidad = alm.capacidad_max_ton  # type: ignore[attr-defined]
+            pesaje.almacen_stock = alm.stock_actual_ton  # type: ignore[attr-defined]
     if pesaje.id_balanza and not getattr(pesaje, "balanza_desc", None):
-        bal = (await db.execute(select(Balanza.descripcion).where(Balanza.id_balanza == pesaje.id_balanza))).scalar_one_or_none()
+        bal = (await db.execute(select(Balanza).where(Balanza.id_balanza == pesaje.id_balanza))).scalar_one_or_none()
         if bal:
-            pesaje.balanza_desc = bal  # type: ignore[attr-defined]
-            pesaje.balanza_nombre = bal  # type: ignore[attr-defined]
+            pesaje.balanza_desc = bal.descripcion  # type: ignore[attr-defined]
+            pesaje.balanza_nombre = bal.descripcion  # type: ignore[attr-defined]
+            pesaje.balanza_codigo = bal.codigo  # type: ignore[attr-defined]
+            pesaje.balanza_capacidad = bal.capacidad_max  # type: ignore[attr-defined]
+            pesaje.balanza_division = bal.division  # type: ignore[attr-defined]
+    # Color del camión desde el catálogo (por placa): lo usa el ticket AVANZADO.
+    if pesaje.id_vehiculo and not getattr(pesaje, "color_camion", None):
+        color = (
+            await db.execute(
+                select(Camion.color).where(
+                    func.upper(Camion.placa) == pesaje.id_vehiculo.strip().upper(),
+                    Camion.id_empresa == pesaje.id_empresa,
+                )
+            )
+        ).scalar_one_or_none()
+        if color:
+            pesaje.color_camion = color  # type: ignore[attr-defined]
+    # Movimiento de kardex derivado del boleto (se registra al completar el ciclo).
+    if not getattr(pesaje, "kardex_mov", None):
+        k = (
+            await db.execute(
+                select(Kardex)
+                .where(Kardex.boleto == pesaje.boleto, Kardex.id_empresa == pesaje.id_empresa)
+                .order_by(Kardex.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if k:
+            pesaje.kardex_mov = k.id_movimiento  # type: ignore[attr-defined]
+            pesaje.kardex_valor = k.valor  # type: ignore[attr-defined]
     return pesaje
 
 
@@ -360,6 +418,7 @@ async def get_weighing_pdf(
     orientacion: str = Query(default="portrait"),
     mostrar_encabezado: bool = Query(default=True),
     mostrar_detalles: bool = Query(default=True),
+    tipo_ticket: str = Query(default="simple"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -377,6 +436,7 @@ async def get_weighing_pdf(
         mostrar_encabezado=mostrar_encabezado,
         mostrar_detalles=mostrar_detalles,
         idioma=lang,
+        tipo_ticket=tipo_ticket,
     )
 
 
@@ -385,6 +445,7 @@ async def get_weighing_txt(
     boleto: str,
     request: Request,
     idioma: str | None = Query(default=None),
+    tipo_ticket: str = Query(default="simple"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -393,7 +454,7 @@ async def get_weighing_txt(
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
     pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
     lang = resolve_lang(request, idioma, empresa.idioma)
-    return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang)
+    return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang, tipo_ticket=tipo_ticket)
 
 
 @router.get("/{boleto}/export")
@@ -401,6 +462,7 @@ async def get_weighing_export(
     boleto: str,
     request: Request,
     idioma: str | None = Query(default=None),
+    tipo_ticket: str = Query(default="simple"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -415,8 +477,8 @@ async def get_weighing_export(
     pesaje = await _enriquecer_pesaje_ticket(db, pesaje)
     lang = resolve_lang(request, idioma, empresa.idioma)
     if (empresa.formato_ticket or "PDF").upper() == "TXT":
-        return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang)
-    return generar_ticket_pdf(pesaje, empresa=empresa, idioma=lang)
+        return generar_ticket_txt(pesaje, empresa=empresa, idioma=lang, tipo_ticket=tipo_ticket)
+    return generar_ticket_pdf(pesaje, empresa=empresa, idioma=lang, tipo_ticket=tipo_ticket)
 
 
 @router.put("/{boleto}", response_model=WeighingOut)
@@ -455,6 +517,7 @@ class ImagenPesajeCreate(BaseModel):
 
 
 class ImagenPesajeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id_imagen: uuid.UUID
     boleto: uuid.UUID
     tipo: str
@@ -529,6 +592,20 @@ async def upload_imagen(
     url = f"/media/{pesaje.boleto}/{filename}"
     img = ImagenPesaje(boleto=pesaje.boleto, tipo=tipo, url=url)
     db.add(img)
+
+    # Update truck's photo if not set
+    if tipo == "vehiculo" and pesaje.id_vehiculo:
+        from sqlalchemy import select
+
+        from app.models import Camion
+        stmt = select(Camion).where(
+            Camion.id_empresa == empresa.id_empresa,
+            Camion.placa == pesaje.id_vehiculo
+        )
+        camion = (await db.execute(stmt)).scalar_one_or_none()
+        if camion and not camion.foto_real_url:
+            camion.foto_real_url = url
+
     await db.commit()
     await db.refresh(img)
     return ImagenPesajeOut.model_validate(img)

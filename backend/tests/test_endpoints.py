@@ -147,7 +147,60 @@ class TestPesajeEndpoints:
         )
         r = await client.get("/api/v1/weighing/pendientes")
         assert r.status_code == 200
-        assert any(p["id_vehiculo"] == "PEN-01" for p in r.json())
+        pen = [p for p in r.json() if p["id_vehiculo"] == "PEN-01"]
+        assert pen
+        assert pen[0]["transporte_nombre"] is not None
+        assert pen[0]["conductor_nombre"] is not None
+
+    async def test_pendientes_muestra_nombres_no_uuids(self, client):
+        """El pendiente resuelve los nombres legibles desde el catálogo; nunca
+        cuela el identificador crudo (UUID) en el campo de nombre."""
+        await client.post(
+            "/api/v1/weighing/create",
+            json={
+                "id_vehiculo": "NOM-01",
+                "transporte_nombre": "Transportes Expresos del Centro C.A.",
+                "conductor_nombre": "C. Mendoza",
+                "producto_nombre": "Cemento Tipo I a Granel",
+                "almacen_nombre": "Silo Principal",
+                "balanza_nombre": "Balanza Camionera",
+                "tercero_nombre": "Corporación Venezolana de Cemento",
+                "peso_entrada_vehiculo": "38250",
+            },
+        )
+        r = await client.get("/api/v1/weighing/pendientes")
+        assert r.status_code == 200
+        pen = [p for p in r.json() if p["id_vehiculo"] == "NOM-01"][0]
+        assert pen["transporte_nombre"] == "Transportes Expresos del Centro C.A."
+        assert "C. Mendoza" in pen["conductor_nombre"]
+        assert pen["producto_nombre"] == "Cemento Tipo I a Granel"
+        assert pen["almacen_nombre"] == "Silo Principal"
+        assert "fe000000" not in (pen.get("transporte_nombre") or "")
+
+    async def test_boleto_detalle_resuelve_nombres_y_remolque(self, client):
+        """El detalle de un boleto con remolque devuelve nombres legibles y la
+        placa del remolque (el front lo usa en la UI)."""
+        created = await client.post(
+            "/api/v1/weighing/create",
+            json={
+                "id_vehiculo": "DET-01",
+                "transporte_nombre": "Transportes Expresos del Centro C.A.",
+                "producto_nombre": "Cemento Tipo I a Granel",
+                "almacen_nombre": "Silo Principal",
+                "remolque": True,
+                "remolque_placa": "RAP55M",
+                "peso_entrada_vehiculo": "38250",
+            },
+        )
+        assert created.status_code == 200, created.text
+        boleto = created.json()["boleto"]
+        r = await client.get(f"/api/v1/weighing/boleto/{boleto}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["transporte_nombre"] == "Transportes Expresos del Centro C.A."
+        assert body["producto_nombre"] == "Cemento Tipo I a Granel"
+        assert body["remolque"] is True
+        assert body["remolque_placa"] == "RAP55M"
 
     async def test_cerrar_calcula_neto(self, client):
         created = (
@@ -270,6 +323,75 @@ class TestPesajeEndpoints:
         r = await client.get("/api/v1/weighing/list", params={"estado": "PENDIENTE"})
         assert r.status_code == 200
         assert all(p["estado_boleto"] == "PENDIENTE" for p in r.json())
+
+    async def test_create_guarda_formulario_avanzado_y_peso_manual(self, client):
+        created = (
+            await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": "PM-01",
+                    "transporte_nombre": "T",
+                    "conductor_nombre": "C",
+                    "producto_nombre": "P",
+                    "almacen_nombre": "A",
+                    "balanza_nombre": "B",
+                    "tercero_nombre": "X",
+                    "peso_entrada_vehiculo": "50000",
+                    "es_peso_manual": True,
+                    "peso_neto_declarado": "4990",
+                    "guia_sunagro": "SUNAGRO-TEST-99",
+                    "medida": "M3",
+                    "densidad": "1.6",
+                    "unidades": "2",
+                },
+            )
+        ).json()
+        assert created["peso_neto_declarado"] == "4990.00"
+        assert created["es_peso_manual"] is True
+        boleto = created["boleto"]
+        body = (await client.get(f"/api/v1/weighing/boleto/{boleto}")).json()
+        assert body["es_peso_manual"] is True
+        assert body["guia_sunagro"] == "SUNAGRO-TEST-99"
+        assert body["medida"] == "M3"
+        from decimal import Decimal as _D
+        assert _D(str(body["densidad"])) == _D("1.6000")
+
+    async def test_close_guarda_formulario_avanzado_y_peso_manual(self, client):
+        created = (
+            await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": "PM-02",
+                    "transporte_nombre": "T",
+                    "conductor_nombre": "C",
+                    "producto_nombre": "P",
+                    "almacen_nombre": "A",
+                    "balanza_nombre": "B",
+                    "tercero_nombre": "X",
+                    "peso_entrada_vehiculo": "50000",
+                },
+            )
+        ).json()
+        boleto = created["boleto"]
+        r = await client.post(
+            f"/api/v1/weighing/close/{boleto}",
+            json={
+                "peso_salida_vehiculo": "45000",
+                "es_peso_manual": True,
+                "guia_sunagro": "SUNAGRO-C",
+                "medida": "M3",
+                "flete": "BS 100",
+                "costo_flete": "250.00",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["es_peso_manual"] is True
+        detail = (await client.get(f"/api/v1/weighing/boleto/{boleto}")).json()
+        assert detail["guia_sunagro"] == "SUNAGRO-C"
+        assert detail["medida"] == "M3"
+        assert detail["flete"] == "BS 100"
+        assert detail["costo_flete"] == "250.00" or detail["costo_flete"] == 250.00
 
 
 class TestAuthEndpoints:

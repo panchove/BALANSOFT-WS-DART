@@ -122,8 +122,9 @@ def _empresa_info(empresa: Empresa | None) -> dict:
                 "email": "", "logo": None}
     nombre = (empresa.nombre_comercial or empresa.nombre_fiscal or "").strip()
     logo = None
-    if getattr(empresa, "logo_url", None):
-        rel = empresa.logo_url.lstrip("/")
+    logo_url = empresa.logo_url
+    if logo_url:
+        rel = logo_url.lstrip("/")
         if rel.startswith("media/"):
             rel = rel[len("media/"):]
         candidato = os.path.join(settings.media_dir, rel)

@@ -16,6 +16,7 @@ import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/command_palette.dart';
+import '../../widgets/mobile_nav_sheet.dart';
 import '../../widgets/quick_actions_bar.dart';
 import '../../widgets/top_nav_bar.dart';
 import '../ajustes_inventario/ajustes_inventario_screen.dart';
@@ -359,33 +360,37 @@ class _HomeShellState extends State<HomeShell> {
   void _toggleSidebar() =>
       setState(() => _sidebarVisible = !_sidebarVisible);
 
-  /// Menú de navegación para móvil: muestra el mismo sidebar del desktop
-  /// (mismas opciones y filtrado por rol) sobre un bottom sheet.
+  /// Menú de navegación para móvil: bottom sheet con **todas** las acciones
+  /// del rol (misma matriz que el sidebar de desktop, sin sidebar).
   void _mostrarMenuNavegacion() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => FractionallySizedBox(
-        heightFactor: 0.92,
-        child: AppSidebar(
-          selectedIndex: _index,
-          onItemSelected: (i) {
-            Navigator.of(ctx).pop();
-            _cambiarIndice(i);
-          },
-          onCollapse: _toggleSidebar,
-          onLogout: () {
-            Navigator.of(ctx).pop();
-            _cerrarSesion();
-          },
-          onOpenConfig: () {
-            Navigator.of(ctx).pop();
-            _abrirConfiguracion();
-          },
-        ),
-      ),
+    mostrarNavMovil(
+      context,
+      selectedIndex: _index,
+      onItemSelected: _cambiarIndice,
+      onLogout: _cerrarSesion,
+      onOpenConfig: _abrirConfiguracion,
     );
+  }
+
+  /// Módulos (hojas) accesibles para el rol actual, en orden del árbol de
+  /// menú. Usado por el bottom bar móvil para mostrar todas las acciones.
+  List<MenuNode> _modulosVisibles() {
+    final authState = context.read<AuthBloc>().state;
+    final rol = authState is AuthAuthenticated ? authState.user.rol : 'OPERADOR';
+    final arbol = AppSidebar.filtrarMenu(AppSidebar.menuTree, rol);
+    final out = <MenuNode>[];
+    void recorrer(List<MenuNode> nodos) {
+      for (final n in nodos) {
+        if (n.isLeaf) {
+          if (n.index != null) out.add(n);
+        } else if (n.children != null) {
+          recorrer(n.children!);
+        }
+      }
+    }
+
+    recorrer(arbol);
+    return out;
   }
 
   void _toggleCommandPalette() =>
@@ -628,9 +633,6 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final usarSidebar = MediaQuery.sizeOf(context).shortestSide >= 600;
-    final authState = context.watch<AuthBloc>().state;
-    final esOperador =
-        authState is AuthAuthenticated && authState.user.isOperador;
 
     final idx = _index.clamp(0, _pages.length - 1);
     final contenido = Navigator(
@@ -649,7 +651,7 @@ class _HomeShellState extends State<HomeShell> {
         body: Stack(
           children: [
             if (!usarSidebar)
-              _buildMobileBody(esOperador, idx, contenido)
+              _buildMobileBody(idx, contenido)
             else
               _buildDesktopBody(idx, contenido),
             if (_commandPaletteOpen)
@@ -664,7 +666,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   /// Cuerpo móvil: TopNavBar + QuickActionsBar + contenido + BottomNavBar.
-  Widget _buildMobileBody(bool esOperador, int idx, Widget contenido) {
+  Widget _buildMobileBody(int idx, Widget contenido) {
     return Column(
       children: [
         TopNavBar(
@@ -683,7 +685,7 @@ class _HomeShellState extends State<HomeShell> {
         Expanded(child: contenido),
         _BottomNavBar(
           indiceActual: idx,
-          esOperador: esOperador,
+          modulos: _modulosVisibles(),
           alSeleccionar: _cambiarIndice,
           abrirMas: _abrirMenuMas,
         ),
@@ -742,79 +744,71 @@ class _HomeShellState extends State<HomeShell> {
 
 // ── BottomNavBar (móvil) ──────────────────────────────────────────────
 
+/// Bottom bar de Android: muestra las acciones del rol del usuario. Si el rol
+/// accede a pocos módulos, se exponen **todos** directamente en la barra; si
+/// accede a muchos, se muestran los 4 principales + "Más" (menú móvil).
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.indiceActual,
-    required this.esOperador,
+    required this.modulos,
     required this.alSeleccionar,
     required this.abrirMas,
   });
 
   final int indiceActual;
-  final bool esOperador;
+  final List<MenuNode> modulos;
   final ValueChanged<int> alSeleccionar;
   final void Function(BuildContext) abrirMas;
 
-  static const _claves = ['inicio', 'entradas', 'salidas', 'reportes'];
+  /// ¿Cabe todo en la barra (5 destinos) o hace falta "Más"?
+  bool get _hayMas => modulos.length > 4;
 
-  int _idx(String clave) {
-    const map = {
-      'inicio': 0,
-      'entradas': 10,
-      'salidas': 11,
-      'reportes': 12,
-    };
-    return map[clave] ?? 0;
-  }
+  List<MenuNode> get _tabs => _hayMas ? modulos.take(4).toList() : modulos;
 
   int _navLocal() {
-    final actual = indiceActual;
-    if (actual == _idx('inicio')) return 0;
-    if (actual == _idx('entradas')) return 1;
-    if (actual == _idx('salidas')) return 2;
-    if (actual == _idx('reportes')) return 3;
-    return 4;
+    for (var i = 0; i < _tabs.length; i++) {
+      if (_tabs[i].index == indiceActual) return i;
+    }
+    return _hayMas ? 4 : 0;
   }
 
   void _alNavegar(BuildContext context, int local) {
-    if (local == 4) {
+    if (_hayMas && local == 4) {
       abrirMas(context);
       return;
     }
-    alSeleccionar(_idx(_claves[local]));
+    alSeleccionar(_tabs[local].index ?? 0);
+  }
+
+  String _lang(BuildContext context) {
+    try {
+      return Localizations.localeOf(context).languageCode;
+    } catch (_) {
+      return 'es';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: _navLocal(),
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      destinations: const [
+    final lang = _lang(context);
+    final destinations = <NavigationDestination>[
+      for (final m in _tabs)
         NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'Inicio',
+          icon: Icon(m.icon),
+          selectedIcon: Icon(m.activeIcon ?? m.icon),
+          label: AppSidebar.traducir(m.label, lang),
         ),
-        NavigationDestination(
-          icon: Icon(Icons.arrow_downward_outlined),
-          selectedIcon: Icon(Icons.arrow_downward),
-          label: 'Entradas',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.arrow_upward_outlined),
-          selectedIcon: Icon(Icons.arrow_upward),
-          label: 'Salidas',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.description_outlined),
-          selectedIcon: Icon(Icons.description),
-          label: 'Reportes',
-        ),
-        NavigationDestination(
+      if (_hayMas)
+        const NavigationDestination(
           icon: Icon(Icons.more_horiz),
           label: 'Más',
         ),
-      ],
+    ];
+
+    return NavigationBar(
+      selectedIndex: _navLocal(),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: destinations,
       onDestinationSelected: (i) => _alNavegar(context, i),
     );
   }

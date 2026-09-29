@@ -26,6 +26,11 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  /// Último listado cargado: si el bloque global pasa por estados transitorios
+  /// (Sync/Detail/Created) el dashboard se sigue renderizando con estos datos
+  /// en lugar de quedarse en el spinner infinito.
+  List<Weighing>? _cache;
+
   @override
   void initState() {
     super.initState();
@@ -51,12 +56,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   backgroundColor: SwsColors.danger,
                 ),
               );
+            } else if (state is WeighingListLoaded) {
+              _cache = state.weighings;
+            } else if (state is WeighingSyncComplete && _cache == null) {
+              // Defensa extra: si el listado aún no ha cargado tras un sync,
+              // se pide de nuevo para no quedarse en el spinner indefinido.
+              context.read<WeighingBloc>().add(const ListWeighingsEvent());
             }
           },
           child: BlocBuilder<WeighingBloc, WeighingState>(
             builder: (context, state) {
-              if (state is WeighingListLoaded) {
-                final weighings = state.weighings;
+              final weighings = state is WeighingListLoaded
+                  ? state.weighings
+                  : _cache;
+              if (weighings != null) {
                 final abiertos = weighings.where((w) => w.isOpen).length;
                 final cerrados = weighings.where((w) => w.isClosed).length;
                 final pesoTotal = weighings
@@ -117,6 +130,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 );
               }
+              if (state is WeighingError) {
+                return _errorVista(context, state.message);
+              }
               return const Center(child: CircularProgressIndicator());
             },
           ),
@@ -127,6 +143,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           MaterialPageRoute(builder: (_) => const WeighingFormScreen()),
         ),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _errorVista(BuildContext context, String mensaje) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off, size: 48, color: SwsColors.danger),
+            const SizedBox(height: 12),
+            Text('Error: $mensaje', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () {
+                context.read<WeighingBloc>().add(const ListWeighingsEvent());
+              },
+              icon: const Icon(Icons.refresh),
+              label: Text('retry'.tr()),
+            ),
+          ],
+        ),
       ),
     );
   }

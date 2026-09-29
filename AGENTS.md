@@ -4,8 +4,8 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 
 | Atributo      | Valor                                            |
 |---------------|--------------------------------------------------|
-| Versión       | 3.0                                              |
-| Fecha         | 2026-09-21                                       |
+| Versión       | 3.1                                              |
+| Fecha         | 2026-09-29                                       |
 | Estado        | Vigente                                          |
 | Fuente        | `docs/MANEJO_DB.md` (arquitectura vigente) y código |
 
@@ -16,7 +16,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 | Comando                          | Lugar | Notas |
 |----------------------------------|-------|-------|
 | `uv sync`                        | `backend/` | Stack uv (`pyproject.toml` + `uv.lock`) |
-| `uv run pytest -q`               | `backend/` | **248 tests** (~90 s); requiere PostgreSQL real (ver Tests) |
+| `uv run pytest -q`               | `backend/` | **268 tests** (~90 s); requiere PostgreSQL real (ver Tests) |
 | `uv run ruff check app tests`    | `backend/` | line-length 100 |
 | `uv run mypy tests/`             | `backend/` | |
 | `flutter test` / `flutter analyze` | `frontend/` | |
@@ -32,7 +32,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
   - `local` → estación operativa (boletos, catálogos, login-local offline). Monta `API_ROUTERS`.
   - `server` → central de cuenta/licencia/credenciales/sync/panel. Monta `SERVER_ROUTERS` (`app/api/v1/endpoints/servidor.py`).
   - Selector en `app/main.py`; modelos del servidor en `app/models_server.py` + motor `server_async_engine` (`app/core/database.py`).
-- **No existe `backend/schema.sql`.** Los esquemas canónicos son **`backend/balansoft-ws-local.sql`** (22 tablas) y **`balansoft-ws-server.sql`** (10 tablas). Migraciones hacia adelante en `backend/migrations/*.sql` (001–012), idempotentes, sin Alembic.
+- **No existe `backend/schema.sql`.** Los esquemas canónicos son **`backend/balansoft-ws-local.sql`** (22 tablas) y **`balansoft-ws-server.sql`** (10 tablas). Migraciones hacia adelante en `backend/migrations/*.sql` (001–020), idempotentes, sin Alembic.
 - **Regla: 1 máquina local = 1 empresa = 1 cuenta.** Reglas, setup dev y flujo de login en `docs/MANEJO_DB.md`.
 - **WServer**: backend local de la estación compilado con PyInstaller one-file (`backend/wserver.py` + `WServer.spec` + `scripts/build_wserver.sh`). En primera instalación crea runtime (`~/.balansoft-ws/wserver`, o `WSERVER_HOME`), genera `.env` desde `.env.plantilla` (SECRET_KEY aleatoria) y levanta la BD local + API en `0.0.0.0:8000` (accesible desde la LAN por IP; migra `API_HOST=127.0.0.1` previo y abre el puerto en ufw vía `pkexec`). La app Flutter lo lanza vía `frontend/lib/core/services/wserver_manager.dart` y muestra `Conexiones` en modo instalación (URL local prefijada `http://localhost:8000`).
 - **Panel administrativo del proveedor** separado: `BALASOFT-UI/panel` (HTML/Bootstrap) contra la API `APP_ROLE=server`. Seed: `backend/scripts/seed_panel_admin.py`. Licencia siempre se valida contra el LM (SGLB, firma Ed25519, `LICENSE_PUBLIC_KEY_PATH`).
@@ -48,7 +48,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 
 - Referencias: `backend/.env.example` (producción), `backend/.env.plantilla` (plantilla embebida del WServer), `docs/MANEJO_DB.md §11`.
 - Claves clave: `DATABASE_URL`/`DATABASE_URL_SYNC` (obligatorio el par async/sync), `APP_ROLE`, `SERVER_API_URL` + `SERVER_DATABASE_URL` (solo rol local), `SECRET_KEY` (generar con `openssl rand -hex 32`), `API_HOST`/`API_PORT` (dev `127.0.0.1:8000`; servidor real `0.0.0.0:8002`), `LICENSE_API_URL` (en estaciones `https://lm.balansoft.com.ve/api/v1`; en el servidor central con LM local `127.0.0.1:9001/api/v1`), `LICENSE_PRODUCT_CODE=WS` (ojo: el default de `config.py` es `BWS`), `RATE_LIMIT_*`, `METRICS_ENABLED`.
-- En dev actual: `APP_ROLE=local` contra la BD `balansoft_ws` (single-DB). Las BDs split de prueba son `balansoft_ws_server` y `balansoft_ws_local` (mismo PostgreSQL local).
+- En dev actual: `APP_ROLE=local` contra la BD `balansoft_ws_local` (el `.env` apunta ahí); `balansoft_ws_server` es la **réplica local del central** (rol `server`, puerto dev `8002`, redoc en §7.1 de MANEJO_DB). `reset_total.sh` (v1.2.7) **respalda las BD con `pg_dump -Fc` antes de borrarlas** y aborta si el respaldo falla.
 
 ---
 
@@ -78,4 +78,5 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
-| 3.0 | 2026-09-21 | Re-alineación: repo es git; docs activas (MANEJO_DB/NAV/INPUTS_MAP/MODELO_ESTANDAR); arquitectura de dos BDs (`APP_ROLE`), WServer/PyInstaller, panel BALASOFT-UI, seguridad por categorías; sin `schema.sql` (local/server.sql); tests 154; `uv` ausente en PATH. |
+| 3.0 | 2026-09-21 | Re-alineación: repo es git; docs activas (MANEJO_DB/NAV/INPUTS_MAP/MODELO_ESTANDAR); arquitectura de dos BDs (`APP_ROLE`), WServer/PyInstaller, panel BALASOFT-UI, seguridad por categorías; sin `schema.sql` (local/server.sql); tests 268; `uv` ausente en PATH. |
+| 3.1 | 2026-09-29 | Dev actual a dos BDs (`balansoft_ws_local` + réplica central `balansoft_ws_server` dev :8002, seed titular + panel en §7.1); `reset_total.sh` v1.2.7 respalda las BDs (`pg_dump -Fc`) antes de borrar y aborta si falla; `seed_reset_demo.sql` repone la operación demo local. |

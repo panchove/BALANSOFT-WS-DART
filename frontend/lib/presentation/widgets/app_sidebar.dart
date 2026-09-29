@@ -45,6 +45,15 @@ class AppSidebar extends StatefulWidget {
     required this.onOpenConfig,
   });
 
+  /// Árbol de menú compartido con el bottom bar / menú móvil de Android.
+  static const menuTree = _AppSidebarState.menuTree;
+
+  static List<MenuNode> filtrarMenu(List<MenuNode> nodes, String rol) =>
+      _AppSidebarState.filtrarMenu(nodes, rol);
+
+  static String traducir(String label, String lang) =>
+      _AppSidebarState.traducir(label, lang);
+
   @override
   State<AppSidebar> createState() => _AppSidebarState();
 }
@@ -57,12 +66,14 @@ class _AppSidebarState extends State<AppSidebar> {
   /// `home_shell.dart`. NO usar el orden visual para inferir el índice.
   /// `rolesPermitidos` = roles que pueden VER el módulo según la matriz por
   /// defecto (`AccesosDefault`); los grupos/encabezados no filtran solos.
-  static const _menuTree = [
-    _MenuNode(
+  /// Árbol de menú compartido (desktop sidebar y menú móvil). Cada hoja
+  /// apunta a `_pages` en `home_shell.dart`.
+  static const menuTree = <MenuNode>[
+    MenuNode(
       label: 'INFORMACIÓN',
       isSectionHeader: true,
       children: [
-        _MenuNode(
+        MenuNode(
           label: 'Inicio',
           icon: Icons.dashboard_outlined,
           activeIcon: Icons.dashboard,
@@ -70,7 +81,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 0,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Terceros',
           icon: Icons.people_outline,
           activeIcon: Icons.people,
@@ -78,11 +89,11 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 1,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Flota y Transporte',
           icon: Icons.local_shipping_outlined,
           children: [
-            _MenuNode(
+            MenuNode(
               label: 'Camiones / Vehículos',
               icon: Icons.directions_car_outlined,
               activeIcon: Icons.directions_car,
@@ -90,7 +101,7 @@ class _AppSidebarState extends State<AppSidebar> {
               index: 3,
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
-            _MenuNode(
+            MenuNode(
               label: 'Conductores',
               icon: Icons.badge_outlined,
               activeIcon: Icons.badge,
@@ -98,7 +109,7 @@ class _AppSidebarState extends State<AppSidebar> {
               index: 4,
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
-            _MenuNode(
+            MenuNode(
               label: 'Empresas de Transporte',
               icon: Icons.fire_truck_outlined,
               activeIcon: Icons.fire_truck,
@@ -108,11 +119,11 @@ class _AppSidebarState extends State<AppSidebar> {
             ),
           ],
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Inventario Base',
           icon: Icons.warehouse_outlined,
           children: [
-            _MenuNode(
+            MenuNode(
               label: 'Categorías',
               icon: Icons.category_outlined,
               activeIcon: Icons.category,
@@ -120,7 +131,7 @@ class _AppSidebarState extends State<AppSidebar> {
               index: 6,
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
-            _MenuNode(
+            MenuNode(
               label: 'Productos',
               icon: Icons.inventory_2_outlined,
               activeIcon: Icons.inventory_2,
@@ -128,7 +139,7 @@ class _AppSidebarState extends State<AppSidebar> {
               index: 7,
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
-            _MenuNode(
+            MenuNode(
               label: 'Almacenes',
               icon: Icons.warehouse_outlined,
               activeIcon: Icons.warehouse,
@@ -138,7 +149,7 @@ class _AppSidebarState extends State<AppSidebar> {
             ),
           ],
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Kardex',
           icon: Icons.table_rows_outlined,
           activeIcon: Icons.table_rows,
@@ -148,11 +159,11 @@ class _AppSidebarState extends State<AppSidebar> {
         ),
       ],
     ),
-    _MenuNode(
+    MenuNode(
       label: 'REPORTES',
       isSectionHeader: true,
       children: [
-        _MenuNode(
+        MenuNode(
           label: 'Ingresos (Entradas)',
           icon: Icons.arrow_downward_outlined,
           activeIcon: Icons.arrow_downward,
@@ -160,7 +171,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 10,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Despachos (Salidas)',
           icon: Icons.arrow_upward_outlined,
           activeIcon: Icons.arrow_upward,
@@ -168,7 +179,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 11,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Inventario (Stock Físico)',
           icon: Icons.inventory_outlined,
           activeIcon: Icons.inventory,
@@ -178,11 +189,11 @@ class _AppSidebarState extends State<AppSidebar> {
         ),
       ],
     ),
-    _MenuNode(
+    MenuNode(
       label: 'MANTENIMIENTO Y CONFIGURACIÓN',
       isSectionHeader: true,
       children: [
-        _MenuNode(
+        MenuNode(
           label: 'Usuarios del Sistema',
           icon: Icons.admin_panel_settings_outlined,
           activeIcon: Icons.admin_panel_settings,
@@ -190,7 +201,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 2,
           rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Dispositivos de Campo',
           icon: Icons.sensors_outlined,
           activeIcon: Icons.sensors,
@@ -198,7 +209,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 13,
           rolesPermitidos: {'ADMIN'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Seguridad y Accesos',
           icon: Icons.lock_outline,
           activeIcon: Icons.lock,
@@ -206,7 +217,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 14,
           rolesPermitidos: {'ADMIN'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Empresa y Documentos',
           icon: Icons.business_outlined,
           activeIcon: Icons.business,
@@ -214,7 +225,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 15,
           rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Diseño de Ticket',
           icon: Icons.receipt_long_outlined,
           activeIcon: Icons.receipt_long,
@@ -222,7 +233,7 @@ class _AppSidebarState extends State<AppSidebar> {
           index: 17,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
-        _MenuNode(
+        MenuNode(
           label: 'Configuración General',
           icon: Icons.settings_outlined,
           activeIcon: Icons.settings,
@@ -275,7 +286,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       vertical: 12,
                     ),
                     children: _buildNodes(
-                      _filtrarArbol(_menuTree),
+                      filtrarMenu(menuTree, _rolActual()),
                       rol: _rolActual(),
                     ),
                   ),
@@ -297,11 +308,10 @@ class _AppSidebarState extends State<AppSidebar> {
   }
 
   /// Poda el árbol eliminando hojas sin permiso y los grupos/secciones que se
-  /// quedan sin hijos visibles.
-  List<_MenuNode> _filtrarArbol(List<_MenuNode> nodes) {
-    final rol = _rolActual();
+  /// quedan sin hijos visibles. Reutilizable por el menú móvil.
+  static List<MenuNode> filtrarMenu(List<MenuNode> nodes, String rol) {
     final repo = di.sl<AccesosRepository>();
-    final result = <_MenuNode>[];
+    final result = <MenuNode>[];
 
     for (final node in nodes) {
       // Hoja: visible si su clave la permite el rol (repositorio con fallback
@@ -314,18 +324,14 @@ class _AppSidebarState extends State<AppSidebar> {
 
       // Nodo con hijos: filtra recursivamente y conserva solo si hay visibles.
       final hijos = node.isSectionHeader ? node.children : node.children;
-      final filtrados = _filtrarArbol(hijos ?? const []);
+      final filtrados = filtrarMenu(hijos ?? const [], rol);
       if (filtrados.isEmpty) continue;
       result.add(node.copyWith(children: filtrados));
     }
     return result;
   }
 
-  String _traducir(BuildContext context, String label) {
-    String lang = 'es';
-    try {
-      lang = Localizations.localeOf(context).languageCode;
-    } catch (_) {}
+  static String traducir(String label, String lang) {
     const map = {
       'INFORMACIÓN': 'menu_informacion',
       'Inicio': 'menu_inicio',
@@ -356,8 +362,16 @@ class _AppSidebarState extends State<AppSidebar> {
     return key != null ? AppTranslations.tr(key, langCode: lang) : label;
   }
 
+  String _traducir(BuildContext context, String label) {
+    String lang = 'es';
+    try {
+      lang = Localizations.localeOf(context).languageCode;
+    } catch (_) {}
+    return AppSidebar.traducir(label, lang);
+  }
+
   List<Widget> _buildNodes(
-    List<_MenuNode> nodes, {
+    List<MenuNode> nodes, {
     required String rol,
   }) {
     final widgets = <Widget>[];
@@ -457,13 +471,13 @@ class _AppSidebarState extends State<AppSidebar> {
 
 // ─── Modelo de Datos ──────────────────────────────────────────────────
 
-class _MenuNode {
+class MenuNode {
   final String label;
   final IconData? icon;
   final IconData? activeIcon;
   final String? clave;
   final int? index;
-  final List<_MenuNode>? children;
+  final List<MenuNode>? children;
 
   /// Roles con acceso al módulo (matriz por defecto). Si es `null`, el nodo
   /// (grupo/encabezado) no filtra por rol y depende de sus hijos.
@@ -471,7 +485,7 @@ class _MenuNode {
   final bool isSectionHeader;
   final bool isSubItem;
 
-  const _MenuNode({
+  const MenuNode({
     required this.label,
     this.icon,
     this.activeIcon,
@@ -485,8 +499,8 @@ class _MenuNode {
 
   bool get isLeaf => children == null && !isSectionHeader;
 
-  _MenuNode copyWith({bool? isSubItem, List<_MenuNode>? children}) {
-    return _MenuNode(
+  MenuNode copyWith({bool? isSubItem, List<MenuNode>? children}) {
+    return MenuNode(
       label: label,
       icon: icon,
       activeIcon: activeIcon,

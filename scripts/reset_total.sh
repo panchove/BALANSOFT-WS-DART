@@ -8,8 +8,10 @@
 #   3. Elimina los tokens del almacén seguro (keyring/libsecret).
 #   4. Elimina el runtime del WServer (~/.balansoft-ws/wserver) para que la
 #      primera ejecución lo regenere desde la plantilla.
-#   5. Elimina las bases locales de PostgreSQL que crea la instalación
-#      (balansoft_ws, balansoft_ws_local, balansoft_ws_server).
+#   5. Respalda (pg_dump -Fc) y elimina las bases locales de PostgreSQL que
+#      crea la instalación (balansoft_ws, balansoft_ws_local,
+#      balansoft_ws_server). Sin pg_dump disponible, el script ABORTA y no
+#      borra nada: los datos pesan más que la comodidad del reset.
 #   6. Reconstruye el bundle: flutter build linux + copia WServer e icono.
 #
 # Uso:
@@ -100,7 +102,7 @@ if [[ "$CONFIRM" == "1" ]]; then
   echo "  - Tokens del keyring      → $SECRET_ACCOUNT"
   echo "  - Runtime del WServer     → $WSRUNTIME"
   if [[ "$DO_DB" == "1" ]]; then
-    printf '  - Bases PostgreSQL       → %s\n' "${DBS_VIRGEN[*]}"
+    printf '  - Bases PostgreSQL       → %s\n    (antes se respaldan en el backup de la ejecución)\n' "${DBS_VIRGEN[*]}"
   fi
   if [[ "$DO_BUILD" == "1" ]]; then
     echo "  (y reconstruirá el bundle de release)"
@@ -262,12 +264,34 @@ WHERE datname IN ($DBS_IN) AND pid <> pg_backend_pid();" ; then
     err "Revisa PGPASSWORD/PGUSER o levanta el servicio (sudo systemctl start postgresql)."
     exit 1
   fi
+  # 5b. Respaldo previo de las bases (integridad). Sin pg_dump o si el
+  # respaldo falla se ABORTA: nunca se borra una base sin tener su copia.
+  if ! command -v pg_dump >/dev/null 2>&1; then
+    err "No se encontró 'pg_dump'. Sin respaldo previo NO se eliminan las bases."
+    err "Instala el cliente PostgreSQL o ejecuta con --no-db."
+    exit 1
+  fi
+  DB_BK_DIR="$BP/db"
+  mkdir -p "$DB_BK_DIR"
+  for db in "${DBS_VIRGEN[@]}"; do
+    if PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db';" | grep -q '^1$'; then
+      info "Respaldo de '$db' → $DB_BK_DIR/$db.pgdump ..."
+      if ! PGPASSWORD="$PGPASSWORD" pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$db" -f "$DB_BK_DIR/$db.pgdump"; then
+        err "Falló el respaldo de '$db'. Se ABORTA para no perder datos."
+        exit 1
+      fi
+      ok "Respaldo de '$db' completado."
+    else
+      ok "Base '$db' no existe: no hay nada que respaldar."
+    fi
+  done
+
   for db in "${DBS_VIRGEN[@]}"; do
     PGPASSWORD="$PGPASSWORD" psql -v ON_ERROR_STOP=1 \
       -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
       -c "DROP DATABASE IF EXISTS $db;"
   done
-  ok "Bases PostgreSQL eliminadas."
+  ok "Bases PostgreSQL eliminadas (respaldo previo en $DB_BK_DIR)."
 else
   info "Omitiendo PostgreSQL (--no-db)."
 fi

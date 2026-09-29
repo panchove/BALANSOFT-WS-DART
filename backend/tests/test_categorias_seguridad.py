@@ -6,6 +6,8 @@ de dependencias. Categorías y permisos operan sobre la BD real de tests.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest_asyncio
 from fastapi import FastAPI
 
@@ -102,6 +104,88 @@ class TestCategoriasEndpoints:
         data = r.json()
         assert "categorias" in data
         assert any(c["nombre"] == "Lubricantes" for c in data["categorias"])
+
+    async def test_codigo_duplicado_create_409(self, client):
+        r1 = await client.post(
+            "/api/v1/categorias", json={"codigo": "CAT-DUP", "nombre": "Primera"}
+        )
+        assert r1.status_code == 200, r1.text
+        r2 = await client.post(
+            "/api/v1/categorias", json={"codigo": "CAT-DUP", "nombre": "Segunda"}
+        )
+        assert r2.status_code == 409, r2.text
+        assert "CAT-DUP" in r2.json()["detail"]
+
+    async def test_codigo_duplicado_update_409(self, client, db):
+        a = await client.post(
+            "/api/v1/categorias", json={"codigo": "CAT-A", "nombre": "Categoría A"}
+        )
+        assert a.status_code == 200, a.text
+        b = await client.post(
+            "/api/v1/categorias", json={"codigo": "CAT-B", "nombre": "Categoría B"}
+        )
+        id_b = b.json()["id_categoria"]
+
+        r = await client.put(
+            f"/api/v1/categorias/{id_b}",
+            json={"codigo": "CAT-A", "nombre": "Categoría B renombrada"},
+        )
+        assert r.status_code == 409, r.text
+        assert "CAT-A" in r.json()["detail"]
+
+        # El registro B debe quedar intacto tras el rechazo: la actualización
+        # falló como transacción, el codigo no cambió a nivel de BD.
+        from sqlalchemy import select
+
+        from app.models import Categoria
+
+        res = await db.execute(
+            select(Categoria)
+            .where(Categoria.id_categoria == uuid.UUID(id_b))
+            .execution_options(populate_existing=True)
+        )
+        fila = res.scalar_one()
+        assert fila.codigo == "CAT-B"
+        assert fila.nombre == "Categoría B"
+
+    async def test_codigo_null_repetido_permitido(self, client):
+        r1 = await client.post("/api/v1/categorias", json={"nombre": "Sin código 1"})
+        r2 = await client.post("/api/v1/categorias", json={"nombre": "Sin código 2"})
+        assert r1.status_code == 200, r1.text
+        assert r2.status_code == 200, r2.text
+
+    async def test_mismo_codigo_otra_empresa_permitido(self, client, db):
+        from app.models import Categoria, Empresa
+
+        otra = Empresa(
+            nombre_fiscal="Otra Empresa Cod",
+            nombre_comercial="Otra Cod S.A.",
+            rif_nit="J-99999998-0",
+            licencia_tier="MONOPUESTA",
+            licencia_status="ACTIVE",
+            activa=True,
+        )
+        db.add(otra)
+        await db.flush()
+        db.add(Categoria(id_empresa=otra.id_empresa, codigo="CAT-A", nombre="De otra empresa"))
+        await db.commit()
+
+        r = await client.post(
+            "/api/v1/categorias", json={"codigo": "CAT-A", "nombre": "De esta empresa"}
+        )
+        assert r.status_code == 200, r.text
+
+    async def test_codigo_duplicado_otra_entidad_409(self, client):
+        """La unicidad aplica igual a otros catálogos con código interno."""
+        r1 = await client.post(
+            "/api/v1/almacenes", json={"codigo": "ALM-01", "nombre": "Patio Norte"}
+        )
+        assert r1.status_code == 200, r1.text
+        r2 = await client.post(
+            "/api/v1/almacenes", json={"codigo": "ALM-01", "nombre": "Patio Sur"}
+        )
+        assert r2.status_code == 409, r2.text
+        assert "ALM-01" in r2.json()["detail"]
 
 
 class TestProductoCategoriaEndpoints:

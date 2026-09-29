@@ -137,6 +137,7 @@ class AppCatalogos {
         key: 'transporte_id',
         label: 'Transporte',
         icono: Icons.fire_truck_outlined,
+        tipo: CatalogFieldType.dropdown,
         catalogoPath: ApiConstants.transportes,
         catalogoIdKey: 'id_transporte',
         catalogoTituloKey: 'razon_social',

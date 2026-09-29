@@ -327,6 +327,28 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                     value: _preset.mostrarDetalles,
                     onChanged: (val) => setState(() => _preset = _preset.copyWith(mostrarDetalles: val)),
                   ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ticket_type'.tr(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        Text('ticket_type_desc'.tr(), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        const SizedBox(height: 8),
+                        SegmentedButton<String>(
+                          segments: [
+                            ButtonSegment(value: 'simple', label: Text('basic_ticket'.tr())),
+                            ButtonSegment(value: 'avanzado', label: Text('advanced_ticket'.tr())),
+                          ],
+                          selected: {_preset.tipoTicket},
+                          onSelectionChanged: (val) {
+                            setState(() => _preset = _preset.copyWith(tipoTicket: val.first));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

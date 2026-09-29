@@ -7,6 +7,282 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ---
 
+## Historial de versiones
+
+- **v1.2.8** — 2026-09-29 — Reportes de boleto (PDF/TXT): el AVANZADO muestra todos los campos del formulario y el BÁSICO marca el peso escrito manualmente.
+- **v1.2.7** — 2026-09-28 — `reset_total.sh` ya respalda las BD (`pg_dump -Fc`) antes de borrarlas; recuperada la operación demo de la estación (camiones/boletos) vía seed.
+- **v1.2.6** — 2026-09-28 — Datos del camión en el pesaje con nombre (nunca UUID) y fotos con aviso de fallo.
+- **v1.2.5** — 2026-09-28 — Navegación Android: bottom bar por rol (sin sidebar) y arranque en teléfono.
+- **v1.2.4** — 2026-09-28 — Adiós al bucle infinito de "sincronizando" tras POST/navegación.
+- **v1.2.3** — 2026-09-28 — Encabezado horizontal del boleto, export respeta PrinterPreset, fix refresh infinito.
+- **v1.2.2** — 2026-09-28 — Código interno/personalizado único por empresa (migración 018).
+
+---
+
+## [v1.2.8] — 2026-09-29
+
+> En los tickets de boleto, el reporte AVANZADO salía casi igual al BÁSICO y no
+> reflejaba la información del formulario, mientras que los pesos escritos a mano
+> (que la aplicación ya distinguía en la captura) no se marcaban en ningún lugar.
+> Ahora el AVANZADO imprime todos los campos capturados (guía SUNAGRO, medida,
+> flete, costo flete, unidades, densidad, resultado, color del camión y operador)
+> y el BÁSICO advierte con un aviso destacado cuando el peso fue manual, con el
+> operador que lo registró.
+
+### Agregado
+- **Columna `es_peso_manual`** en `boletos_pesaje` (migración `020_es_peso_manual.sql`): persiste si el peso fue escrito manualmente (antes solo existía en tiempo de captura y se perdía). Queda en `balansoft-ws-local.sql`.
+- **Persistencia del formulario en `create`/`close`** (`WeighingCreate` extendido): `guia_sunagro`, `medida`, `peso_neto_declarado`, `densidad`, `litros` y `unidades` ya no se descartan al registrar el boleto.
+- **Reporte AVANZADO completo** en `ticket_service.py` (PDF hoja + térmico + TXT): muestra todos los campos del formulario vía el helper `_pares_avanzado`, incluida la fila de color de camión (resuelto desde `camiones.color` en `_enriquecer_pesaje_ticket`).
+- **Bloque "DATOS DEL CATÁLOGO Y CONTROL" en el AVANZADO** (`_pares_catalogo`): refleja las entidades maestro del pesaje (empresa RIF, tercero código/RIF, conductor cédula/teléfono/licencia, transporte código/RIF, remolque tipo/tara, categoría, producto código/unidad/manejo de kardex, almacén código/capacidad/stock, balanza código/capacidad/división) y los registros de control derivados (movimiento de kardex `INGRESO`/`DESPACHO` con su valor, y estado de sincronización). Solo imprime filas con dato.
+- **Enriquecimiento extendido**: `_enriquecer_pesaje_ticket` ahora resuelve los catálogos completos (no solo nombres) y consulta el kardex vinculado al boleto, de modo que el ticket nunca imprime UUIDs y el AVANZADO refleja todo lo que registró o creó el ciclo de pesaje.
+- **Aviso de peso manual en el BÁSICO**: marcador "PESO MANUAL" (negrita roja en PDF) + operador registrador.
+- **Campo `es_peso_manual`** en la respuesta de la API (`WeighingOut`) para que el flujo conozca el modo de captura.
+- **Pruebas**: 6 unitarias de contenido (avanzado/total, básico mínimo, aviso manual, legibilidad del térmico/compacto con el bloque completo) y 2 de integración de persistencia (create y close guardan formulario + peso manual).
+- **Selector persistente "Tipo de Ticket" (Básico/Avanzado)** en `Diseño de Ticket` (`ticket_design_screen.dart`): guarda la elección en el `PrinterPreset` de `LocalStorage`, de modo que todos los botones de imprimir/reimprimir respetan el tipo configurado (antes solo se podía elegir dentro del diálogo de vista previa y se perdía al salir).
+
+### Corregido
+- **La app exportaba "básico" aunque el preset fuera "Avanzado"**: los botones de imprimir/reimprimir del formulario y del detalle del pesaje (`_reimprimirTicket` en `weighing_form_screen.dart` y `weighing_detail_screen.dart`) llamaban a la API sin enviar `tipo_ticket`, así que siempre generaban el BÁSICO. Ahora envían `tipoTicket: preset.tipoTicket` (PDF y TXT).
+- **El PDF AVANZADO se recortaba en silencio** cuando `boletosPorHoja` era 2–4: el contenido no cabía en el frame fijo y `Frame.addFromList` descartaba el excedente (imprimía un "básico" cortado). Ahora `_build_pdf` calcula cuántos boletos caben enteros por página a una escala legible y las copias restantes fluyen a páginas siguientes; nada se pierde (verificado: 3 y 4 por hoja imprimen la guía SUNAGRO, los catálogos, el estado de sincronización y las firmas en todas las copias, repartidos en más páginas).
+- **`_caben` mide contra la altura útil del Frame** (alto − top/bottom padding), para que la última fila (firmas) no se recorte en casos límite.
+
+### Cambiado
+- **El BÁSICO ya no imprime los campos de firma** (operador y conductor), ni en el PDF de hoja, ni en el térmico, ni en el TXT: eran los que empujaban la hoja a 2 páginas al imprimir 3 boletos por hoja. El **AVANZADO los mantiene**. La vista previa de la app (`ticket_preview_dialog.dart`) refleja el mismo criterio. Con esta medida, tres boletos BÁSICOS caben en una sola hoja (verificado: 1 página, sin truncar); si además llevan el logo de la empresa y todos los datos del formulario, tres boletos completos ya no caben a escala legible y el excedente pasa a la página siguiente en lugar de recortarse.
+
+### Nota
+- Los boletos ya existentes quedan con `es_peso_manual = FALSE` (default); el valor solo se llena en capturas nuevas.
+- En la BD dev se marcó el boleto `BOL-20260004` con `es_peso_manual`, guía/medida/costo de flete de ejemplo para validar el render del ticket.
+
+---
+
+## [v1.2.7] — 2026-09-28
+
+> Un `reset_total.sh` para pruebas de instalación borraba las bases locales de
+> PostgreSQL sin dejar copia (solo respaldaba el estado de la app y el runtime del
+> WServer), y la estación SERVIDOR re-activada quedaba sin camiones/boletos
+> catalogados. Ahora el reset respalda las BD antes de eliminarlas y existe un
+> seed para reponer la operación demo.
+
+### Corregido
+- **Pérdida silenciosa de datos**: `scripts/reset_total.sh` hacía
+  `DROP DATABASE` de `balansoft_ws`, `balansoft_ws_local` y `balansoft_ws_server`
+  con `pg_terminate_backend`, sin respaldo previo. Un reset dejaba la empresa
+  re-activada pero con catálogos, camiones y boletos vacíos.
+
+### Agregado
+- **Respaldo previo obligatorio en `reset_total.sh`**: antes de cada DROP se
+  ejecuta `pg_dump -Fc` de cada base existente hacia `backups/<ts>/db/*.pgdump`.
+  Si `pg_dump` no está disponible, o el respaldo de una base falla, el script
+  **aborta y no borra nada**.
+- **`backend/scripts/seed_reset_demo.sql`**: repone la operación demo de la
+  estación SERVIDOR bajo la empresa local actual: categorías/productos (Cemento,
+  Harina en Sacos, Arroz), transportes, conductores, almacenes, balanza, tercero,
+  remolque, los camiones RAP44W/A99ZZ0/A31CX8 con su transporte asignado, la
+  serie `BOL-2026` (siguiente 0004) y los boletos `BOL-2026-0001` (CERRADO),
+  `BOL-2026-0002` (CERRADO) y `BOL-2026-0003` (PENDIENTE). Idempotente de facto:
+  usa los mismos UUID y `ON ERROR STOP`.
+
+---
+
+## [v1.2.6] — 2026-09-28
+
+> Los datos relacionados al camión (transporte, conductor, producto, almacén,
+> balanza, tercero) se muestran con **nombre legible** en el detalle y el ticket
+> del pesaje —nunca más como UUID—, y si la subida de fotos falla, el usuario es
+> avisado en lugar de perderlas en silencio.
+
+### Corregido
+- **No se imprime más el UUID en el boleto de pesaje**: el detalle
+  (`weighing_detail_screen.dart`) y la vista de impresión del ticket
+  (`ticket_preview_dialog.dart`) mostraban `ID: ff000000…` o el UUID crudo de
+  transporte, conductor, producto, almacén, balanza y tercero cuando el nombre no
+  estaba resuelto. Ahora, si no hay nombre, se muestra `—`/`N/A`; jamás el id.
+- **`GET /api/v1/weighing/pendientes` no resolvía nombres**: era la única ruta de
+  pesajes que serializaba sin enriquecer (`*_nombre` siempre null), así que un
+  boleto pendiente imprimía el UUID. Ahora enriquece igual que `/list` y el
+  detalle (`_enriquecer_pesaje_ticket`).
+
+### Agregado
+- **Pesaje auto-completa el Transporte desde el camión**: al seleccionar un camión
+  que tiene transporte asignado (`transporte_id`), el formulario de pesaje precarga
+  la razón social del transporte correspondiente.
+- **Aviso de fotos no subidas**: la subida de fotos del pesaje abandonaba en
+  silencio (`catch` vacío) y el boleto quedaba sin fotos sin explicación. Ahora el
+  formulario informa cuántas fotos no pudieron subirse.
+
+---
+
+## [v1.2.5] — 2026-09-28
+
+> Compatibilidad total con Android (teléfono). La app dejó de funcionar solo en
+> escritorio con teclado: ahora arranca y navega en móvil con una barra inferior
+> que expone todas las acciones según el rol, sin sidebar.
+
+### Agregado
+- **`MobileNavSheet`** (`mobile_nav_sheet.dart`): menú móvil de lista agrupada que
+  reemplaza al sidebar en Android. Muestra **todos** los módulos accesibles para el
+  rol del usuario (misma matriz `AppSidebar.menuTree` + `AccesosRepository`), con
+  acciones inferiores de Configuración (si el rol puede) y Cerrar sesión.
+- **Bottom bar dinámico por rol** (`_BottomNavBar`): si el rol accede a ≤4 módulos
+  los expone **todos** directamente; si accede a más, muestra los 4 principales +
+  "Más" (abre el menú móvil). El dashboard ya no abre un sidebar al pulsar "Más".
+- **`AppSidebar` público reutilizable**: `AppSidebar.menuTree`, `filtrarMenu` y
+  `traducir` se exponen como estáticos para compartir el árbol y su filtrado por
+  rol entre desktop y móvil.
+
+### Corregido
+- **Android arrancaba pero no conectaba**: `AndroidManifest.xml` no declaraba
+  `android.permission.INTERNET` ni permitía tráfico claro
+  (`usesCleartextTraffic`), por lo que todo `http://...` fallaba en el teléfono al
+  cumplir Android 9+ el bloqueo de cleartext. Ahora existe el permiso y el tráfico
+  HTTP plano está habilitado.
+- **Android no compilaba con las dependencias actuales**: `connectivity_plus 4.x`
+  compila contra `android-33` mientras sus dependencias (fragment 1.7.1, window,
+  activity, core) exigen `compileSdk ≥ 34`. Se fuerza `compileSdk 36` en todos los
+  submódulos desde `android/build.gradle.kts` (vía `afterEvaluate` registrado al
+  inicio del script, antes de `evaluationDependsOn(":app")`).
+
+---
+
+## [v1.2.4] — 2026-09-28
+
+> Tras hacer un POST, retroceder o cambiar de módulo, la estación podía quedar
+> "cargando en bucle" mostrando sincronizando sin terminar nunca (solo se resolvía
+> yendo a Inicio y regresando). Causa: `WeighingBloc` es global y tras la
+> sincronización quedaba en `WeighingSyncComplete` sin que ninguna pantalla
+> pidiera el listado de nuevo; el Dashboard y un listado recién abierto solo
+> renderizaban con `WeighingListLoaded`.
+
+### Corregido
+- **`WeighingBloc` se auto-recupera tras sincronizar**: al terminar
+  `SyncWeighingsEvent` encola automáticamente un `ListWeighingsEvent()`, por lo
+  que el estado global siempre vuelve a `WeighingListLoaded` (datos frescos) y ni
+  el Dashboard ni los módulos Entradas/Salidas quedan en el spinner infinito.
+- **Dashboard** (`dashboard_screen.dart`): guarda la última lista cargada y sigue
+  renderizándola durante estados transitorios (sync/detalle/crear); recuperación
+  explícita tras `WeighingSyncComplete` sin datos y vista de error con reintento
+  en lugar del spinner eterno.
+- **`WeighingListScreen`**: si tiene `_items == null` y el estado global es un
+  estado terminal sin listado (p. ej. `SyncComplete`), lanza una recarga
+  automática (con guarda `_solicitandoCarga` anti-bucle) para no quedarse
+  cargando indefinidamente.
+- **`WeighingDetailScreen`**: cachea el último detalle renderizado, así un
+  `Loading`/`Sync`/`ListLoaded` ajeno deja de blanquear la vista con un spinner
+  infinito.
+- **`WeighingFormScreen`**: el overlay de "Guardando pesaje…" se descarta ante
+  estados globales ajenos a la operación del formulario (listado, sync, detalle),
+  evitando quedarse en bucle mostrando el spinner.
+- **Impresión desde Entradas/Salidas**: al quedar desbloqueada la carga del
+  módulo (causa del reporte previo), la impresión del boleto desde el listado
+  vuelve a ser accesible; el flujo ya enviaba el `PrinterPreset` al backend.
+
+### Añadido
+- Test de bloc actualizado: `sync emite SyncComplete y recarga automáticamente el
+  listado` (verifica la secuencia `Syncing → SyncComplete → Loading →
+  ListLoaded`) en `frontend/test/unit/weighing_bloc_test.dart`.
+- Verificado: `flutter analyze` sin issues, `flutter test` **120/120** ✓.
+
+---
+
+## [v1.2.3] — 2026-09-28
+
+> Encabezado del boleto en layout **horizontal (logo izquierda | datos derecha)**,
+> el export respeta el diseño configurado (`PrinterPreset`) y desaparece el
+> "refresh infinito" al volver al listado de pesajes.
+
+### Corregido
+- **Encabezado del ticket**: el logo ahora va en la columna izquierda y a la
+  derecha dos líneas (nombre + RIF arriba; dirección + contactos abajo), igual en
+  PDF (`ticket_service.py`) y TXT (marco `━|━` con `[LOGO]`); en térmico solo
+  datos alineados a la izquierda. Antes todo quedaba centrado en vertical.
+- **La divisoria `|` del encabezado se dibuja siempre** (también sin logo):
+  `_build_boleto_simple` usa la tabla con la columna izquierda de logo vacía en
+  lugar del bloque de texto suelto, así el PDF y la previsualización Flutter
+  (`ticket_preview_dialog.dart`, ahora `Row` horizontal con `Container` gris
+  vertical) coinciden en cualquier configuración.
+- **Datos de contacto provienen de `empresas`**: verificado contra
+  `balansoft_ws_local` (nombre, RIF, dirección, teléfono, email y `logo_url` en
+  `media/uploads/`) — los "textos fantasma" del diagnóstico eran artefactos de
+  extracción de texto de `pdfminer` (p. ej. un `;` tras "S&S" o la dirección
+  partida), no datos de la BD ni texto hardcodeado en el backend.
+- **Export no respetaba el diseño**: `weighing_list_screen`, `weighing_detail_screen`
+  y `weighing_form_screen` no enviaban el `PrinterPreset`; ahora leen
+  `LocalStorage.getPrinterPreset()` y pasan `boletosPorHoja`, `tamanoPapel`,
+  `orientacion`, `mostrarEncabezado` y `mostrarDetalles` al backend (antes
+  siempre salía 1 boleto/hoja Letter portrait).
+- **Pesajes congelado en "refresh infinito"**: `WeighingListScreen` se quedaba en
+  spinner indefinido porque `WeighingBloc` es global y cualquier estado que no
+  fuera `ListLoaded` (detalle, crear, sync) rompía la lista; ahora conserva la
+  última lista cargada, recarga al volver del detalle/formulario
+  (`RouteAware.didPopNext`) y muestra un estado de error con reintento en lugar de
+  un spinner eterno.
+
+### Añadido
+- Test visual TXT verificando el ancho de 100 columnas del nuevo encabezado
+  (los 43 tests de ticket del backend siguen en verde).
+
+---
+
+## [v1.2.2] — 2026-09-28
+
+> El "código interno / personalizado" de los catálogos queda **único por empresa**
+> a nivel de BD (índice único parcial `(id_empresa, codigo) WHERE codigo IS NOT NULL`),
+> con mensaje claro de conflicto en la API. Verificado: backend `268/268` ✓, `ruff` ✓.
+
+### Corregido
+- `categorias`, `productos`, `terceros`, `transportes`, `almacenes` y `balanzas`
+  ahora exigen un `codigo` (interno/personalizado) **único dentro de la empresa**;
+  los registros sin código sí pueden repetirse (índice parcial). Antes la BD
+  permitía duplicados y la validación dependía solo de la UI.
+- `CatalogService` distingue la violación de unicidad y responde `409` con el
+  código en conflicto: `Ya existe un <entidad> con el código 'X'` al **crear** y
+  al **actualizar** (antes, actualizar a un código repetido terminaba en 500).
+
+### Añadido
+- Migración **018** `_codigo_unico_catalogos.sql`: sanea duplicados existentes
+  (conserva el más antiguo por `created_at`, resto queda sin código) y crea los
+  índices únicos parciales. Idempotente (verificada dos veces).
+- Índices equivalentes en el esquema canónico `balansoft-ws-local.sql` y como
+  `__table_args__` en los modelos ORM (la `balansoft_ws_test` y estaciones nuevas
+  ya nacen con la restricción).
+
+### Verificado
+- 5 tests nuevos en `test_categorias_seguridad.py`: duplicado al crear y al
+  actualizar (409 + fila intacta), mismo código en otra empresa permitido,
+  `codigo NULL` repetido permitido, y la regla aplicada a otros catálogos.
+- Suite completa backend `268/268`; `ruff` limpio; `mypy` sin errores nuevos.
+
+---
+
+## [v1.2.1] — 2026-09-28
+
+> Boleto/comprobante de pesaje con los datos de contacto y logo de la estación
+> emisora (teléfono, dirección, email y logo), tanto en el PDF como en el TXT y
+> en la vista previa de Flutter. Verificado: backend `263/263` ✓, `ruff` ✓,
+> frontend `120/120` ✓, `flutter analyze` ✓.
+
+### Añadido
+- **Boleto (backend)** (`app/services/ticket_service.py`)
+  - Encabezado con **logo** de la estación: se resuelve la ruta `/media/...` contra
+    `settings.media_dir`, se incrusta centrado (máx. 12 mm alto / 45 mm ancho) y se
+    omite si el archivo falta o está corrupto (no rompe el PDF).
+  - **Línea de contacto** `Tel.: X · Dirección: Y · email` bajo el RIF (gris, cuerpo
+    menor); sin email en el ticket térmico. TXT la envuelve a `ANCHO_TXT`.
+  - Los datos nacen de `empresas`: `telefono`, `direccion`, `email` y `logo_url`.
+- **Boleto (Flutter)**
+  - `TicketPreviewDialog` (vista previa) carga el perfil real de la estación
+    (`getEmpresaPerfil`) y pinta logo + nombre + RIF + contacto igual que el PDF;
+    sustituye los datos demo hardcodeados. El térmico omite el logo.
+  - Nuevo parámetro `empresaPerfilFuture` para inyectar el perfil sin tocar GetIt
+    en tests.
+- **i18n**: claves `ticket_company_phone` / `ticket_company_address` (es/en/pt).
+
+### Verificado
+- Backend: 43 tests de `test_ticket_service.py` (encabezado, logo, TXT, una página
+  en todas las configuraciones) + suite completa `263/263`.
+- Frontend: 120 tests (3 nuevos del encabezado del preview); `flutter analyze` limpio.
+
+---
+
 ## [v1.2.0] — 2026-09-28
 
 > Onboarding de instalación en dos modos (Servidor / Trabajador) y corrección del

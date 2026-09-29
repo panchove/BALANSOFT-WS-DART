@@ -20,6 +20,10 @@ Formatos:
   - TXT : misma estructura en texto plano UTF-8, mismo orden.
 
 Si el boleto está ANULADO se imprime con marca de agua 'ANULADO' (solo PDF).
+
+Encabezado de empresa (hoja Carta/A4):
+  - CON logo → tabla [logo | datos] SIN línea divisoria entre ambos.
+  - SIN logo → solo texto alineado a la izquierda.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from __future__ import annotations
 import glob
 import io
 import os
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -37,20 +42,23 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     Frame,
+    Image,
     Paragraph,
     Spacer,
     Table,
     TableStyle,
 )
 
+from app.core.config import settings
 from app.core.formato import formatear_numero
 from app.core.i18n import t, traducir_estado_boleto
-from app.models import BoletoPesaje, Empresa
+from app.models import BoletoPesaje, Empresa, Kardex
 from app.services.weighing_service import normalizar_estado
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +172,7 @@ def _dato(p: BoletoPesaje, idioma: str = "es") -> dict[str, Any]:
         ),
         "fecha_hora":   _fmt_dt(p.fecha_hora_entrada),
         "camion":       (p.id_vehiculo or t("sin_placa", idioma)),
+        "color_camion": getattr(p, "color_camion", None),
         "remolque":     remolque_txt,
         "transporte":   (
             getattr(p, "transporte_nombre", None)
@@ -215,6 +224,12 @@ def _dato(p: BoletoPesaje, idioma: str = "es") -> dict[str, Any]:
         "desviacion":    getattr(p, "porcentaje_desviacion", None),
         # ── Datos adicionales ─────────────────────────────────────────────────
         "documento":     (p.documento or "").strip(),
+        "guia_sunagro":  getattr(p, "guia_sunagro", None),
+        "medida":        getattr(p, "medida", None),
+        "flete":         getattr(p, "flete", None),
+        "costo_flete_raw": getattr(p, "costo_flete", None),
+        "unidades_raw":  (p.unidades or p.litros),
+        "densidad_raw":  getattr(p, "densidad", None),
         "unidades_txt":  (
             _fmt(p.unidades or p.litros, lang=idioma)
             if (p.unidades or p.litros) is not None
@@ -225,7 +240,147 @@ def _dato(p: BoletoPesaje, idioma: str = "es") -> dict[str, Any]:
         "observaciones":    (p.observaciones or "").strip(),
         "estado":           normalizar_estado(p.estado_boleto),
         "motivo_anulacion": p.motivo_anulacion,
+        "peso_manual":      bool(getattr(p, "es_peso_manual", False)),
+        "operador":         getattr(p, "creado_por", None),
+        # ── Entidades maestro y control (inyectados por _enriquecer_pesaje_ticket)
+        "empresa_rif":       getattr(p, "empresa_rif", None),
+        "tercero_codigo":    getattr(p, "tercero_codigo", None),
+        "tercero_rif":       getattr(p, "tercero_rif", None),
+        "conductor_cedula":  getattr(p, "conductor_cedula", None),
+        "conductor_telefono": getattr(p, "conductor_telefono", None),
+        "conductor_licencia": getattr(p, "conductor_licencia", None),
+        "transporte_codigo": getattr(p, "transporte_codigo", None),
+        "transporte_rif":    getattr(p, "transporte_rif", None),
+        "remolque_tipo":     getattr(p, "tipo_remolque", None),
+        "remolque_tara":     getattr(p, "tara_habitual", None),
+        "categoria_nombre":  getattr(p, "categoria_nombre", None),
+        "categoria_codigo":  getattr(p, "categoria_codigo", None),
+        "producto_codigo":   getattr(p, "producto_codigo", None),
+        "producto_unidad":   getattr(p, "producto_unidad", None),
+        "producto_kardex":   bool(getattr(p, "producto_kardex", False)),
+        "almacen_codigo":    getattr(p, "almacen_codigo", None),
+        "almacen_capacidad": getattr(p, "almacen_capacidad", None),
+        "almacen_stock":     getattr(p, "almacen_stock", None),
+        "balanza_codigo":    getattr(p, "balanza_codigo", None),
+        "balanza_capacidad": getattr(p, "balanza_capacidad", None),
+        "balanza_division":  getattr(p, "balanza_division", None),
+        "kardex_mov":        getattr(p, "kardex_mov", None),
+        "kardex_valor":      getattr(p, "kardex_valor", None),
+        "sincronizado":      bool(getattr(p, "sincronizado", False)),
     }
+
+
+def _pares_avanzado(d: dict[str, Any], idioma: str = "es") -> list[tuple[str, str]]:
+    """Todos los campos del formulario de pesaje, para el ticket AVANZADO.
+
+    Devuelve pares (etiqueta, valor) incluyendo vacíos, de modo que el layout
+    avanzado refleje absolutamente toda la información que capturó el formulario
+    (no solo los 3-4 campos que ya tenía).
+    """
+    costo = d.get("costo_flete_raw")
+    un = d.get("unidades_raw")
+    dens = d.get("densidad_raw")
+    dens_txt = _fmt_densidad(dens, idioma) or ""
+    pares: list[tuple[str, str]] = [
+        (f"{t('documento', idioma)}:", d["documento"] or ""),
+        ("Guía SUNAGRO:", d.get("guia_sunagro") or ""),
+        ("Medida:", d.get("medida") or ""),
+        ("Flete:", d.get("flete") or ""),
+        ("Costo Flete:", _fmt(costo, lang=idioma) if costo is not None else ""),
+        (f"{t('unidades', idioma)}:", _fmt(un, lang=idioma) if un is not None else ""),
+        (f"{t('densidad', idioma)}:", dens_txt),
+        (
+            "Resultado:",
+            _fmt(un * dens, lang=idioma) if un is not None and dens is not None else "",
+        ),
+    ]
+    operador = d.get("operador")
+    if operador:
+        pares.append((f"{t('operador', idioma)}:", operador))
+    return pares
+
+
+def _pares_catalogo(
+    d: dict[str, Any],
+    idioma: str = "es",
+    rif_empresa: str = "",
+) -> list[tuple[str, str]]:
+    """Datos de las entidades maestro (empresa, tercero, conductor, transporte,
+    remolque, categoría, producto, almacén, balanza) y de los registros de
+    control derivados (kardex, sincronización) para el bloque 'DATOS DEL
+    CATÁLOGO Y CONTROL' del ticket AVANZADO.
+
+    Solo incluye filas con valor, para que el reporte muestre toda la
+    información disponible sin rellenar de vacíos la impresión.
+    """
+    pares: list[tuple[str, str]] = []
+
+    def _ag(lab: str, val: str | None) -> None:
+        val = (val or "").strip()
+        if val:
+            pares.append((lab, val))
+
+    def _ag_num(lab: str, val: object, unidad: str = "") -> None:
+        # No formatear si no hay dato numérico real.
+        if val is None:
+            return
+        try:
+            dec_val = Decimal(str(val))
+        except (ValueError, TypeError, ArithmeticError):
+            return
+        if dec_val != dec_val:  # NaN
+            return
+        texto = f"{_fmt(dec_val, lang=idioma)}"
+        if unidad:
+            texto += f" {unidad}"
+        pares.append((lab, texto))
+
+    _ag(f"RIF {t('empresa', idioma)}:", rif_empresa)
+    _ag(f"{t('codigo', idioma)} {t('cliente_proveedor', idioma)}:", d.get("tercero_codigo"))
+    _ag(f"{t('rif', idioma)} {t('cliente_proveedor', idioma)}:", d.get("tercero_rif"))
+    _ag(f"{t('codigo', idioma)} {t('transporte', idioma)}:", d.get("transporte_codigo"))
+    _ag(f"{t('rif', idioma)} {t('transporte', idioma)}:", d.get("transporte_rif"))
+    _ag(
+        f"{t('conductor', idioma)} {t('cedula', idioma)}:",
+        d.get("conductor_cedula"),
+    )
+    _ag(
+        f"{t('telefono', idioma)} {t('conductor', idioma)}:",
+        d.get("conductor_telefono"),
+    )
+    _ag(
+        f"{t('licencia', idioma)} {t('conductor', idioma)}:",
+        d.get("conductor_licencia"),
+    )
+    _ag(t("tipo_remolque", idioma), d.get("remolque_tipo"))
+    _ag_num(t("tara", idioma), d.get("remolque_tara"), "kg")
+
+    cat = " - ".join(p for p in (d.get("categoria_codigo"), d.get("categoria_nombre")) if p)
+    _ag(t("categoria", idioma), cat or None)
+    _ag(f"{t('codigo', idioma)} {t('producto', idioma)}:", d.get("producto_codigo"))
+    _ag(f"{t('unidad', idioma)} {t('producto', idioma)}:", d.get("producto_unidad"))
+    _ag(
+        f"{t('kardex', idioma)} {t('producto', idioma)}:",
+        d.get("producto_kardex") and t("sincronizado_si", idioma)
+        or t("sincronizado_no", idioma),
+    )
+    _ag(f"{t('codigo', idioma)} {t('almacen', idioma)}:", d.get("almacen_codigo"))
+    _ag_num(f"{t('capacidad', idioma)} {t('almacen', idioma)}", d.get("almacen_capacidad"), "t")
+    _ag_num(f"{t('stock', idioma)} {t('almacen', idioma)}", d.get("almacen_stock"), "t")
+    _ag(f"{t('codigo', idioma)} {t('balanza', idioma)}:", d.get("balanza_codigo"))
+    _ag_num(f"{t('capacidad', idioma)} {t('balanza', idioma)}", d.get("balanza_capacidad"), "kg")
+    _ag_num(f"{t('division', idioma)}", d.get("balanza_division"), "kg")
+
+    kardex_id = d.get("kardex_mov")
+    kardex_val = d.get("kardex_valor")
+    if kardex_id is not None and kardex_val is not None:
+        mov = t("despacho", idioma) if int(kardex_id) >= Kardex.RANGO_NEGATIVO_DESDE else t("ingreso", idioma)
+        _ag(t("kardex", idioma), f"{mov} {_fmt(Decimal(kardex_val), lang=idioma)} kg")
+    _ag(
+        t("sincronizado", idioma),
+        t("sincronizado_si", idioma) if d.get("sincronizado") else t("sincronizado_no", idioma),
+    )
+    return pares
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,13 +432,85 @@ def _registrar_ttf() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Cabecera de empresa
 # ─────────────────────────────────────────────────────────────────────────────
-def _empresa_cabecera(empresa: Empresa | None) -> dict[str, str]:
-    """Devuelve nombre y RIF de la empresa para el encabezado del boleto."""
+def _ruta_logo(empresa: Empresa | None) -> str | None:
+    """Ruta en disco del logo de la empresa (``/media/...`` → media_dir).
+
+    Devuelve ``None`` si no hay logo, si la URL es externa (el backend no la
+    descarga) o si el archivo ya no existe en el servidor. Nunca revienta: un
+    logo roto no puede tumbar la impresión de un boleto.
+    """
     if empresa is None:
-        return {"nombre": "", "rif": ""}
+        return None
+    url = (getattr(empresa, "logo_url", None) or "").strip()
+    if not url or url.startswith(("http://", "https://")):
+        return None
+    # /media/<subcarpeta>/<archivo>  ->  <MEDIA_DIR>/<subcarpeta>/<archivo>
+    rel = url.split("/media/", 1)[-1].split("?", 1)[0] if "/media/" in url else url.lstrip("/")
+    rel = os.path.normpath(rel).lstrip(os.sep)
+    if rel.startswith(".."):
+        return None
+    ruta = os.path.join(settings.media_dir, rel)
+    return ruta if os.path.isfile(ruta) else None
+
+
+def _logo_flowable(
+    ruta: str | None, ancho_util: float, alto_max: float = 12 * mm, ancho_max: float = 45 * mm
+) -> Image | None:
+    """Logo centrado con proporción preservada; ``None`` si no se puede usar."""
+    if not ruta:
+        return None
+    try:
+        iw, ih = ImageReader(ruta).getSize()
+        if iw <= 0 or ih <= 0:
+            return None
+        escala = min(ancho_max / iw, alto_max / ih)
+        img = Image(ruta, width=iw * escala, height=ih * escala)
+        img.hAlign = "CENTER"
+        return img
+    except Exception:  # noqa: BLE001 - imagen ilegible/unsupported: sin logo
+        return None
+
+
+def _linea_contacto(
+    cab: Mapping[str, object], idioma: str, con_email: bool = True
+) -> str:
+    """Datos de contacto del emisor en una línea: ``Tel.: X · Dirección: Y``.
+
+    Se omite lo que la empresa no tenga guardado. Para el ticket térmico
+    (``con_email=False``) se deja fuera el email para no gastar ancho.
+    """
+    partes: list[str] = []
+    telefono = cab.get("telefono")
+    direccion = cab.get("direccion")
+    email = cab.get("email")
+    if telefono:
+        partes.append(f'{t("etiqueta_telefono", idioma)}: {telefono}')
+    if direccion:
+        partes.append(f'{t("etiqueta_direccion", idioma)}: {direccion}')
+    if con_email and email:
+        partes.append(str(email))
+    return "  ·  ".join(partes)
+
+
+def _empresa_cabecera(empresa: Empresa | None) -> dict[str, str]:
+    """Datos de la empresa para el encabezado del boleto.
+
+    Nombre, RIF y datos de contacto (teléfono, dirección, email) más la ruta del
+    logo, para que el comprobante identifique a la estación que lo emite. Todos
+    los valores quedan como ``str`` (vacíos si faltan); el logo vacío indica que
+    no hay imagen que incrustar.
+    """
+    # getattr: los datos de contacto son opcionales y el servicio tolera un
+    # Empresa projections parcial (p. ej. en pruebas o selects reducidos).
+    if empresa is None:
+        return {"nombre": "", "rif": "", "telefono": "", "direccion": "", "email": "", "logo": ""}
     return {
-        "nombre": (empresa.nombre_comercial or empresa.nombre_fiscal or "").strip(),
-        "rif":    (empresa.rif_nit or "").strip(),
+        "nombre":    (empresa.nombre_comercial or empresa.nombre_fiscal or "").strip(),
+        "rif":       (empresa.rif_nit or "").strip(),
+        "telefono":  (getattr(empresa, "telefono", None) or "").strip(),
+        "direccion": " ".join((getattr(empresa, "direccion", None) or "").split()),
+        "email":     (getattr(empresa, "email", None) or "").strip(),
+        "logo":      _ruta_logo(empresa) or "",
     }
 
 
@@ -322,6 +549,12 @@ def _estilos_simples(ts: float = 10.5) -> dict[str, ParagraphStyle]:
             "rif_c", parent=es["Normal"],
             fontName=FUENTE, fontSize=ts - 1, leading=ts + 1,
             alignment=TA_CENTER, textColor=GRIS_TEXTO,
+        ),
+        # Teléfono / dirección / email — centrado, gris, un punto menor que el RIF
+        "contacto_c": ParagraphStyle(
+            "contacto_c", parent=es["Normal"],
+            fontName=FUENTE, fontSize=ts - 1.5, leading=ts + 0.5,
+            alignment=TA_CENTER, textColor=GRIS_MEDIO,
         ),
         # Título "BOLETO DE PESAJE DE BALANSOFT"
         "titulo_c": ParagraphStyle(
@@ -383,6 +616,12 @@ def _estilos_simples(ts: float = 10.5) -> dict[str, ParagraphStyle]:
             fontName=FUENTE, fontSize=ts - 2, leading=ts + 1,
             alignment=TA_CENTER, textColor=GRIS_TEXTO,
         ),
+        # Aviso de peso escrito manualmente (sin báscula) — negrita, rojo
+        "peso_manual_c": ParagraphStyle(
+            "peso_manual_c", parent=es["Normal"],
+            fontName=FUENTE_BOLD, fontSize=ts, leading=ts + 1.5,
+            alignment=TA_CENTER, textColor=colors.HexColor("#C62828"),
+        ),
     }
 
 
@@ -423,6 +662,7 @@ def _build_boleto_simple(
     mostrar_detalles: bool = True,
     compact: bool = False,
     idioma: str = "es",
+    tipo_ticket: str = "simple",
 ) -> list[Any]:
     """Construye la lista de flowables de UN boleto con i18n."""
     col_l = ancho_util * 0.38   # etiqueta  38 %
@@ -466,14 +706,73 @@ def _build_boleto_simple(
         return t
 
     # ── 1. Encabezado empresa ─────────────────────────────────────────────────
+    # Layout horizontal:
+    #   CON logo → tabla [logo | datos] SIN línea divisoria vertical.
+    #     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #       LOGO    VARIEDADES S&S - RIF: J-12345678-9
+    #               [Dirección] - Tel.: ... - email
+    #     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #   SIN logo → solo el texto alineado a la izquierda.
     if mostrar_encabezado and cab["nombre"]:
-        els: list[Any] = [
-            Paragraph(cab["nombre"], st["empresa_c"]),
-        ]
-        if cab["rif"]:
-            els.append(
-                Paragraph(f'{t("etiqueta_rif", idioma)}: {cab["rif"]}', st["rif_c"])
+        els: list[Any] = []
+        logo = None if compact else _logo_flowable(
+            cab["logo"], ancho_util, alto_max=14 * mm, ancho_max=20 * mm
+        )
+
+        # Bloque de texto derecho (nombre + RIF / dirección + contacto).
+        rif_txt = f'{t("etiqueta_rif", idioma)}: {cab["rif"]}' if cab["rif"] else ""
+        linea1 = " - ".join(x for x in [cab["nombre"], rif_txt] if x)
+
+        partes_contacto: list[str] = []
+        if cab["direccion"]:
+            partes_contacto.append(cab["direccion"])
+        if cab["telefono"]:
+            partes_contacto.append(
+                f'{t("etiqueta_telefono", idioma)}: {cab["telefono"]}'
             )
+        # En térmico el email no cabe: se omite para no partir la línea.
+        if not compact and cab["email"]:
+            partes_contacto.append(cab["email"])
+        linea2 = " - ".join(partes_contacto)
+
+        # Estilos del bloque derecho, alineados a la izquierda (no centrados).
+        base_l1 = st["empresa_c"]
+        estilo_l1 = ParagraphStyle(
+            "emp_l1", parent=base_l1,
+            alignment=TA_LEFT,
+            fontSize=getattr(base_l1, "fontSize") - 1.5,  # noqa: B009 - no declarado en los stubs de reportlab
+            leading=getattr(base_l1, "leading") - 1,  # noqa: B009
+        )
+        estilo_l2 = ParagraphStyle(
+            "emp_l2", parent=st["contacto_c"], alignment=TA_LEFT,
+        )
+
+        texto_derecha: list[Any] = [Paragraph(linea1, estilo_l1)]
+        if linea2:
+            texto_derecha.append(Spacer(1, 0.4 * mm))
+            texto_derecha.append(Paragraph(linea2, estilo_l2))
+
+        if logo is not None:
+            # ── CON logo: tabla [logo | datos] SIN línea divisoria ──
+            cabecera = Table(
+                [[logo, texto_derecha]],
+                colWidths=[ancho_util * 0.22, ancho_util * 0.78],
+            )
+            cabecera.setStyle(TableStyle([
+                ("VALIGN",    (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN",     (0, 0), (0, 0),   "CENTER"),
+                ("ALIGN",     (1, 0), (1, 0),   "LEFT"),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                # Nota: SIN LINEAFTER → sin línea divisoria vertical entre logo y datos.
+            ]))
+            els.append(cabecera)
+        else:
+            # ── SIN logo: solo el texto alineado a la izquierda ──
+            els.extend(texto_derecha)
+
         els.append(Spacer(1, 1.0 * mm))
         els.append(_hr_negro(1.0))
         els.append(Spacer(1, 1.2 * mm))
@@ -491,6 +790,8 @@ def _build_boleto_simple(
         els.append(_fila(f"{t('serie_boleto', idioma)}:", d["numero"], bold=True))
         els.append(_fila(f"{t('fecha_hora', idioma)}:",     d["fecha_hora"]))
         els.append(_fila(f"{t('camion', idioma)}:",         d["camion"]))
+        if tipo_ticket == "avanzado" and d.get("color_camion"):
+            els.append(_fila(f"{t('camion_color', idioma)}:", d["color_camion"]))
         els.append(_fila(f"{t('remolque', idioma)}:",       d["remolque"]))
         els.append(_fila(f"{t('transporte', idioma)}:",     d["transporte"]))
         els.append(_fila(f"{t('conductor', idioma)}:",      d["conductor"]))
@@ -524,6 +825,38 @@ def _build_boleto_simple(
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_negro(1.0))
 
+        if d["peso_manual"]:
+            els.append(Paragraph(t("peso_manual", idioma), st["peso_manual_c"]))
+            if d.get("operador"):
+                els.append(Spacer(1, 0.5 * mm))
+                els.append(_fila(f"{t('operador', idioma)}:", d["operador"]))
+            els.append(Spacer(1, 0.8 * mm))
+
+        if tipo_ticket == "avanzado":
+            pares_adv = _pares_avanzado(d, idioma)
+            if pares_adv:
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(Paragraph(t("datos_adicionales", idioma), st["seccion_c"]))
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(_hr_gris())
+                els.append(Spacer(1, 1.0 * mm))
+                for lab, val in pares_adv:
+                    els.append(_fila(lab, val))
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(_hr_negro(1.0))
+
+            pares_cat = _pares_catalogo(d, idioma, rif_empresa=cab["rif"])
+            if pares_cat:
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(Paragraph(t("datos_catalogo", idioma), st["seccion_c"]))
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(_hr_gris())
+                els.append(Spacer(1, 1.0 * mm))
+                for lab, val in pares_cat:
+                    els.append(_fila(lab, val))
+                els.append(Spacer(1, 0.8 * mm))
+                els.append(_hr_negro(1.0))
+
         if mostrar_detalles and d["observaciones"]:
             els.append(Spacer(1, 1.0 * mm))
             els.append(Paragraph(f'Obs: {d["observaciones"]}', st["obs"]))
@@ -532,26 +865,28 @@ def _build_boleto_simple(
             els.append(Spacer(1, 1.0 * mm))
             els.append(_bloque_anulado(d, st, ancho_util, idioma=idioma))
 
-        els.append(Spacer(1, 4 * mm))
-        firma_izq = Paragraph(
-            f"_______________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
-        )
-        firma_der = Paragraph(
-            f"_______________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
-        )
-        firmas = Table(
-            [[firma_izq, firma_der]],
-            colWidths=[ancho_util / 2, ancho_util / 2],
-        )
-        firmas.setStyle(TableStyle([
-            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING",    (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-        ]))
-        els.append(firmas)
+        # ── 7. Firmas (solo AVANZADO) ─────────────────────────────────────────
+        if tipo_ticket == "avanzado":
+            els.append(Spacer(1, 4 * mm))
+            firma_izq = Paragraph(
+                f"_______________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
+            )
+            firma_der = Paragraph(
+                f"_______________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
+            )
+            firmas = Table(
+                [[firma_izq, firma_der]],
+                colWidths=[ancho_util / 2, ancho_util / 2],
+            )
+            firmas.setStyle(TableStyle([
+                ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+            ]))
+            els.append(firmas)
         return els
 
     # ═══════════════════════ VARIANTE HOJA (Carta/A4) ════════════════════════
@@ -559,6 +894,8 @@ def _build_boleto_simple(
     els.append(_fila(f"{t('serie_boleto', idioma)}:", d["numero"], bold=True))
     els.append(_fila(f"{t('fecha_hora', idioma)}:",     d["fecha_hora"]))
     els.append(_fila(f"{t('camion', idioma)}:",         d["camion"]))
+    if tipo_ticket == "avanzado" and d.get("color_camion"):
+        els.append(_fila(f"{t('camion_color', idioma)}:", d["color_camion"]))
     els.append(_fila(f"{t('remolque', idioma)}:",       d["remolque"]))
     els.append(_fila(f"{t('transporte', idioma)}:",     d["transporte"]))
     els.append(_fila(f"{t('conductor', idioma)}:",      d["conductor"]))
@@ -644,23 +981,51 @@ def _build_boleto_simple(
     els.append(Spacer(1, 1.0 * mm))
     els.append(_hr_negro(1.0))
 
+    # ── 4b. PESO MANUAL (escrito a mano, sin báscula) ─────────────────────────
+    if d["peso_manual"]:
+        els.append(Spacer(1, 0.8 * mm))
+        els.append(Paragraph(t("peso_manual", idioma), st["peso_manual_c"]))
+        if d.get("operador"):
+            els.append(Spacer(1, 0.5 * mm))
+            els.append(_fila(f"{t('operador', idioma)}:", d["operador"]))
+        els.append(Spacer(1, 0.8 * mm))
+
     # ── 5. DATOS ADICIONALES ─────────────────────────────────────────────────
-    dats_adic = [
-        (f"{t('documento', idioma)}:", d["documento"]) if d["documento"] else None,
-        (f"{t('unidades', idioma)}:", d["unidades_txt"]) if d["unidades_txt"] is not None else None,
-        (f"{t('densidad', idioma)}:", d["densidad_txt"]) if d["densidad_txt"] is not None else None,
-    ]
-    if any(x is not None for x in dats_adic):
+    if tipo_ticket == "avanzado":
+        dats_adic = _pares_avanzado(d, idioma)
+    else:
+        dats_adic = []
+        if d["documento"]:
+            dats_adic.append((f"{t('documento', idioma)}:", d["documento"]))
+        if d.get("unidades_txt") is not None:
+            dats_adic.append((f"{t('unidades', idioma)}:", d["unidades_txt"]))
+        if d.get("densidad_txt") is not None:
+            dats_adic.append((f"{t('densidad', idioma)}:", d["densidad_txt"]))
+
+    if dats_adic:
         els.append(Spacer(1, 1.2 * mm))
         els.append(Paragraph(t("datos_adicionales", idioma), st["seccion_c"]))
         els.append(Spacer(1, 0.8 * mm))
         els.append(_hr_gris())
         els.append(Spacer(1, 1.0 * mm))
         for par in dats_adic:
-            if par is not None:
-                els.append(_fila(par[0], par[1]))
+            els.append(_fila(par[0], par[1]))
         els.append(Spacer(1, 1.0 * mm))
         els.append(_hr_negro(1.0))
+
+    # ── 5b. DATOS DEL CATÁLOGO Y CONTROL (solo AVANZADO) ─────────────────────
+    if tipo_ticket == "avanzado":
+        pares_cat = _pares_catalogo(d, idioma, rif_empresa=cab["rif"])
+        if pares_cat:
+            els.append(Spacer(1, 1.2 * mm))
+            els.append(Paragraph(t("datos_catalogo", idioma), st["seccion_c"]))
+            els.append(Spacer(1, 0.8 * mm))
+            els.append(_hr_gris())
+            els.append(Spacer(1, 1.0 * mm))
+            for lab, val in pares_cat:
+                els.append(_fila(lab, val))
+            els.append(Spacer(1, 1.0 * mm))
+            els.append(_hr_negro(1.0))
 
     # ── 6. OBSERVACIONES ──────────────────────────────────────────────────────
     if mostrar_detalles and d["observaciones"]:
@@ -676,27 +1041,28 @@ def _build_boleto_simple(
         els.append(Spacer(1, 1.2 * mm))
         els.append(_bloque_anulado(d, st, ancho_util, idioma=idioma))
 
-    # ── 7. Firmas ─────────────────────────────────────────────────────────────
-    els.append(Spacer(1, 4 * mm))
-    firma_izq = Paragraph(
-        f"________________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
-    )
-    firma_der = Paragraph(
-        f"________________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
-    )
-    firmas = Table(
-        [[firma_izq, firma_der]],
-        colWidths=[ancho_util / 2, ancho_util / 2],
-    )
-    firmas.setStyle(TableStyle([
-        ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-    ]))
-    els.append(firmas)
+    # ── 7. Firmas (solo AVANZADO: el BÁSICO va sin firmas para ser compacto) ──
+    if tipo_ticket == "avanzado":
+        els.append(Spacer(1, 4 * mm))
+        firma_izq = Paragraph(
+            f"________________________<br/><b>{t('firma_operador', idioma)}</b>", st["firma_c"],
+        )
+        firma_der = Paragraph(
+            f"________________________<br/><b>{t('firma_conductor', idioma)}</b>", st["firma_c"],
+        )
+        firmas = Table(
+            [[firma_izq, firma_der]],
+            colWidths=[ancho_util / 2, ancho_util / 2],
+        )
+        firmas.setStyle(TableStyle([
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ]))
+        els.append(firmas)
 
     return els
 
@@ -733,6 +1099,7 @@ def _build_pdf(
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
     idioma: str = "es",
+    tipo_ticket: str = "simple",
 ) -> io.BytesIO:
     """PDF con N tickets de altura exacta por página usando Frames fijos con i18n."""
     d   = _dato(p, idioma)
@@ -768,98 +1135,119 @@ def _build_pdf(
     ancho_frame = ANCHO_TICKET * mm if centrado else (ancho_pag - 2 * mg_lat)
     margen_frame = (ancho_pag - ancho_frame) / 2 if centrado else mg_lat
 
-    alto_frame  = (alto_pag - mg_top - mg_bot - gap * (n - 1)) / n
-
-    # ── Escala tipográfica adaptativa ─────────────────────────────────────────
+    # ── Escala tipográfica y boletos por página (el AVANZADO nunca se trunca) ─
+    # El boleto AVANZADO trae mucho contenido: si con el boletosPorHoja
+    # solicitado no cabe ni a la escala mínima, se reduce la cantidad por página
+    # y las copias restantes fluyen a páginas siguientes. Nada se descarta.
     escala_candidatas = {
         1: [10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5],
         2: [9.5,  9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0],
         3: [8.5,  8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
         4: [8.0,  7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
-    }.get(n, [10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5])
+    }
 
-    st = None
-    for ts in escala_candidatas:
-        st_probe = _estilos_simples(ts)
-        flowables_probe = _build_boleto_simple(
-            d, cab, st_probe, ancho_frame,
-            mostrar_encabezado=mostrar_encabezado,
-            mostrar_detalles=mostrar_detalles,
-            compact=compact,
-            idioma=idioma,
-        )
-        if _caben(flowables_probe, ancho_frame, alto_frame):
-            st = st_probe
+    st: dict[str, ParagraphStyle] = _estilos_simples(10.5)
+    n_fit = 0
+    for n_try in range(n, 0, -1):
+        alto_try = (alto_pag - mg_top - mg_bot - gap * (n_try - 1)) / n_try
+        cand = escala_candidatas.get(n_try, escala_candidatas[1])
+        for ts in cand:
+            st_probe = _estilos_simples(ts)
+            flowables_probe = _build_boleto_simple(
+                d, cab, st_probe, ancho_frame,
+                mostrar_encabezado=mostrar_encabezado,
+                mostrar_detalles=mostrar_detalles,
+                compact=compact,
+                idioma=idioma,
+                tipo_ticket=tipo_ticket,
+            )
+            # El Frame reserva topPadding=2 + bottomPadding=2: medir contra la
+            # altura útil, o el último flowable (firmas) se recorta.
+            if _caben(flowables_probe, ancho_frame, alto_try - 4):
+                n_fit, st = n_try, st_probe
+                break
+        if n_fit:
             break
-    if st is None:
-        st = _estilos_simples(escala_candidatas[-1])
+    if not n_fit:
+        n_fit = 1
+        st = _estilos_simples(escala_candidatas[1][-1])
+    alto_frame = (alto_pag - mg_top - mg_bot - gap * (n_fit - 1)) / n_fit
 
-    # ── Canvas ───────────────────────────────────────────────────────────────
+    # ── Canvas: una página por bloque de hasta n_fit tickets ───────────────
     buf = io.BytesIO()
     cnv = canvas.Canvas(buf, pagesize=pagina)
     cnv.setTitle(f"Boleto de Pesaje {d['numero']}")
     cnv.setAuthor(cab["nombre"] or t("sistema_pesaje", idioma))
 
-    # Marca de agua ANULADO (45°, semitransparente)
-    if anulado:
+    pendientes = n
+    while pendientes > 0:
+        por_pagina = min(n_fit, pendientes)
+
+        # Marca de agua ANULADO (45°, semitransparente)
+        if anulado:
+            cnv.saveState()
+            cnv.setFillColor(ROJO_ANULADO)
+            cnv.setFillAlpha(0.12)
+            cnv.setFont(FUENTE_BOLD, 72)
+            cnv.translate(ancho_pag / 2, alto_pag / 2)
+            cnv.rotate(45)
+            cnv.drawCentredString(0, 0, t("doc_anulado", idioma))
+            cnv.restoreState()
+
+        # Pie de página (fecha de impresión + estado + número de boleto)
         cnv.saveState()
-        cnv.setFillColor(ROJO_ANULADO)
-        cnv.setFillAlpha(0.12)
-        cnv.setFont(FUENTE_BOLD, 72)
-        cnv.translate(ancho_pag / 2, alto_pag / 2)
-        cnv.rotate(45)
-        cnv.drawCentredString(0, 0, t("doc_anulado", idioma))
+        cnv.setFont(FUENTE, 7)
+        cnv.setFillColor(GRIS_MEDIO)
+        cnv.drawString(
+            margen_frame, mg_bot / 2,
+            f"{t('impreso', idioma)}: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}   {t('estado', idioma)}: {traducir_estado_boleto(d['estado'], idioma)}",
+        )
+        cnv.drawRightString(
+            margen_frame + ancho_frame, mg_bot / 2,
+            f"{t('col_boleto', idioma)} N° {d['numero']}",
+        )
         cnv.restoreState()
 
-    # Pie de página (fecha de impresión + estado + número de boleto)
-    cnv.saveState()
-    cnv.setFont(FUENTE, 7)
-    cnv.setFillColor(GRIS_MEDIO)
-    cnv.drawString(
-        margen_frame, mg_bot / 2,
-        f"{t('impreso', idioma)}: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}   {t('estado', idioma)}: {traducir_estado_boleto(d['estado'], idioma)}",
-    )
-    cnv.drawRightString(
-        margen_frame + ancho_frame, mg_bot / 2,
-        f"{t('col_boleto', idioma)} N° {d['numero']}",
-    )
-    cnv.restoreState()
+        # ── Dibujar cada ticket en su Frame ──────────────────────────────────
+        for i in range(por_pagina):
+            y1_frame = mg_bot + (por_pagina - 1 - i) * (alto_frame + gap)
 
-    # ── Dibujar cada ticket en su Frame ──────────────────────────────────────
-    for i in range(n):
-        y1_frame = mg_bot + (n - 1 - i) * (alto_frame + gap)
+            frame = Frame(
+                x1=margen_frame,
+                y1=y1_frame,
+                width=ancho_frame,
+                height=alto_frame,
+                leftPadding=0, rightPadding=0,
+                topPadding=2,  bottomPadding=2,
+                showBoundary=0,
+            )
 
-        frame = Frame(
-            x1=margen_frame,
-            y1=y1_frame,
-            width=ancho_frame,
-            height=alto_frame,
-            leftPadding=0, rightPadding=0,
-            topPadding=2,  bottomPadding=2,
-            showBoundary=0,
-        )
+            flowables = _build_boleto_simple(
+                d, cab, st, ancho_frame,
+                mostrar_encabezado=mostrar_encabezado,
+                mostrar_detalles=mostrar_detalles,
+                compact=compact,
+                idioma=idioma,
+                tipo_ticket=tipo_ticket,
+            )
+            frame.addFromList(flowables, cnv)
 
-        flowables = _build_boleto_simple(
-            d, cab, st, ancho_frame,
-            mostrar_encabezado=mostrar_encabezado,
-            mostrar_detalles=mostrar_detalles,
-            compact=compact,
-            idioma=idioma,
-        )
-        frame.addFromList(flowables, cnv)
+            if i < por_pagina - 1:
+                y_corte = y1_frame + alto_frame + gap / 2
+                cnv.saveState()
+                cnv.setStrokeColor(GRIS_MEDIO)
+                cnv.setLineWidth(0.4)
+                cnv.setDash(4, 3)
+                cnv.line(margen_frame, y_corte, margen_frame + ancho_frame, y_corte)
+                cnv.setDash()
+                cnv.setFont(FUENTE, 8)
+                cnv.setFillColor(GRIS_MEDIO)
+                cnv.drawString(margen_frame, y_corte + 1 * mm, "✂")
+                cnv.restoreState()
 
-        if i < n - 1:
-            y_corte = y1_frame + alto_frame + gap / 2
-            cnv.saveState()
-            cnv.setStrokeColor(GRIS_MEDIO)
-            cnv.setLineWidth(0.4)
-            cnv.setDash(4, 3)
-            cnv.line(margen_frame, y_corte, margen_frame + ancho_frame, y_corte)
-            cnv.setDash()
-            cnv.setFont(FUENTE, 8)
-            cnv.setFillColor(GRIS_MEDIO)
-            cnv.drawString(margen_frame, y_corte + 1 * mm, "✂")
-            cnv.restoreState()
+        pendientes -= por_pagina
+        if pendientes > 0:
+            cnv.showPage()
 
     cnv.save()
     return buf
@@ -875,6 +1263,50 @@ def _linea(char: str = "-") -> str:
 
 def _centrar(texto: str) -> str:
     return texto.center(ANCHO_TXT)
+
+
+def _centrar_partido(texto: str, ancho: int = ANCHO_TXT) -> list[str]:
+    """Como ``_centrar`` pero parte el texto largo en varias líneas centradas.
+
+    Necesario para la línea de contacto (teléfono · dirección · email), que con
+    una dirección real se pasa del ancho del ticket.
+    """
+    palabras = texto.split()
+    if not palabras:
+        return []
+    lineas: list[str] = []
+    actual = ""
+    for palabra in palabras:
+        if not actual:
+            actual = palabra
+        elif len(actual) + 1 + len(palabra) <= ancho:
+            actual = f"{actual} {palabra}"
+        else:
+            lineas.append(actual.center(ancho))
+            actual = palabra
+    if actual:
+        lineas.append(actual.center(ancho))
+    return lineas
+
+
+def _partir_ancho(texto: str, ancho: int) -> list[str]:
+    """Parte un bloque de texto en líneas de a lo más ``ancho`` columnas."""
+    palabras = texto.split()
+    if not palabras:
+        return [""]
+    lineas: list[str] = []
+    actual = ""
+    for palabra in palabras:
+        if not actual:
+            actual = palabra
+        elif len(actual) + 1 + len(palabra) <= ancho:
+            actual = f"{actual} {palabra}"
+        else:
+            lineas.append(actual)
+            actual = palabra
+    if actual:
+        lineas.append(actual)
+    return lineas
 
 
 def _campo_txt(etiqueta: str, valor: str) -> str:
@@ -905,6 +1337,7 @@ def _build_txt(
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
     idioma: str = "es",
+    tipo_ticket: str = "simple",
 ) -> io.BytesIO:
     """Ticket en texto plano con el mismo layout que el PDF e i18n."""
     d   = _dato(p, idioma)
@@ -914,12 +1347,46 @@ def _build_txt(
     lineas: list[str] = []
 
     # ── 1. Encabezado empresa ─────────────────────────────────────────────────
+    # SIN separador '|' entre [LOGO] y datos (para no introducir una línea
+    # vertical en TXT que no está en el PDF).
     lineas.append(_linea("="))
     if mostrar_encabezado and cab["nombre"]:
-        lineas.append(_centrar(cab["nombre"].upper()))
-        if cab["rif"]:
-            lineas.append(_centrar(f"{t('etiqueta_rif', idioma)}: {cab['rif']}"))
-        lineas.append(_linea("="))
+        ancho_logo = 10
+        ancho_der = ANCHO_TXT - ancho_logo - 1
+        logo_txt = "[LOGO]".center(ancho_logo)
+
+        rif_txt = f'{t("etiqueta_rif", idioma)}: {cab["rif"]}' if cab["rif"] else ""
+        linea1 = " - ".join(x for x in [cab["nombre"], rif_txt] if x)
+
+        partes_contacto: list[str] = []
+        if cab["direccion"]:
+            partes_contacto.append(cab["direccion"])
+        if cab["telefono"]:
+            partes_contacto.append(
+                f'{t("etiqueta_telefono", idioma)}: {cab["telefono"]}'
+            )
+        if cab["email"]:
+            partes_contacto.append(cab["email"])
+        linea2 = " - ".join(partes_contacto)
+
+        tiene_logo_txt = bool(cab["logo"])
+        if tiene_logo_txt:
+            # CON logo: [LOGO] y datos en columnas separadas por espacios.
+            lineas.append("━" * ANCHO_TXT)
+            renglones = [linea1, linea2] if linea2 else [linea1]
+            for i, bloque in enumerate(renglones):
+                for j, parte in enumerate(_partir_ancho(bloque, ancho_der)):
+                    prefijo = f"{logo_txt} " if i == 0 and j == 0 else f"{' ' * ancho_logo} "
+                    lineas.append(f"{prefijo}{parte}")
+            lineas.append("━" * ANCHO_TXT)
+            lineas.append("")
+        else:
+            # SIN logo: solo texto alineado a la izquierda.
+            if linea1:
+                lineas.extend(_partir_ancho(linea1, ANCHO_TXT))
+            if linea2:
+                lineas.extend(_partir_ancho(linea2, ANCHO_TXT))
+            lineas.append("")
 
     # ── 2. Título ─────────────────────────────────────────────────────────────
     lineas.append(_centrar(t("titulo_boleto", idioma)))
@@ -930,6 +1397,8 @@ def _build_txt(
     lineas.append(_campo_txt(t("serie_boleto", idioma), d["numero"]))
     lineas.append(_campo_txt(t("fecha_hora", idioma),     d["fecha_hora"]))
     lineas.append(_campo_txt(t("camion", idioma),         d["camion"]))
+    if tipo_ticket == "avanzado" and d.get("color_camion"):
+        lineas.append(_campo_txt(t("camion_color", idioma), d["color_camion"]))
     lineas.append(_campo_txt(t("remolque", idioma),       d["remolque"]))
     lineas.append(_campo_txt(t("transporte", idioma),     d["transporte"]))
     lineas.append(_campo_txt(t("conductor", idioma),      d["conductor"]))
@@ -980,19 +1449,46 @@ def _build_txt(
     lineas.append(_linea("="))
     lineas.append("")
 
+    # ── 5b. PESO MANUAL (escrito a mano, sin báscula) ─────────────────────────
+    if d["peso_manual"]:
+        lineas.append(_centrar(t("peso_manual", idioma)))
+        if d.get("operador"):
+            lineas.append(_campo_txt(t("operador", idioma), d["operador"]))
+        lineas.append("")
+
     # ── 6. DATOS ADICIONALES ──────────────────────────────────────────────────
-    if d["documento"] or d["unidades_txt"] is not None or d["densidad_txt"] is not None:
+    if tipo_ticket == "avanzado":
+        pares_txt = _pares_avanzado(d, idioma)
+        tiene_dats_adic = True
+    else:
+        pares_txt = []
+        if d["documento"]:
+            pares_txt.append((f"{t('documento', idioma)}:", d["documento"]))
+        if d.get("unidades_txt") is not None:
+            pares_txt.append((f"{t('unidades', idioma)}:", d["unidades_txt"]))
+        if d.get("densidad_txt") is not None:
+            pares_txt.append((f"{t('densidad', idioma)}:", d["densidad_txt"]))
+        tiene_dats_adic = bool(pares_txt)
+    if tiene_dats_adic:
         lineas.append(_linea("="))
         lineas.append(_centrar(t("datos_adicionales", idioma)))
         lineas.append(_linea("-"))
-        if d["documento"]:
-            lineas.append(_campo_txt(t("documento", idioma), d["documento"]))
-        if d["unidades_txt"] is not None:
-            lineas.append(_campo_txt(t("unidades", idioma), d["unidades_txt"]))
-        if d["densidad_txt"] is not None:
-            lineas.append(_campo_txt(t("densidad", idioma), d["densidad_txt"]))
+        for etiqueta, valor in pares_txt:
+            lineas.append(_campo_txt(etiqueta.rstrip(":"), valor))
         lineas.append(_linea("="))
         lineas.append("")
+
+    # ── 6b. DATOS DEL CATÁLOGO Y CONTROL (solo AVANZADO) ─────────────────────
+    if tipo_ticket == "avanzado":
+        pares_cat_txt = _pares_catalogo(d, idioma, rif_empresa=cab["rif"])
+        if pares_cat_txt:
+            lineas.append(_linea("="))
+            lineas.append(_centrar(t("datos_catalogo", idioma)))
+            lineas.append(_linea("-"))
+            for lab, val in pares_cat_txt:
+                lineas.append(_campo_txt(lab.rstrip(":"), val))
+            lineas.append(_linea("="))
+            lineas.append("")
 
     # ── 7. OBSERVACIONES ──────────────────────────────────────────────────────
     if mostrar_detalles and d["observaciones"]:
@@ -1013,15 +1509,16 @@ def _build_txt(
         lineas.append(_linea("*"))
         lineas.append("")
 
-    # ── 8. Firmas ─────────────────────────────────────────────────────────────
-    ancho_col = ANCHO_TXT // 2
-    lineas.append(
-        f"{'_' * 24}".center(ancho_col) + f"{'_' * 24}".center(ancho_col)
-    )
-    lineas.append(
-        t("firma_operador", idioma).center(ancho_col) + t("firma_conductor", idioma).center(ancho_col)
-    )
-    lineas.append("")
+    # ── 8. Firmas (solo AVANZADO) ─────────────────────────────────────────────
+    if tipo_ticket == "avanzado":
+        ancho_col = ANCHO_TXT // 2
+        lineas.append(
+            f"{'_' * 24}".center(ancho_col) + f"{'_' * 24}".center(ancho_col)
+        )
+        lineas.append(
+            t("firma_operador", idioma).center(ancho_col) + t("firma_conductor", idioma).center(ancho_col)
+        )
+        lineas.append("")
 
     # ── Pie ───────────────────────────────────────────────────────────────────
     lineas.append(_linea("-"))
@@ -1044,6 +1541,7 @@ def generar_ticket_pdf(
     mostrar_encabezado: bool = True,
     mostrar_detalles: bool = True,
     idioma: str = "es",
+    tipo_ticket: str = "simple",
 ) -> StreamingResponse:
     """Retorna el PDF del boleto con layout fiel a TicketPreviewDialog (Flutter) e i18n."""
     buf = _build_pdf(
@@ -1055,6 +1553,7 @@ def generar_ticket_pdf(
         mostrar_encabezado=mostrar_encabezado,
         mostrar_detalles=mostrar_detalles,
         idioma=idioma,
+        tipo_ticket=tipo_ticket,
     )
     buf.seek(0)
     nombre = f"ticket_{p.numero_boleto or p.boleto}.pdf"
@@ -1069,9 +1568,10 @@ def generar_ticket_txt(
     p: BoletoPesaje,
     empresa: Empresa | None = None,
     idioma: str = "es",
+    tipo_ticket: str = "simple",
 ) -> StreamingResponse:
     """Retorna el ticket en texto plano con layout fiel a TicketPreviewDialog (Flutter) e i18n."""
-    buf = _build_txt(p, empresa=empresa, idioma=idioma)
+    buf = _build_txt(p, empresa=empresa, idioma=idioma, tipo_ticket=tipo_ticket)
     buf.seek(0)
     nombre = f"ticket_{p.numero_boleto or p.boleto}.txt"
     return StreamingResponse(

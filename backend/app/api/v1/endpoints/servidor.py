@@ -12,6 +12,7 @@ import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any, overload
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -71,6 +72,18 @@ log = logging.getLogger(__name__)
 ROL_SERVIDOR_LOCAL = "SERVIDOR_LOCAL"
 
 
+@overload
+def _naive_utc(value: datetime) -> datetime: ...
+
+
+@overload
+def _naive_utc(value: None) -> None: ...
+
+
+@overload
+def _naive_utc(value: datetime | None) -> datetime | None: ...
+
+
 def _naive_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -83,7 +96,7 @@ def _token_digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _max_sesiones_default(tier: str) -> int | None:
+def _max_sesiones_default(tier: str | None) -> int | None:
     """Sesiones concurrentes por defecto según tier de la licencia.
 
     Balansoft WS no ofrece MONOPUESTA: una estación de pesaje trae mínimo 3
@@ -985,7 +998,7 @@ async def panel_cuenta_actualizar(
             .limit(1)
         )
     ).scalar_one_or_none()
-    lic_campos = {
+    lic_campos: dict[str, Any] = {
         "licencia_key": (payload.licencia_key or "").strip().upper() or None,
         "licencia_tier": payload.licencia_tier,
         "licencia_status": payload.licencia_status,

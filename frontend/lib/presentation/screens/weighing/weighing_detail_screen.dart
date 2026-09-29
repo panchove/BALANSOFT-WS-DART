@@ -25,6 +25,11 @@ class WeighingDetailScreen extends StatefulWidget {
 }
 
 class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
+  /// Último detalle renderizado: evita que el spinner global del WeighingBloc
+  /// (lista/sync de otras pantallas) deje la vista en blanco o cargando en
+  /// bucle hasta que vuelva a llegar un estado acorde al boleto.
+  Weighing? _ultimo;
+
   @override
   void initState() {
     super.initState();
@@ -101,22 +106,27 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
                   state.weighing.numeroBoleto == widget.boleto)) {
             w = state.weighing;
           }
-
           if (w != null) {
+            _ultimo = w;
+          }
+          final detalle = w ?? _ultimo;
+          if (detalle != null) {
             return Column(
               children: [
                 _AccionBar(
-                  boleto: w.boleto,
-                  peso: w,
+                  boleto: detalle.boleto,
+                  peso: detalle,
                   puedeAnular: puedeAnular,
-                  onImprimirPdf: () => _reimprimirTicket(context, w!, formato: 'PDF'),
-                  onImprimirTxt: () => _reimprimirTicket(context, w!, formato: 'TXT'),
+                  onImprimirPdf: () =>
+                      _reimprimirTicket(context, detalle, formato: 'PDF'),
+                  onImprimirTxt: () =>
+                      _reimprimirTicket(context, detalle, formato: 'TXT'),
                 ),
                 const Divider(height: 1),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
-                    child: _buildDetalle(context, w),
+                    child: _buildDetalle(context, detalle),
                   ),
                 ),
               ],
@@ -166,25 +176,17 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
             if (w.remolque) _InfoRow(
                 label: 'Remolque',
                 value: w.remolquePlaca ?? 'Sí'),
-            _InfoRow(
-                label: 'Transporte',
-                value: w.transporteNombre ?? (w.idTransporte != null ? 'ID: ${w.idTransporte!.substring(0, 8)}…' : 'N/A')),
+            _InfoRow(label: 'Transporte', value: w.transporteNombre ?? '—'),
             _InfoRow(
                 label: 'Conductor',
-                value: w.conductorNombre ?? w.idConductor ?? 'N/A'),
-            _InfoRow(
-                label: 'Producto',
-                value: w.productoNombre ?? (w.idProducto != null ? 'ID: ${w.idProducto!.substring(0, 8)}…' : 'N/A')),
-            _InfoRow(
-                label: 'Almacén',
-                value: w.almacenNombre ?? (w.idAlmacen != null ? 'ID: ${w.idAlmacen!.substring(0, 8)}…' : 'N/A')),
-            _InfoRow(
-                label: 'Balanza',
-                value: w.balanzaNombre ?? (w.idBalanza != null ? 'ID: ${w.idBalanza!.substring(0, 8)}…' : 'N/A')),
+                value: w.conductorNombre ?? (w.idConductor ?? 'N/A')),
+            _InfoRow(label: 'Producto', value: w.productoNombre ?? '—'),
+            _InfoRow(label: 'Almacén', value: w.almacenNombre ?? '—'),
+            _InfoRow(label: 'Balanza', value: w.balanzaNombre ?? '—'),
             if (w.tipoTercero != null || w.idTercero != null)
               _InfoRow(
                   label: w.tipoTercero ?? 'Tercero',
-                  value: w.terceroNombre ?? (w.idTercero != null ? 'ID: ${w.idTercero!.substring(0, 8)}…' : 'N/A')),
+                  value: w.terceroNombre ?? '—'),
           ],
         ),
         const SizedBox(height: 12),
@@ -297,10 +299,19 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
 
   Future<void> _reimprimirTicket(BuildContext context, Weighing w, {String formato = 'PDF'}) async {
     try {
+      final preset = await di.sl<LocalStorage>().getPrinterPreset();
       final repo = di.sl<WeighingRepository>();
       final response = formato == 'TXT'
-          ? await repo.getTicketTxt(w.boleto)
-          : await repo.getTicketPdf(w.boleto);
+          ? await repo.getTicketTxt(w.boleto, tipoTicket: preset.tipoTicket)
+          : await repo.getTicketPdf(
+              w.boleto,
+              boletosPorHoja: preset.boletosPorHoja,
+              tamanoPapel: preset.tamanoPapel,
+              orientacion: preset.orientacion,
+              mostrarEncabezado: preset.mostrarEncabezado,
+              mostrarDetalles: preset.mostrarDetalles,
+              tipoTicket: preset.tipoTicket,
+            );
       final bytes = response.data;
       if (bytes is! List<int> || bytes.isEmpty) {
         throw Exception('El servidor no devolvió un $formato válido.');

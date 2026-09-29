@@ -12,6 +12,7 @@ class PrinterPreset {
   final double margenMm;
   final double? anchoCustomMm;
   final double? altoCustomMm;
+  final String tipoTicket; // simple, avanzado
 
   const PrinterPreset({
     this.nombreImpresora = 'Impresora Térmica POS-80',
@@ -27,6 +28,7 @@ class PrinterPreset {
     this.margenMm = 5.0,
     this.anchoCustomMm,
     this.altoCustomMm,
+    this.tipoTicket = 'simple',
   });
 
   Map<String, dynamic> toJson() => {
@@ -43,6 +45,7 @@ class PrinterPreset {
         'margenMm': margenMm,
         'anchoCustomMm': anchoCustomMm,
         'altoCustomMm': altoCustomMm,
+        'tipoTicket': tipoTicket,
       };
 
   factory PrinterPreset.fromJson(Map<String, dynamic> json) => PrinterPreset(
@@ -75,6 +78,7 @@ class PrinterPreset {
     double? margenMm,
     double? anchoCustomMm,
     double? altoCustomMm,
+    String? tipoTicket,
   }) {
     return PrinterPreset(
       nombreImpresora: nombreImpresora ?? this.nombreImpresora,
@@ -90,6 +94,7 @@ class PrinterPreset {
       margenMm: margenMm ?? this.margenMm,
       anchoCustomMm: anchoCustomMm ?? this.anchoCustomMm,
       altoCustomMm: altoCustomMm ?? this.altoCustomMm,
+      tipoTicket: tipoTicket ?? this.tipoTicket,
     );
   }
 }

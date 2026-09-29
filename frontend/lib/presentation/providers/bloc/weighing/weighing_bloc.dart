@@ -113,6 +113,11 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
       final count = await _syncUseCase.execute();
       final failed = await _failedCountUseCase?.execute() ?? 0;
       emit(WeighingSyncComplete(count, failedCount: failed));
+      // Tras sincronizar se recarga el listado: si el bloque queda en
+      // WeighingSyncComplete, las pantallas que solo renderizan con
+      // WeighingListLoaded (Dashboard, listado recién abierto) se quedarían
+      // en el spinner infinito hasta que se reingresara al módulo.
+      add(const ListWeighingsEvent());
     } catch (e) {
       emit(WeighingError('Error en sincronización: $e'));
     }
