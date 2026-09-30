@@ -1,7 +1,8 @@
 # Changelog — BALANSOFT-WS
 
-Este proyecto **no es un repositorio Git** (carpeta compartida de VM), por lo que no
-se aplican tags; la versión se documenta exclusivamente en este archivo.
+El proyecto sí es un repositorio Git (`git@github.com:panchove/BALANSOFT-WS-DART.git`);
+el historial de versiones de este archivo es la referencia funcional para la
+operación (la app reporta `AppConfig.appVersion`).
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
@@ -9,6 +10,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## Historial de versiones
 
+- **v1.3.1** — 2026-09-30 — Pesaje: conversión de unidades (kg → Litros/Galones/Toneladas/Unidades) en DATOS ADICIONALES, captura guiada de dos pesos con remolque y báscula por defecto separada para entradas y salidas.
+- **v1.3.0** — 2026-09-30 — Navegación y atajos alineados con `docs/NAV.md` y `docs/INPUTS_MAP.md`: entradas faltantes en el menú (pesajes, ajustes de inventario, auditoría, ayuda), grupos colapsables, atajos de función y búsquedas dirigidas en la paleta.
+- **v1.2.9** — 2026-09-30 — Ajustes: "Diagnóstico del Sistema" propio (API local, BD, licencia, sincronización y versión) en lugar del asistente de instalación.
 - **v1.2.8** — 2026-09-29 — Reportes de boleto (PDF/TXT): el AVANZADO muestra todos los campos del formulario y el BÁSICO marca el peso escrito manualmente.
 - **v1.2.7** — 2026-09-28 — `reset_total.sh` ya respalda las BD (`pg_dump -Fc`) antes de borrarlas; recuperada la operación demo de la estación (camiones/boletos) vía seed.
 - **v1.2.6** — 2026-09-28 — Datos del camión en el pesaje con nombre (nunca UUID) y fotos con aviso de fallo.
@@ -16,6 +20,159 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - **v1.2.4** — 2026-09-28 — Adiós al bucle infinito de "sincronizando" tras POST/navegación.
 - **v1.2.3** — 2026-09-28 — Encabezado horizontal del boleto, export respeta PrinterPreset, fix refresh infinito.
 - **v1.2.2** — 2026-09-28 — Código interno/personalizado único por empresa (migración 018).
+
+---
+
+## [v1.3.1] — 2026-09-30
+
+> La báscula solo lee kilogramos, pero la empresa factura o registra en litros,
+> galones, toneladas o sacos. `medida` era texto libre, `litros` y `unidades`
+> se llenaban con el mismo valor y el peso del remolque era opcional.
+
+### Agregado
+
+- **Conversión de unidades** (`frontend/lib/core/utils/medida_conversion.dart`,
+  reglas de negocio puras y testeadas):
+  - `Medida` pasa a ser desplegable: Kilogramos, Litros, Galones, Toneladas,
+    Unidades (sacos); se autocompleta con la `unidad_medida` del producto
+    (`TON`→Toneladas, `UN`→Unidades, `L`→Litros, `GAL`→Galones, `KG`/`LBS`→kg).
+  - Fórmulas: `Litros = PNT/densidad`, `Galones = Litros/3.78541`,
+    `Toneladas = PNT/1000`, `Unidades = PNT/peso por unidad`,
+    `Kilogramos = PNT`.
+  - `Unidades` se autocalcula al capturar el peso de salida y **deja de
+    sobrescribirse** en cuanto el operador escribe (botón `calculate` fuerza el
+    recálculo). El texto de ayuda muestra la fórmula aplicada y avisa cuando
+    falta la densidad o el peso por unidad.
+  - `Densidad` se autocompleta del producto y queda de solo lectura cuando la
+    medida no es líquido; `Peso por unidad` se muestra (del producto) cuando la
+    medida es `Unidades`.
+  - Corrección: `litros` ya no duplica `unidades`; se guarda el volumen real.
+- **Captura guiada cabina → remolque, con alertas** (obligatoria en entrada y
+  salida). Flujo implementado como máquina de estados de tres pasos
+  (`_ObjetivoPeso.cabina → .remolque → .fijado`):
+  1. el operador carga los datos del pesaje con la báscula default de
+     **entradas** ya preseleccionada;
+  2. `F3` / botón **Capturar peso** (ahora dentro de *LECTURA DE PESO*)
+     **congela** el peso de la cabina;
+  3. con remolque se abre la alerta **«Mueva el camión»**: al *Continuar* la
+     báscula y el indicador pasan a llenar el campo del remolque, resaltado en
+     acento y con el aviso fijo debajo del monitor; al *No, seguir editando* se
+     permanece en la cabina;
+  4. `F3` de nuevo fija el peso del remolque y avisa que complete los demás
+     datos;
+  5. `Enter`/`F4` abren la confirmación **«¿Desea confirmar guardar este peso?»**
+     con el resumen de pesos y el tipo de pesaje (*ENTRADA* / *SALIDA*);
+  6. tras guardar, la confirmación **«¿Desea imprimir?»** ofrece **Imprimir** o
+     **Nuevo peso** (antes la salida imprimía automáticamente).
+  Guardar está bloqueado si el peso no se capturó con el botón, si falta el
+  peso del remolque o si solo quedó la tara sugerida. La misma secuencia aplica
+  al registrar la salida (báscula default de **salidas**).
+- **Báscula por defecto separada por tipo de pesaje**: en Configuración →
+  *Básculas* hay un selector para **entradas** y otro para **salidas**
+  (`scale_default_entrada_id`, `scale_default_salida_id`), con reserva a la
+  báscula global del sistema. El formulario preselecciona la que corresponde y
+  el operador puede cambiarla por boleto. Con una sola báscula registrada esa
+  pasa a ser la default de entradas y salidas aunque no haya nada configurado.
+- **Producto**: `Peso por unidad` (kg/saco) y `Tolerancia (%)` ya son editables
+  en el CRUD, y `Unidad de medida` admite `KG/TON/L/GAL/UN`.
+- **Barra superior reorganizada** según la especificación de la estación:
+  `Entrada F2 · Salida F6 · Guardar F4 · Cancelar Esc · Imprimir F5 ·
+  Salir Esc` sobre las tres columnas *LECTURA DE PESO · DATOS DEL PESAJE ·
+  RESUMEN*. `F3` salió de la barra y vive en el botón **Capturar peso** de
+  *LECTURA DE PESO*; el chip *Imprimir* duplicado del `AppBar` se eliminó.
+  El botón **Buscar** quedó alineado al inicio de la barra y abre el panel de
+  búsqueda rápida de pesos (ver más abajo).
+- **Resumen de pesos y tolerancia** en *LECTURA DE PESO*, bajo la tabla de
+  lectura (según `docs/DOCUMENTACION VIEJA/MODEL.md`): fechas de entrada/salida,
+  peso camión, peso remolque, peso total, **PNT = PTE − PTS**, **PND**,
+  **PDF = PNT − PND**, **PDV = PDF / PND (%)**, la tolerancia del producto
+  seleccionado y el **Estado** (*DENTRO* / *SOBRE* / *BAJO*) con el rango
+  aceptado `PND ± tol.`. Sin PND o tolerancia muestra `-` en vez de
+  `#¡DIV/0!` / `#¡VALOR!`.
+- **Búsqueda rápida de pesos** (botón **Buscar** de la barra): panel con filtro
+  *Todos / Pendientes / Cerrados* y búsqueda por placa, boleto, conductor,
+  producto, transporte, tercero, documento o guía. *Traer al formulario* carga
+  el pesaje como **copia editable** (aviso amarillo): al guardar se registra un
+  **nuevo** pesaje con la fecha/hora actual y el original **no** se modifica; el
+  número de boleto no se arrastra.
+- **Protección de datos sin guardar**: la estación **arranca maximizada**; al
+  presionar `Esc` en el formulario o la **X** de la ventana con información
+  capturada y sin guardar se pide confirmación antes de cerrar/limpiar (nuevas
+  claves `weighing_unsaved_*` en es/en/pt).
+
+### Sin cambios en backend
+
+`weighings.medida/densidad/litros/unidades`, `peso_entrada_remolque`,
+`peso_salida_remolque` y `productos.peso_unidad` ya existían (migraciones
+`019`/`020`); no hizo falta migración ni endpoint nuevo.
+
+---
+
+## [v1.3.0] — 2026-09-30
+
+> La barra lateral solo exponía 16 de los módulos que describe `docs/NAV.md`,
+> faltaban las hojas de operación (pesajes), ajustes de inventario, auditoría,
+> diagnóstico, licencia, conexiones y ayuda; además las teclas `F1`, `F5`, `F6`
+> y `F12` de `docs/INPUTS_MAP.md` no hacían nada y la paleta no resolvía las
+> búsquedas por boleto, placa o conductor.
+
+### Agregado
+- Entradas nuevas del menú: **Pesaje Automático** (`F1`), **Pesaje Manual**
+  (`F2`), **Ajustes de Inventario** (`Ctrl+A`), **Auditoría del Sistema** y la
+  sección **Ayuda y Soporte**; el mismo árbol alimenta el menú lateral de
+  escritorio y la hoja de navegación móvil.
+- **Diagnóstico del Sistema**, **Administración de Licencia** y **Conexiones**
+  quedan fuera del sidebar (para no saturarlo) y se alcanzan desde la paleta
+  `Ctrl + K` o con `go:diagnostico`, `go:licencia`, `go:conexiones`.
+- Hojas-acción en `MenuNode` (`accion`): no ocupan índice de página y se
+  filtran por `rolesPermitidos`, sin tocar la matriz de
+  `seguridad` (siguen siendo 18 módulos).
+- Chips de atajo a la derecha de cada entrada del menú y en la hoja móvil.
+- Búsqueda dirigida en la paleta (`Ctrl+K`): `t:#123` (boleto), `p:A12BC3`
+  (placa) y `c:V12345678` (conductor) llevan el texto al buscador de destino.
+- `FocusSearchBus`: el atajo `F6` enfoca el buscador de la pantalla activa.
+- Comandos nuevos en la paleta: diagnóstico, licencia, conexiones, ayuda,
+  camiones, conductores, transporte y documentos; se corrigieron tres entradas
+  que apuntaban a grupos sin página (`go:flota`, `go:inventario_base`,
+  `go:empresa`).
+
+### Cambiado
+- `home_shell`: las teclas de operación (`F1`, `F5`, `F6`, `F12`) solo responden
+  cuando el shell es la ruta visible, de modo que **no roban** `F2`–`F6` al
+  formulario de pesaje, que conserva sus atajos propios.
+- `F5` refresca el módulo visible según su origen (catálogos vía
+  `CatalogCrudCubit`, pesajes vía `WeighingBloc`, resto reconstruyendo la vista).
+- El buscador de entradas/salidas filtra por **placa o boleto**.
+- Módulo `reportes` renombrado a **Reportes Generales** en la matriz por defecto
+  y en el backend (misma clave, sin migración).
+
+### Corregido
+- `filtrarMenu` respeta `rolesPermitidos` en las hojas-acción: los módulos
+  restringidos (diagnóstico, licencia, conexiones, auditoría) ya no son visibles
+  para roles sin permiso.
+- La etiqueta «Inventario (Stock Físico)» del menú lateral era ambigua con
+  «Ajustes de Inventario»; ahora cada uno tiene nombre propio.
+- Texto nuevo en español, inglés y portugués (paridad de 547 claves).
+
+---
+
+## [v1.2.9] — 2026-09-30
+
+> En Configuración, el acceso "Integridad del Sistema" abría el asistente de
+> instalación (revisión de servicio de PostgreSQL, drivers, puertos y
+> permisos del sistema operativo), que es lo contrario de lo que un operador
+> de una estación ya instalada necesita: saber si la API, la base de datos, la
+> licencia y la sincronización están bien, sin salir de la app.
+
+- Nueva pantalla `SystemDiagnosticsScreen` con cinco tarjetas de **solo
+  lectura**: API local, base de datos, licencia, sincronización y versión.
+- Resumen superior (todo en orden / avisos / problemas), botón de refresco y
+  *pull to refresh*; los cinco chequeos se resuelven en paralelo.
+- El asistente `EnvironmentCheckScreen` queda reservado para el flujo de
+  instalación; ya no se abre desde Configuración.
+- `ApiClient.syncStatus()` nuevo (`GET /api/v1/sync/status`) para mostrar
+  pendientes y fecha de la última sincronización.
+- Textos nuevos en español, inglés y portugués (paridad de 541 claves).
 
 ---
 

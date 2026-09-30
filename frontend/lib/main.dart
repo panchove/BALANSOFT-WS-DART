@@ -12,6 +12,7 @@ import 'core/i18n/translations.dart';
 import 'core/services/wserver_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
+import 'core/utils/unsaved_work_guard.dart';
 import 'data/datasources/remote/api_client.dart';
 import 'data/repositories/activacion_repository.dart';
 import 'injection.dart' as di;
@@ -26,7 +27,8 @@ import 'presentation/screens/auth/reset_password_screen.dart';
 import 'presentation/screens/dashboard/home_shell.dart';
 import 'presentation/screens/setup/environment_check_screen.dart';
 import 'presentation/screens/weighing/weighing_detail_screen.dart';
-import 'presentation/screens/weighing/weighing_list_screen.dart' show weighingListRouteObserver;
+import 'presentation/screens/weighing/weighing_list_screen.dart'
+    show weighingListRouteObserver;
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/settings/connections_screen.dart';
 
@@ -77,6 +79,13 @@ void main() async {
     // funcionen los atajos F9 (maximizar/restaurar) y F11 (pantalla completa).
     await windowManager.ensureInitialized();
     await windowManager.setPreventClose(true);
+    // La estación arranca maximizada (el operador no debe redimensionar).
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(minimumSize: Size(1280, 800), center: true),
+      () async {
+        await windowManager.maximize();
+      },
+    );
   }
 
   await _aplicarModoKiosk();
@@ -91,6 +100,9 @@ void main() async {
   runApp(const BalansoftApp());
 }
 
+/// Contexto raíz del `MaterialApp`, para dialogues launched por el
+/// `WindowListener` (cierre de ventana), que vive fuera del árbol de widgets.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> _aplicarModoKiosk() async {
   if (!EnvConfig.isKiosk) return;
@@ -132,12 +144,50 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
 
   @override
   void onWindowClose() async {
+    // Si la estación tiene captura a medias (pesaje de báscula sin boleto,
+    // datos del camión, copia de un boleto...), advertir antes de perderla.
+    if (tieneDatosSinGuardar) {
+      final salir = await _confirmarCierreConDatos();
+      if (salir != true) return;
+    }
     final autostart =
         await WServerManager.autostartActivo() || AppConfig.wserverAutostart;
     if (!autostart) {
       await WServerManager.detener();
     }
     await windowManager.destroy();
+  }
+
+  /// Diálogo de confirmación del cierre cuando hay información sin guardar.
+  Future<bool?> _confirmarCierreConDatos() {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return Future.value(true);
+    return showDialog<bool>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded,
+            color: SwsColors.danger, size: 36),
+        title: Text(AppTranslations.tr('weighing_unsaved_exit_title'),
+            textAlign: TextAlign.center),
+        content: Text(
+          AppTranslations.tr('weighing_unsaved_exit_msg'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: Text(AppTranslations.tr('weighing_unsaved_cancel_btn')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: SwsColors.danger),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text(AppTranslations.tr('weighing_unsaved_confirm_exit')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -161,6 +211,7 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
         animation: Listenable.merge([themeController, localeController]),
         builder: (context, _) => MaterialApp(
           key: ValueKey(localeController.activeLanguageCode),
+          navigatorKey: navigatorKey,
           title: 'Balansoft-WS',
           debugShowCheckedModeBanner: false,
           theme: buildLightTheme(),
@@ -188,7 +239,8 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
                 ),
             '/mode_selection': (_) => const ModeSelectionScreen(),
             '/setup': (_) => const EnvironmentCheckScreen(setupMode: true),
-            '/activation': (_) => ActivationScreen(repository: di.sl<ActivacionRepository>()),
+            '/activation': (_) =>
+                ActivationScreen(repository: di.sl<ActivacionRepository>()),
             '/worker_connection': (_) => WorkerConnectionScreen(
                   clientFactory: (baseUrl) => ApiClient(baseUrl: baseUrl),
                 ),

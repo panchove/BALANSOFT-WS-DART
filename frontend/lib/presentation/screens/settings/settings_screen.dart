@@ -15,7 +15,7 @@ import '../../../domain/entities/catalogs.dart';
 import 'license_admin_screen.dart';
 import 'connections_screen.dart';
 import 'usuarios_screen.dart';
-import '../setup/environment_check_screen.dart';
+import 'system_diagnostics_screen.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
@@ -35,6 +35,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const _scaleDefaultKey = 'scale_default_id';
+  static const _scaleEntradaKey = 'scale_default_entrada_id';
+  static const _scaleSalidaKey = 'scale_default_salida_id';
 
   LocaleController? _localLocaleController;
   LocaleController get _localeController {
@@ -47,6 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<Scale> _balanzas = const [];
   Scale? _balanzaDefault;
+  Scale? _balanzaEntrada;
+  Scale? _balanzaSalida;
   bool _cargandoBalanzas = true;
 
   @override
@@ -66,14 +70,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _balanzas = filas;
-        final prevId = AppConfig.prefs.getString(_scaleDefaultKey);
-        if (prevId != null && prevId.isNotEmpty) {
-          final coincidencias = filas.where((b) => b.id == prevId);
-          _balanzaDefault =
-              coincidencias.isNotEmpty ? coincidencias.first : null;
-        } else {
-          _balanzaDefault = null;
-        }
+        _balanzaDefault = _buscarPreferida(filas, _scaleDefaultKey);
+        _balanzaEntrada = _buscarPreferida(filas, _scaleEntradaKey);
+        _balanzaSalida = _buscarPreferida(filas, _scaleSalidaKey);
       });
     } catch (_) {
       if (mounted) setState(() => _balanzas = const []);
@@ -82,20 +81,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Resuelve la báscula guardada en una clave de preferencia; si no existe
+  /// esa clave, cae en la báscula global del sistema.
+  Scale? _buscarPreferida(List<Scale> filas, String clave) {
+    final id = AppConfig.prefs.getString(clave) ??
+        AppConfig.prefs.getString(_scaleDefaultKey);
+    if (id == null || id.isEmpty) return null;
+    final coincidencias = filas.where((b) => b.id == id);
+    return coincidencias.isNotEmpty ? coincidencias.first : null;
+  }
+
   /// Al cambiar la báscula por defecto: persiste el id y refresca el
   /// `ScaleApiClient` con los datos de hardware de esa báscula.
   Future<void> _onBalanzaSeleccionada(Scale? b) async {
-    setState(() => _balanzaDefault = b);
+    await _onBalanzaSeleccionadaEn(
+        b, _scaleDefaultKey, (v) => _balanzaDefault = v);
+  }
+
+  /// Persiste la báscula por defecto de las ENTRADAS.
+  Future<void> _onBalanzaEntradaSeleccionada(Scale? b) async {
+    await _onBalanzaSeleccionadaEn(
+        b, _scaleEntradaKey, (v) => _balanzaEntrada = v);
+  }
+
+  /// Persiste la báscula por defecto de las SALIDAS.
+  Future<void> _onBalanzaSalidaSeleccionada(Scale? b) async {
+    await _onBalanzaSeleccionadaEn(
+        b, _scaleSalidaKey, (v) => _balanzaSalida = v);
+  }
+
+  Future<void> _onBalanzaSeleccionadaEn(
+    Scale? b,
+    String clave,
+    void Function(Scale?) onEstado,
+  ) async {
+    setState(() => onEstado(b));
     if (b == null) {
-      await AppConfig.prefs.remove(_scaleDefaultKey);
+      await AppConfig.prefs.remove(clave);
       return;
     }
-    await AppConfig.prefs.setString(_scaleDefaultKey, b.id);
+    await AppConfig.prefs.setString(clave, b.id);
     if (b.ipAddress != null && b.ipAddress!.isNotEmpty) {
       di.sl<ScaleApiClient>().configurarFallbackTcp(
-        b.ipAddress!,
-        b.puertoTcp ?? 5555,
-      );
+            b.ipAddress!,
+            b.puertoTcp ?? 5555,
+          );
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -132,7 +162,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await _loadBalanzas();
           if (mounted) setState(() {});
         },
-        child: isWide ? _buildWideLayout(context) : _buildCompactLayout(context),
+        child:
+            isWide ? _buildWideLayout(context) : _buildCompactLayout(context),
       ),
     );
   }
@@ -181,13 +212,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final derecha = <Widget>[
       _SectionCard(
         icon: Icons.straighten_outlined,
-        title: 'Báscula del Sistema',
-        children: [_buildBalanzasSelector()],
+        title: 'Básculas',
+        children: [
+          _buildBalanzaEntradaSelector(),
+          const Divider(),
+          _buildBalanzaSalidaSelector(),
+          const Divider(),
+          _buildBalanzasSelector(),
+        ],
       ),
-const _SectionCard(
+      const _SectionCard(
         icon: Icons.wifi_tethering_outlined,
         title: 'Conexiones',
-        children: [_ConexionesTile(), _IntegridadTile()],
+        children: [_ConexionesTile(), _DiagnosticoTile()],
       ),
       const _SectionCard(
         icon: Icons.storage_outlined,
@@ -247,13 +284,19 @@ const _SectionCard(
       ),
       _SectionCard(
         icon: Icons.straighten_outlined,
-        title: 'Báscula del Sistema',
-        children: [_buildBalanzasSelector()],
+        title: 'Básculas',
+        children: [
+          _buildBalanzaEntradaSelector(),
+          const Divider(),
+          _buildBalanzaSalidaSelector(),
+          const Divider(),
+          _buildBalanzasSelector(),
+        ],
       ),
       const _SectionCard(
         icon: Icons.wifi_tethering_outlined,
         title: 'Conexiones',
-        children: [_ConexionesTile(), _IntegridadTile()],
+        children: [_ConexionesTile(), _DiagnosticoTile()],
       ),
       const _SectionCard(
         icon: Icons.storage_outlined,
@@ -309,6 +352,38 @@ const _SectionCard(
   // ── Báscula por defecto (solo select) ───────────────────────────────────
 
   Widget _buildBalanzasSelector() {
+    return _selectorBalanza(
+      etiqueta: 'Báscula por defecto',
+      ayuda: 'default_scale_pick_full'.tr(),
+      seleccionada: _balanzaDefault,
+      onChanged: _onBalanzaSeleccionada,
+    );
+  }
+
+  Widget _buildBalanzaEntradaSelector() {
+    return _selectorBalanza(
+      etiqueta: 'Báscula por defecto en ENTRADAS',
+      ayuda: 'default_scale_entry_hint'.tr(),
+      seleccionada: _balanzaEntrada,
+      onChanged: _onBalanzaEntradaSeleccionada,
+    );
+  }
+
+  Widget _buildBalanzaSalidaSelector() {
+    return _selectorBalanza(
+      etiqueta: 'Báscula por defecto en SALIDAS',
+      ayuda: 'default_scale_exit_hint'.tr(),
+      seleccionada: _balanzaSalida,
+      onChanged: _onBalanzaSalidaSeleccionada,
+    );
+  }
+
+  Widget _selectorBalanza({
+    required String etiqueta,
+    required String ayuda,
+    required Scale? seleccionada,
+    required void Function(Scale?) onChanged,
+  }) {
     if (_cargandoBalanzas) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
@@ -321,13 +396,13 @@ const _SectionCard(
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'default_scale_pick_full'.tr(),
+            ayuda,
             style: const TextStyle(fontSize: 12.5, color: SwsColors.gray600),
           ),
         ),
         InputDecorator(
           decoration: InputDecoration(
-            labelText: 'Báscula por defecto',
+            labelText: etiqueta,
             prefixIcon: const Icon(Icons.scale_outlined),
             suffixIcon: IconButton(
               tooltip: 'Actualizar básculas',
@@ -337,12 +412,12 @@ const _SectionCard(
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<Scale?>(
-              value: _balanzaDefault,
+              value: seleccionada,
               isExpanded: true,
               isDense: true,
               hint: Text('not_selected'.tr()),
               items: _dropdownItems(),
-              onChanged: _onBalanzaSeleccionada,
+              onChanged: onChanged,
             ),
           ),
         ),
@@ -517,9 +592,9 @@ class _AccountHeaderState extends State<_AccountHeader> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 900;
-    final nombre = (_account?['nombre_comercial'] as String?)
-        ?? (_account?['nombre_fiscal'] as String?)
-        ?? 'Estación';
+    final nombre = (_account?['nombre_comercial'] as String?) ??
+        (_account?['nombre_fiscal'] as String?) ??
+        'Estación';
     final rif = _account?['rif_nit'] as String? ?? '---';
 
     return Card(
@@ -974,27 +1049,24 @@ class _WServerPanelState extends State<_WServerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final base =
-        AppConfig.apiBaseUrl?.trim().isNotEmpty == true
-            ? AppConfig.apiBaseUrl!
-            : AppConfig.defaultApiBaseUrl;
+    final base = AppConfig.apiBaseUrl?.trim().isNotEmpty == true
+        ? AppConfig.apiBaseUrl!
+        : AppConfig.defaultApiBaseUrl;
     final online = _online;
 
-    final estadoColor =
-        _trabajando
-            ? SwsColors.warning
-            : (online == true
-                ? SwsColors.success
-                : (online == false ? SwsColors.danger : SwsColors.gray500));
+    final estadoColor = _trabajando
+        ? SwsColors.warning
+        : (online == true
+            ? SwsColors.success
+            : (online == false ? SwsColors.danger : SwsColors.gray500));
 
-    final estadoTexto =
-        _trabajando
-            ? 'Verificando...'
-            : (online == true
-                ? 'Activo · $base'
-                : (online == false
-                    ? 'Apagado · no responde en $base'
-                    : 'Comprobando conexión...'));
+    final estadoTexto = _trabajando
+        ? 'Verificando...'
+        : (online == true
+            ? 'Activo · $base'
+            : (online == false
+                ? 'Apagado · no responde en $base'
+                : 'Comprobando conexión...'));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1089,8 +1161,8 @@ class _ConexionesTile extends StatelessWidget {
   }
 }
 
-class _IntegridadTile extends StatelessWidget {
-  const _IntegridadTile();
+class _DiagnosticoTile extends StatelessWidget {
+  const _DiagnosticoTile();
 
   @override
   Widget build(BuildContext context) {
@@ -1099,17 +1171,17 @@ class _IntegridadTile extends StatelessWidget {
       leading: const SizedBox(
         width: 24,
         height: 24,
-        child: Icon(Icons.health_and_safety_outlined),
+        child: Icon(Icons.monitor_heart_outlined),
       ),
-      title: Text('system_integrity'.tr()),
+      title: Text('system_diagnostics'.tr()),
       subtitle: Text(
-        'system_integrity_desc'.tr(),
+        'system_diagnostics_desc'.tr(),
         style: const TextStyle(fontSize: 12),
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => const EnvironmentCheckScreen(setupMode: false),
+          builder: (_) => const SystemDiagnosticsScreen(),
         ),
       ),
     );
@@ -1283,7 +1355,10 @@ class _DirectorioTileState extends State<_DirectorioTile> {
           if (_esPersonalizada)
             Text(
               'set_by_admin'.tr(),
-              style: const TextStyle(fontSize: 10.5, color: SwsColors.primary, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  fontSize: 10.5,
+                  color: SwsColors.primary,
+                  fontWeight: FontWeight.w600),
             ),
         ],
       ),
@@ -1362,11 +1437,14 @@ class _LanguageSelector extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                const Icon(Icons.language_outlined, size: 18, color: SwsColors.accent),
+                const Icon(Icons.language_outlined,
+                    size: 18, color: SwsColors.accent),
                 const SizedBox(width: 8),
                 Text(
-                  AppTranslations.of(context, 'language_title', localeController),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  AppTranslations.of(
+                      context, 'language_title', localeController),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ],
             ),

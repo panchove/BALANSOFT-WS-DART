@@ -14,6 +14,7 @@ Future<void> mostrarNavMovil(
   BuildContext context, {
   required int selectedIndex,
   required ValueChanged<int> onItemSelected,
+  required void Function(String comando) onAction,
   required VoidCallback onLogout,
   required VoidCallback onOpenConfig,
 }) {
@@ -24,6 +25,7 @@ Future<void> mostrarNavMovil(
     builder: (_) => _MobileNavSheet(
       selectedIndex: selectedIndex,
       onItemSelected: onItemSelected,
+      onAction: onAction,
       onLogout: onLogout,
       onOpenConfig: onOpenConfig,
     ),
@@ -34,12 +36,14 @@ class _MobileNavSheet extends StatefulWidget {
   const _MobileNavSheet({
     required this.selectedIndex,
     required this.onItemSelected,
+    required this.onAction,
     required this.onLogout,
     required this.onOpenConfig,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
+  final void Function(String comando) onAction;
   final VoidCallback onLogout;
   final VoidCallback onOpenConfig;
 
@@ -79,6 +83,11 @@ class _MobileNavSheetState extends State<_MobileNavSheet> {
   void _seleccionar(int idx) {
     Navigator.of(context).pop();
     widget.onItemSelected(idx);
+  }
+
+  void _ejecutarAccion(String comando) {
+    Navigator.of(context).pop();
+    widget.onAction(comando);
   }
 
   @override
@@ -204,8 +213,8 @@ class _MobileNavSheetState extends State<_MobileNavSheet> {
           );
         }
       } else if (node.isLeaf) {
-        final idx = node.index ?? 0;
-        final isSelected = widget.selectedIndex == idx;
+        final idx = node.index;
+        final isSelected = idx != null && widget.selectedIndex == idx;
         widgets.add(
           ListTile(
             shape: RoundedRectangleBorder(
@@ -229,8 +238,24 @@ class _MobileNavSheetState extends State<_MobileNavSheet> {
             ),
             trailing: isSelected
                 ? const Icon(Icons.check, size: 18, color: SwsColors.accent)
-                : null,
-            onTap: () => _seleccionar(idx),
+                : (node.shortcut != null
+                    ? Text(
+                        node.shortcut!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: SwsColors.gray500,
+                        ),
+                      )
+                    : null),
+            onTap: () {
+              final accion = node.accion;
+              if (accion != null) {
+                _ejecutarAccion(accion);
+              } else {
+                _seleccionar(idx ?? 0);
+              }
+            },
           ),
         );
       } else {

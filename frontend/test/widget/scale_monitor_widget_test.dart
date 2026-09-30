@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(_wrap(client));
 
     expect(find.textContaining('Recibiendo peso'), findsOneWidget);
-    expect(find.text('123.4'), findsOneWidget);
+    expect(find.text('123.40'), findsOneWidget);
   });
 
   testWidgets('muestra "Estable" cuando el peso se asienta', (tester) async {

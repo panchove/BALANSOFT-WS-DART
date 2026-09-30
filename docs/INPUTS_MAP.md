@@ -364,3 +364,130 @@ Además de las teclas físicas, la paleta acepta comandos escritos:
 | `Alt + A` auditoría | `Ctrl + A` ajustes inventario | Coherente con Ctrl+N, Ctrl+B |
 | `Ctrl + Shift + S` configuración | **`Ctrl + ,`** | Estándar apps modernas (VS Code, Slack, Notion) |
 | Atajos `Ctrl+Shift+T` para transporte y tema | `Ctrl+Shift+T` transporte; tema en `Ctrl+Shift+L` | Sin colisiones |
+
+
+
+
+# Documentación de Atajos de Teclado — Balansoft-WS
+
+Esta guía contiene la asignación completa y estandarizada de accesos directos para la estación de pesaje industrial. El esquema está diseñado para minimizar el uso del mouse durante la operación en balanza.
+
+---
+
+## 1. Flujo de Operación de Báscula (Teclas de Función $F1$–$F12$)
+
+Diseñado para operar directamente desde la fila superior del teclado en la terminal de báscula.
+
+| Tecla | Acción | Descripción / Contexto |
+|---|---|---|
+| **`F2`** | **Entrada** | Limpia el formulario y abre un pesaje de **entrada**; la báscula default de entradas queda preseleccionada. |
+| **`F3`** | **Capturar Peso** | Fija la lectura en curso como peso del paso activo (cabina o remolque). Es **obligatorio** antes de guardar. Botón en *LECTURA DE PESO*. |
+| **`F4`** | **Guardar** | Valida, pide la confirmación final (*"¿Desea confirmar guardar este peso?"*) y guarda el pesaje de entrada o registra la salida. `Enter` hace lo mismo cuando el foco no está en un campo de texto. |
+| **`F5`** | **Imprimir** | Abre el selector de impresión de boletos (incluye el último boleto registrado). |
+| **`F6`** | **Salida** | Abre el selector de boleto pendiente; al elegirlo carga los datos y la báscula default de **salidas**. |
+| **`Esc`** | **Cancelar / Salir** | Cierra la alerta abierta si hay una; en la pantalla de pesaje sale de la vista. **Si hay captura sin guardar pide confirmación** (*"Hay información capturada… ¿Desea cancelar de todos modos?"*). El botón *Cancelar* (mismo `Esc` en su etiqueta) limpia el formulario; `F12` queda como atajo global de *Cancelar Operación*. |
+| **`F7`** | **Nuevo Vehículo / Camión** | Abre el modal de registro rápido de vehículos/flota sin perder el ticket actual. |
+| **`F8`** | **Nuevo Conductor** | Abre el modal de registro rápido de choferes. |
+| **`F9`** | **Maximizar / Restaurar** | Alterna el tamaño de la ventana (ideal para pantallas compactas de balanza). |
+| **`F10`** | **Mostrar / Ocultar Sidebar** | Colapsa o expande el menú lateral para mayor área de trabajo. |
+| **`F11`** | **Pantalla Completa** | Activa/desactiva el modo kiosco. |
+| **`F12`** | **Cancelar Operación** | Limpia el formulario activo o descarta el ticket en borrador. |
+
+> `F4` estaba documentado como *Tarar / Cero*. Sigue **pendiente**: el HAL
+> (`app/core/scale_hal.py`) solo lee (`read_weight`, `is_stable`) y no envía
+> comandos de tara/cero, que dependen del fabricante. Hoy `F4` guarda; el
+> monitor aplica el flag de peso neto con el botón `T`.
+
+### 1.1 Captura guiada cabina → remolque (obligatoria)
+
+| Paso | Acción del operador | Resultado en pantalla |
+|---|---|---|
+| 1 | Carga los datos del pesaje | Báscula de **entrada** preseleccionada. La lectura en vivo llena *Peso Entrada Vehículo*. |
+| 2 | Presiona **Capturar peso** (`F3`) con la cabina en la báscula | El peso queda **congelado** en el campo de la cabina. |
+| 3 | Con remolque, aparece la alerta **"Mueva el camión"** | Al *Continuar*, la báscula y el indicador pasan a llenar el campo del remolque (resaltado en acento, bajo la alerta); el aviso queda fijo en *LECTURA DE PESO*. Al *No, seguir editando* se permanece en la cabina. |
+| 4 | Mueve el camión hasta que el remolque esté sobre la báscula y presiona **Capturar peso** (`F3`) | Ambos pesos quedan congelados; aviso *"Complete los demás datos y presione Enter para guardar"*. |
+| 5 | Completa los demás datos y presiona `Enter` (o `F4`) | Confirmación *"¿Desea confirmar guardar este peso?"* con el resumen de pesos y el tipo de pesaje (*ENTRADA* / *SALIDA*). |
+| 6 | Tras guardar | Confirmación *"¿Desea imprimir?"* → **Imprimir** o **Nuevo peso**. |
+| 7 | Si presiona `Esc` o la **X** de la ventana con datos sin guardar | Alerta de confirmación: *"Hay información … que no ha sido guardada. ¿Desea … de todos modos?"*. Solo cierra/limpia si confirma. |
+
+Reglas: la captura es obligatoria también en **salida** (mismo mecanismo para
+cabina y remolque); guardar sin haber pulsado *Capturar peso* se rechaza; la
+tara sugerida del remolque no cuenta como captura; con una sola báscula
+registrada esa es la default de entradas y salidas. La estación **arranca
+maximizada**.
+
+### 1.2 Resumen de pesos y tolerancia (LECTURA DE PESO)
+
+Bajo la tabla de lectura se muestra el bloque **CONTROL DE PESOS Y TOLERANCIA**
+según `docs/DOCUMENTACION VIEJA/MODEL.md`: fechas de entrada/salida, peso camión,
+peso remolque, peso total, **PNT = PTE − PTS**, **PND**, **PDF = PNT − PND**,
+**PDV = PDF / PND (%)**, la tolerancia del producto seleccionado y el
+**Estado** (*DENTRO* / *SOBRE* / *BAJO*) con el rango aceptado `PND ± tol.`.
+Sin PND o tolerancia se muestra `-` en vez de `#¡DIV/0!` / `#¡VALOR!`.
+---
+
+## 2. Acciones de Creación y Entidades (`Ctrl` / `Ctrl + Shift`)
+
+| Atajo | Acción | Descripción |
+|---|---|---|
+| `Ctrl + N` | Nuevo Pesaje Estándar | Crea una nueva entrada/pesaje rápido. |
+| `Ctrl + Shift + N` | Nuevo Pesaje Manual | Vía alternativa para apertura manual. |
+| `Ctrl + Shift + V` | Nuevo Vehículo | Registro de camión/placa. |
+| `Ctrl + Shift + D` | Nuevo Conductor | Registro de chofer (*Driver*). |
+| `Ctrl + Shift + T` | Nuevo Transporte | Módulo/Registro de empresa transportista. |
+| `Ctrl + A` | Ajustes de Inventario | Abre el panel de corrección/ajuste manual de stock. |
+
+---
+
+## 3. Entorno e Interfaz Global
+
+| Atajo | Acción | Descripción |
+|---|---|---|
+| `Ctrl + B` | Alternar Sidebar | Muestra u oculta la barra lateral. |
+| `Ctrl + K` | Paleta de Comandos | Abre la búsqueda rápida ejecutable por comandos. |
+| `Ctrl + H` | Inicio / Dashboard | Regresa al panel principal (*Home*). |
+| `Ctrl + Shift + L` | Cambiar Tema | Alterna entre modo claro y oscuro (*Light/Dark*). |
+| `Ctrl + ,` | Configuración | Abre el panel de ajustes de la aplicación. |
+| `Ctrl + L` | Bloquear / Cerrar Sesión | Cierra la sesión activa por seguridad (*Lock*). |
+| `Ctrl + Q` | Salir del Sistema | Muestra el diálogo de confirmación para cerrar la app (*Quit*). |
+| `Esc` | Cerrar / Cancelar | Cierra el modal o diálogo activo. |
+| `Backspace` / `Delete` | Volver Atrás | Navega a la vista anterior (solo si no hay un input de texto enfocado). |
+
+---
+
+## 4. Navegación Rápida por Módulos
+
+### Vía Números (`Ctrl + Nro`)
+| Atajo | Módulo Destino |
+|---|---|
+| `Ctrl + 1` | Inicio / Dashboard |
+| `Ctrl + 2` | Entradas (Ingresos) |
+| `Ctrl + 3` | Salidas (Despachos) |
+| `Ctrl + 4` | Reportes |
+| `Ctrl + 5` | Kardex / Inventario |
+
+### Vía Teclas Mnemónicas (`Alt + Letra`)
+| Atajo | Módulo Destino | Clave Mnemónica |
+|---|---|---|
+| `Alt + C` | Clientes / Terceros | **C**lientes |
+| `Alt + F` | Flota y Vehículos | **F**lota |
+| `Alt + P` | Productos | **P**roductos |
+| `Alt + A` | Almacenes | **A**lmacén |
+| `Alt + K` | Kardex | **K**ardex |
+| `Alt + R` | Reportes | **R**eportes |
+| `Alt + U` | Usuarios | **U**suarios |
+| `Alt + D` | Dispositivos de Campo | **D**ispositivos |
+| `Alt + S` | Seguridad y Permisos | **S**eguridad |
+
+---
+
+## 5. Paleta de Comandos (`Ctrl + K`)
+
+Comandos rápidos disponibles para escribir en la paleta:
+
+* **Navegación:** `go:wm` (Pesaje Manual), `go:wa` (Pesaje Auto), `go:in` (Entradas), `go:out` (Salidas), `go:fleet` (Flota), `cfg:dev` (Dispositivos).
+* **Creación:** `new:ticket` / `w:in` (Nuevo ticket), `new:truck` / `add:camion` (Nuevo vehículo), `new:driver` / `add:chofer` (Nuevo conductor).
+* **Búsqueda rápida:**
+  * `t:#123` → Busca ticket número 123.
+  * `p:A12BC3` → Busca por placa de vehículo.
+  * `c:V12345678` → Busca por cédula/RIF de conductor o cliente.

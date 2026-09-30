@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/focus_search_bus.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
 import '../../../presentation/widgets/atajo_nuevo.dart';
@@ -23,6 +24,7 @@ class CatalogCrudScreen extends StatefulWidget {
 
 class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
   final _searchCtrl = TextEditingController();
+  final _busquedaFocus = FocusNode();
   _FiltroTipo _tipoSeleccionado = _FiltroTipo.ambos;
 
   /// El cubit se resuelve una sola vez en el State: los métodos pueden usarlo
@@ -33,11 +35,16 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
   @override
   void initState() {
     super.initState();
+    FocusSearchBus.instance.registrar(_busquedaFocus);
+    final pendiente = FocusSearchBus.instance.tomarTexto();
+    if (pendiente != null) _searchCtrl.text = pendiente;
     _cubit.cargar(widget.recurso);
   }
 
   @override
   void dispose() {
+    FocusSearchBus.instance.liberar(_busquedaFocus);
+    _busquedaFocus.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -232,6 +239,7 @@ class _CatalogCrudScreenState extends State<CatalogCrudScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: TextField(
                     controller: _searchCtrl,
+                    focusNode: _busquedaFocus,
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       hintText:

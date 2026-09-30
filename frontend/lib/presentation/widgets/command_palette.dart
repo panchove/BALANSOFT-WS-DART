@@ -39,13 +39,13 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Pesaje Manual',
       icon: Icons.edit_note,
-      shortcut: 'Ctrl+Shift+N',
+      shortcut: 'Ctrl+Shift+N  /  F2',
       action: 'go:pesaje_manual',
     ),
     const _Command(
       label: 'Pesaje Automático',
       icon: Icons.smart_toy_outlined,
-      shortcut: 'Ctrl+N',
+      shortcut: 'Ctrl+N  /  F1',
       action: 'go:pesaje_automatico',
     ),
     const _Command(
@@ -73,16 +73,39 @@ class _CommandPaletteState extends State<CommandPalette> {
       action: 'go:terceros',
     ),
     const _Command(
-      label: 'Flota y Transporte',
-      icon: Icons.local_shipping_outlined,
-      shortcut: 'Alt+F',
-      action: 'go:flota',
+      label: 'Camiones / Vehículos',
+      icon: Icons.directions_car_outlined,
+      shortcut: 'Alt+F  /  F7',
+      action: 'go:camiones',
     ),
     const _Command(
-      label: 'Inventario Base',
+      label: 'Conductores',
+      icon: Icons.badge_outlined,
+      shortcut: 'Ctrl+Shift+D  /  F8',
+      action: 'go:conductores',
+    ),
+    const _Command(
+      label: 'Empresas de Transporte',
+      icon: Icons.fire_truck_outlined,
+      shortcut: 'Ctrl+Shift+T',
+      action: 'go:transportes',
+    ),
+    const _Command(
+      label: 'Categorías',
+      icon: Icons.category_outlined,
+      action: 'go:categorias',
+    ),
+    const _Command(
+      label: 'Productos',
       icon: Icons.inventory_2_outlined,
       shortcut: 'Alt+P',
-      action: 'go:inventario_base',
+      action: 'go:productos',
+    ),
+    const _Command(
+      label: 'Almacenes',
+      icon: Icons.warehouse_outlined,
+      shortcut: 'Alt+A',
+      action: 'go:almacenes',
     ),
     const _Command(
       label: 'Kardex',
@@ -102,6 +125,26 @@ class _CommandPaletteState extends State<CommandPalette> {
       action: 'go:auditoria',
     ),
     const _Command(
+      label: 'Diagnóstico del Sistema',
+      icon: Icons.monitor_heart_outlined,
+      action: 'go:diagnostico',
+    ),
+    const _Command(
+      label: 'Administración de Licencia',
+      icon: Icons.key_outlined,
+      action: 'go:licencia',
+    ),
+    const _Command(
+      label: 'Conexiones',
+      icon: Icons.hub_outlined,
+      action: 'go:conexiones',
+    ),
+    const _Command(
+      label: 'Ayuda',
+      icon: Icons.help_outline,
+      action: 'go:ayuda',
+    ),
+    const _Command(
       label: 'Dispositivos de Campo',
       icon: Icons.sensors_outlined,
       shortcut: 'Alt+D',
@@ -116,7 +159,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Empresa y Documentos',
       icon: Icons.business_outlined,
-      action: 'go:empresa',
+      action: 'go:documentos_empresa',
     ),
     const _Command(
       label: 'Diseño de Ticket',
@@ -182,15 +225,49 @@ class _CommandPaletteState extends State<CommandPalette> {
   ];
 
   List<_Command> get _filtered {
-    if (_query.isEmpty) return _commands;
+    if (_query.isEmpty) return _comandos;
     final q = _query.toLowerCase();
-    return _commands
+    return _comandos
         .where(
           (c) =>
               c.label.toLowerCase().contains(q) ||
               c.action.toLowerCase().contains(q),
         )
         .toList();
+  }
+
+  /// Búsqueda dirigida por prefijo (`t:#123`, `p:A12BC3`, `c:V12345678`).
+  /// Devuelve el comando sintético `buscar:<tipo>:<texto>` cuando el texto
+  /// empieza por un prefijo válido y ya trae un parámetro.
+  List<_Command> get _comandos {
+    final directa = _comandoDeBusquedaDirecta();
+    if (directa != null) return [directa];
+    return _commands;
+  }
+
+  _Command? _comandoDeBusquedaDirecta() {
+    final cruda = _query.trim();
+    if (cruda.length < 3) return null;
+    final tipo = cruda.substring(0, 1).toLowerCase();
+    if (cruda[1] != ':') return null;
+
+    final (etiqueta, icono, atajo) = switch (tipo) {
+      't' => ('Buscar boleto', Icons.confirmation_number_outlined, 't:#123'),
+      'p' => ('Buscar placa', Icons.directions_car_outlined, 'p:A12BC3'),
+      'c' => ('Buscar conductor', Icons.badge_outlined, 'c:V12345678'),
+      _ => ('', Icons.search, ''),
+    };
+    if (etiqueta.isEmpty) return null;
+
+    final texto = cruda.substring(2).trim();
+    if (texto.isEmpty) return null;
+
+    return _Command(
+      label: '$etiqueta  «$texto»',
+      icon: icono,
+      shortcut: atajo,
+      action: 'buscar:$tipo:$texto',
+    );
   }
 
   @override
@@ -274,7 +351,8 @@ class _CommandPaletteState extends State<CommandPalette> {
                           controller: _controller,
                           decoration: InputDecoration(
                             hintText:
-                                'Buscar módulo, comando o acción...',
+                                'Buscar módulo, comando o acción… '
+                                '(t:#123 · p:A12BC3 · c:V12345678)',
                             hintStyle: const TextStyle(fontSize: 13),
                             prefixIcon:
                                 const Icon(Icons.search, size: 20),

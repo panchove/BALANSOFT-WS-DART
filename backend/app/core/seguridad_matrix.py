@@ -25,7 +25,7 @@ MODULOS: dict[str, str] = {
     "kardex": "Kardex",
     "entradas": "Ingresos (Entradas)",
     "salidas": "Despachos (Salidas)",
-    "reportes": "Inventario (Stock Físico)",
+    "reportes": "Reportes Generales",
     "dispositivos": "Dispositivos de Campo",
     "seguridad": "Seguridad y Accesos",
     "documentos_empresa": "Empresa y Documentos",

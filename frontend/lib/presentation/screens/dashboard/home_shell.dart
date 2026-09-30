@@ -9,10 +9,13 @@ import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/theme_controller.dart';
+import '../../../core/utils/focus_search_bus.dart';
 import '../../../data/datasources/local/local_storage.dart';
+import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/user.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
+import '../../providers/bloc/catalog_crud/catalog_crud_cubit.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/command_palette.dart';
@@ -30,9 +33,12 @@ import '../kardex/kardex_screen.dart';
 import '../reports/reports_screen.dart';
 import '../seguridad/seguridad_screen.dart';
 import '../settings/initial_setup_screen.dart';
+import '../settings/license_admin_screen.dart';
 import '../settings/settings_screen.dart';
+import '../settings/system_diagnostics_screen.dart';
 import '../settings/ticket_design_screen.dart';
 import '../settings/usuarios_screen.dart';
+import '../setup/worker_connection_screen.dart';
 import '../weighing/weighing_form_screen.dart';
 import '../weighing/weighing_list_screen.dart';
 import 'dashboard_screen.dart';
@@ -40,6 +46,17 @@ import 'dashboard_screen.dart';
 class HomeShell extends StatefulWidget {
   final ThemeController themeController;
   const HomeShell({super.key, required this.themeController});
+
+  /// Alias cortos de la paleta de comandos (`docs/INPUTS_MAP.md` §5):
+  /// `go:wm`, `go:wa`, `go:in`, `go:out`, `go:fleet`, `go:cfg`.
+  static const Map<String, String> aliasAcciones = {
+    'wm': 'pesaje_manual',
+    'wa': 'pesaje_automatico',
+    'in': 'entradas',
+    'out': 'salidas',
+    'fleet': 'camiones',
+    'cfg': 'configuracion',
+  };
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -168,9 +185,36 @@ class _HomeShellState extends State<HomeShell> {
     final alt = kb.isAltPressed;
 
     // ── Teclas de función (sin modificadores) ───────────────────────────────
+    //
+    // Las teclas de lectura de pantalla (F1, F5, F6) solo responden cuando el
+    // shell es la ruta visible: con una pantalla encima (p. ej. el formulario de
+    // pesaje, que registra F2..F6 propias) NO se interceptan. F2, F7, F8, F9,
+    // F10 y F11 son globales y no colisionan con el formulario. F3 y F4
+    // (capturar peso / tarar) las atiende el formulario de pesaje.
     if (event is KeyDownEvent && !ctrl && !alt) {
+      final enShell = _enShellVisible();
+      if (enShell && event.physicalKey == LogicalKeyboardKey.f1) {
+        _abrirNuevoPesaje();
+        return true;
+      }
       if (event.physicalKey == LogicalKeyboardKey.f2) {
         _abrirNuevoPesaje();
+        return true;
+      }
+      if (enShell && event.physicalKey == LogicalKeyboardKey.f5) {
+        _refrescarModuloActual();
+        return true;
+      }
+      if (enShell && event.physicalKey == LogicalKeyboardKey.f6) {
+        if (FocusSearchBus.instance.enfocar()) return true;
+        return false;
+      }
+      if (event.physicalKey == LogicalKeyboardKey.f7) {
+        _abrirNuevoVehiculo();
+        return true;
+      }
+      if (event.physicalKey == LogicalKeyboardKey.f8) {
+        _abrirNuevoConductor();
         return true;
       }
       if (event.physicalKey == LogicalKeyboardKey.f9) {
@@ -183,6 +227,10 @@ class _HomeShellState extends State<HomeShell> {
       }
       if (event.physicalKey == LogicalKeyboardKey.f11) {
         _alternarPantallaCompleta();
+        return true;
+      }
+      if (event.physicalKey == LogicalKeyboardKey.f12) {
+        _cancelarOperacion();
         return true;
       }
       if (key == LogicalKeyboardKey.escape) {
@@ -360,6 +408,90 @@ class _HomeShellState extends State<HomeShell> {
   void _toggleSidebar() =>
       setState(() => _sidebarVisible = !_sidebarVisible);
 
+  /// Despachador único de acciones `go:*` (sidebar, paleta, quick actions).
+  ///
+  /// Se mantiene una sola implementación para que el menú lateral, la paleta y
+  /// los atajos no diverjan. Las hojas que son páginas del shell se resuelven
+  /// por clave (`_claveAIndice`); el resto abre su pantalla o ejecuta la
+  /// acción correspondiente.
+  void ejecutarAccion(String comando) {
+    final partes = comando.split(':');
+    if (partes.first != 'go' || partes.length < 2) return;
+
+    final destino =
+        HomeShell.aliasAcciones[partes[1]] ?? partes[1];
+
+    switch (destino) {
+      // ── Páginas del shell (por clave o alias) ───────────────────────────
+      case 'inicio':
+      case 'terceros':
+      case 'clientes':
+      case 'proveedores':
+      case 'usuarios':
+      case 'camiones':
+      case 'conductores':
+      case 'transportes':
+      case 'categorias':
+      case 'productos':
+      case 'almacenes':
+      case 'kardex':
+      case 'entradas':
+      case 'salidas':
+      case 'reportes':
+      case 'dispositivos':
+      case 'seguridad':
+      case 'documentos_empresa':
+      case 'configuracion':
+      case 'diseno_ticket':
+        _irA(partes[1]);
+
+      // ── Módulos "operación" de pesaje ─────────────────────────────────────
+      case 'pesaje_automatico':
+        _irA('entradas');
+      case 'pesaje_manual':
+        _abrirNuevoPesaje();
+
+      // ── Hojas fuera del shell ────────────────────────────────────────────
+      case 'ajustes':
+        _abrirAjustesInventario();
+      case 'auditoria':
+        _abrirAuditoria();
+      case 'diagnostico':
+        _abrirDiagnostico();
+      case 'licencia':
+        _abrirLicencia();
+      case 'conexiones':
+        _abrirConexiones();
+      case 'ayuda':
+        _abrirAyuda();
+
+      // ── Búsquedas directas (paleta) ──────────────────────────────────────
+      case 'vehiculo':
+        _irA('camiones');
+      case 'conductor':
+        _irA('conductores');
+
+      default:
+        break;
+    }
+  }
+
+  /// `go:` de la paleta: `t:#123` busca boleto, `p:A12BC3` placa, `c:V12345678`
+  /// conductor. El parámetro es el texto a colocar en el buscador de destino.
+  void _buscarEn(String destino, String texto) {
+    switch (destino) {
+      case 't':
+        _irA('entradas');
+      case 'p':
+        _irA('entradas');
+      case 'c':
+        _irA('conductores');
+      default:
+        break;
+    }
+    FocusSearchBus.instance.registrarTexto(texto);
+  }
+
   /// Menú de navegación para móvil: bottom sheet con **todas** las acciones
   /// del rol (misma matriz que el sidebar de desktop, sin sidebar).
   void _mostrarMenuNavegacion() {
@@ -367,6 +499,7 @@ class _HomeShellState extends State<HomeShell> {
       context,
       selectedIndex: _index,
       onItemSelected: _cambiarIndice,
+      onAction: ejecutarAccion,
       onLogout: _cerrarSesion,
       onOpenConfig: _abrirConfiguracion,
     );
@@ -414,6 +547,51 @@ class _HomeShellState extends State<HomeShell> {
     final contexto = FocusManager.instance.primaryFocus?.context;
     if (contexto == null) return false;
     return contexto.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
+  /// ¿El shell es la ruta visible (no hay pantalla ni diálogo encima)?
+  /// Determina si las teclas de operación global deben appliquer.
+  bool _enShellVisible() {
+    final ruta = ModalRoute.of(context);
+    return ruta == null || ruta.isCurrent;
+  }
+
+  /// F12: cancela la operación en curso. Cierra el diálogo o la pantalla
+  /// abierta (descarta el boleto en borrador) y, si no hay nada que cerrar,
+  /// vuelve al Inicio.
+  void _cancelarOperacion() {
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+      return;
+    }
+    if (_index != 0) _irA('inicio');
+  }
+
+  /// F5: refresca los datos del módulo visible sin cambiar de pantalla.
+  void _refrescarModuloActual() {
+    final catalogosPorIndice = <int, CatalogResource>{
+      1: AppCatalogos.tercerosResource,
+      3: AppCatalogos.camionResource,
+      4: AppCatalogos.conductorResource,
+      5: AppCatalogos.transporteResource,
+      6: AppCatalogos.categoriaResource,
+      7: AppCatalogos.productoResource,
+      8: AppCatalogos.almacenResource,
+    };
+
+    final recurso = catalogosPorIndice[_index];
+    if (recurso != null) {
+      di.sl<CatalogCrudCubit>().cargar(recurso);
+      return;
+    }
+    if (_index == 0 || _index == 9 || _index == 10 || _index == 11) {
+      context.read<WeighingBloc>().add(const ListWeighingsEvent());
+      return;
+    }
+    // Los módulos restantes (reportes, seguridad, configuración…) se refrescan
+    // reconstruyendo la vista activa.
+    setState(() {});
   }
 
   void _volverAtras() {
@@ -540,6 +718,30 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _abrirDiagnostico() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SystemDiagnosticsScreen()),
+    );
+  }
+
+  void _abrirLicencia() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LicenseAdminScreen()),
+    );
+  }
+
+  /// Conexiones: misma pantalla del modo TRABAJADOR (host/puerto + /health),
+  /// reutilizando el cliente HTTP de la app.
+  void _abrirConexiones() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkerConnectionScreen(
+          clientFactory: (baseUrl) => ApiClient(baseUrl: baseUrl),
+        ),
+      ),
+    );
+  }
+
   Future<void> _cerrarSesion() async {
     final authBloc = context.read<AuthBloc>();
     final confirmar = await showDialog<bool>(
@@ -626,7 +828,19 @@ class _HomeShellState extends State<HomeShell> {
         _irA('dispositivos');
         return;
       default:
-        if (command.startsWith('go:')) _irA(command.substring(3));
+        if (command.startsWith('go:')) {
+          ejecutarAccion(command);
+          return;
+        }
+        // Búsqueda dirigida: `t:#123` (boleto), `p:A12BC3` (placa),
+        // `c:V12345678` (conductor). Se quita el prefijo `:` que la paleta
+        // usa para separar destino y parámetro.
+        final partes = command.split(':');
+        if (partes.length == 3 && partes[0] == 'buscar') {
+          _buscarEn(partes[1], partes[2]);
+        } else if (partes.length >= 2) {
+          _buscarEn(partes[0], partes.skip(1).join(':'));
+        }
     }
   }
 
@@ -709,6 +923,7 @@ class _HomeShellState extends State<HomeShell> {
                 AppSidebar(
                   selectedIndex: idx,
                   onItemSelected: _cambiarIndice,
+                  onAction: ejecutarAccion,
                   onCollapse: _toggleSidebar,
                   onLogout: _cerrarSesion,
                   onOpenConfig: _abrirConfiguracion,

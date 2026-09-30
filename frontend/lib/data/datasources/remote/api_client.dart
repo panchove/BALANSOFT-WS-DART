@@ -261,6 +261,23 @@ class ApiClient {
     return response.data as Map<String, dynamic>;
   }
 
+  /// Estado de sincronización con el servidor (GET /api/v1/sync/status).
+  /// Devuelve null si el backend no responde o no está en modo servidor.
+  Future<Map<String, dynamic>?> syncStatus() async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrl${ApiConstants.syncStatus}',
+        options: Options(receiveTimeout: const Duration(seconds: 8)),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+    } on DioException {
+      // Sin central configurado o sin red: se informa como "no disponible".
+    }
+    return null;
+  }
+
   /// Identidad de la estación local (GET /api/v1/identity).
   /// Lanza 404 si la cuenta aún no se ha configurado tras un login.
   Future<Map<String, dynamic>?> getIdentity({bool refresh = false}) async {

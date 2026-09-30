@@ -29,9 +29,15 @@ import '../providers/bloc/auth/auth_bloc.dart';
 ///   14 seguridad
 ///   15 documentos_empresa
 ///   16 configuracion
+///   17 diseno_ticket
+///
+/// Las hojas que **no** son páginas del shell (pesajes, ajustes de inventario,
+/// auditoría, diagnóstico, licencia, conexiones, ayuda) se declaran como nodos
+/// de acción (`accion`) y no ocupan índice: el shell ejecuta el comando.
 class AppSidebar extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
+  final void Function(String comando) onAction;
   final VoidCallback onCollapse;
   final VoidCallback onLogout;
   final VoidCallback onOpenConfig;
@@ -40,6 +46,7 @@ class AppSidebar extends StatefulWidget {
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
+    required this.onAction,
     required this.onCollapse,
     required this.onLogout,
     required this.onOpenConfig,
@@ -79,7 +86,24 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.dashboard,
           clave: 'inicio',
           index: 0,
+          shortcut: 'Ctrl+1',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
+        ),
+        MenuNode(
+          label: 'Pesaje Automático',
+          icon: Icons.smart_toy_outlined,
+          activeIcon: Icons.smart_toy,
+          accion: 'go:pesaje_automatico',
+          shortcut: 'F1',
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
+        ),
+        MenuNode(
+          label: 'Pesaje Manual',
+          icon: Icons.edit_note,
+          activeIcon: Icons.edit_note,
+          accion: 'go:pesaje_manual',
+          shortcut: 'F2',
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
           label: 'Terceros',
@@ -87,6 +111,7 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.people,
           clave: 'terceros',
           index: 1,
+          shortcut: 'Alt+C',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
@@ -99,6 +124,7 @@ class _AppSidebarState extends State<AppSidebar> {
               activeIcon: Icons.directions_car,
               clave: 'camiones',
               index: 3,
+              shortcut: 'Alt+F',
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             MenuNode(
@@ -107,6 +133,7 @@ class _AppSidebarState extends State<AppSidebar> {
               activeIcon: Icons.badge,
               clave: 'conductores',
               index: 4,
+              shortcut: 'F8',
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             MenuNode(
@@ -115,6 +142,7 @@ class _AppSidebarState extends State<AppSidebar> {
               activeIcon: Icons.fire_truck,
               clave: 'transportes',
               index: 5,
+              shortcut: 'Ctrl+⇧+T',
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
           ],
@@ -137,6 +165,7 @@ class _AppSidebarState extends State<AppSidebar> {
               activeIcon: Icons.inventory_2,
               clave: 'productos',
               index: 7,
+              shortcut: 'Alt+P',
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
             MenuNode(
@@ -145,6 +174,15 @@ class _AppSidebarState extends State<AppSidebar> {
               activeIcon: Icons.warehouse,
               clave: 'almacenes',
               index: 8,
+              shortcut: 'Alt+A',
+              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
+            ),
+            MenuNode(
+              label: 'Ajustes de Inventario',
+              icon: Icons.tune,
+              activeIcon: Icons.tune,
+              accion: 'go:ajustes',
+              shortcut: 'Ctrl+A',
               rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
             ),
           ],
@@ -155,13 +193,14 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.table_rows,
           clave: 'kardex',
           index: 9,
+          shortcut: 'Alt+K',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
       ],
     ),
     MenuNode(
       label: 'REPORTES',
-      isSectionHeader: true,
+      icon: Icons.bar_chart_outlined,
       children: [
         MenuNode(
           label: 'Ingresos (Entradas)',
@@ -169,6 +208,7 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.arrow_downward,
           clave: 'entradas',
           index: 10,
+          shortcut: 'Ctrl+2',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
@@ -177,21 +217,30 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.arrow_upward,
           clave: 'salidas',
           index: 11,
+          shortcut: 'Ctrl+3',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
-          label: 'Inventario (Stock Físico)',
-          icon: Icons.inventory_outlined,
-          activeIcon: Icons.inventory,
+          label: 'Reportes Generales',
+          icon: Icons.analytics_outlined,
+          activeIcon: Icons.analytics,
           clave: 'reportes',
           index: 12,
+          shortcut: 'Ctrl+4',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
+        ),
+        MenuNode(
+          label: 'Auditoría del Sistema',
+          icon: Icons.fact_check_outlined,
+          activeIcon: Icons.fact_check,
+          accion: 'go:auditoria',
+          rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
       ],
     ),
     MenuNode(
-      label: 'MANTENIMIENTO Y CONFIGURACIÓN',
-      isSectionHeader: true,
+      label: 'MANTENIMIENTO',
+      icon: Icons.settings_outlined,
       children: [
         MenuNode(
           label: 'Usuarios del Sistema',
@@ -199,15 +248,8 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.admin_panel_settings,
           clave: 'usuarios',
           index: 2,
+          shortcut: 'Alt+U',
           rolesPermitidos: {'ADMIN', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Dispositivos de Campo',
-          icon: Icons.sensors_outlined,
-          activeIcon: Icons.sensors,
-          clave: 'dispositivos',
-          index: 13,
-          rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
           label: 'Seguridad y Accesos',
@@ -215,6 +257,16 @@ class _AppSidebarState extends State<AppSidebar> {
           activeIcon: Icons.lock,
           clave: 'seguridad',
           index: 14,
+          shortcut: 'Alt+S',
+          rolesPermitidos: {'ADMIN'},
+        ),
+        MenuNode(
+          label: 'Dispositivos de Campo',
+          icon: Icons.sensors_outlined,
+          activeIcon: Icons.sensors,
+          clave: 'dispositivos',
+          index: 13,
+          shortcut: 'Alt+D',
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
@@ -234,12 +286,26 @@ class _AppSidebarState extends State<AppSidebar> {
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
-          label: 'Configuración General',
+          label: 'Configuración',
           icon: Icons.settings_outlined,
           activeIcon: Icons.settings,
           clave: 'configuracion',
           index: 16,
+          shortcut: 'Ctrl+,',
           rolesPermitidos: {'ADMIN'},
+        ),
+      ],
+    ),
+    MenuNode(
+      label: 'AYUDA Y SOPORTE',
+      isSectionHeader: true,
+      children: [
+        MenuNode(
+          label: 'Ayuda',
+          icon: Icons.help_outline,
+          activeIcon: Icons.help,
+          accion: 'go:ayuda',
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
         ),
       ],
     ),
@@ -248,7 +314,19 @@ class _AppSidebarState extends State<AppSidebar> {
   @override
   void initState() {
     super.initState();
+    _inicializarGruposColapsados(menuTree); // <-- Agregar esta línea
     _cargarAccesos();
+  }
+
+  void _inicializarGruposColapsados(List<MenuNode> nodes) {
+    for (final node in nodes) {
+      if (!node.isLeaf && !node.isSectionHeader) {
+        _collapsedGroups.add(node.label);
+      }
+      if (node.children != null) {
+        _inicializarGruposColapsados(node.children!);
+      }
+    }
   }
 
   Future<void> _cargarAccesos() async {
@@ -270,7 +348,7 @@ class _AppSidebarState extends State<AppSidebar> {
       child: SafeArea(
         right: false,
         child: SizedBox(
-          width: 280,
+          width: 380,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -315,8 +393,16 @@ class _AppSidebarState extends State<AppSidebar> {
 
     for (final node in nodes) {
       // Hoja: visible si su clave la permite el rol (repositorio con fallback
-      // a la matriz por defecto).
+      // a la matriz por defecto). Las hojas-acción no tienen clave de matriz:
+      // se filtran directamente por `rolesPermitidos`.
       if (node.isLeaf) {
+        if (node.accion != null) {
+          final roles = node.rolesPermitidos;
+          if (roles == null || roles.contains(rol.toUpperCase())) {
+            result.add(node);
+          }
+          continue;
+        }
         final clave = node.clave;
         if (clave == null || repo.puedeVer(rol, clave)) result.add(node);
         continue;
@@ -335,6 +421,8 @@ class _AppSidebarState extends State<AppSidebar> {
     const map = {
       'INFORMACIÓN': 'menu_informacion',
       'Inicio': 'menu_inicio',
+      'Pesaje Automático': 'menu_pesaje_automatico',
+      'Pesaje Manual': 'menu_pesaje_manual',
       'Terceros': 'menu_terceros',
       'Flota y Transporte': 'menu_flota_transporte',
       'Camiones / Vehículos': 'menu_camiones',
@@ -344,18 +432,23 @@ class _AppSidebarState extends State<AppSidebar> {
       'Categorías': 'menu_categorias',
       'Productos': 'menu_productos',
       'Almacenes': 'menu_almacenes',
+      'Ajustes de Inventario': 'menu_ajustes_inventario',
       'Kardex': 'menu_kardex',
       'REPORTES': 'menu_reportes',
       'Ingresos (Entradas)': 'menu_entradas',
       'Despachos (Salidas)': 'menu_salidas',
-      'Inventario (Stock Físico)': 'menu_stock',
-      'MANTENIMIENTO Y CONFIGURACIÓN': 'menu_mantenimiento',
+      'Reportes Generales': 'menu_reportes_generales',
+      'Auditoría del Sistema': 'menu_auditoria',
+      'MANTENIMIENTO': 'menu_mantenimiento',
       'Usuarios del Sistema': 'menu_usuarios',
       'Dispositivos de Campo': 'menu_dispositivos',
       'Seguridad y Accesos': 'menu_seguridad',
       'Empresa y Documentos': 'menu_documentos_empresa',
       'Diseño de Ticket': 'menu_diseno_ticket',
+      'Configuración': 'menu_configuracion',
       'Configuración General': 'menu_configuracion',
+      'AYUDA Y SOPORTE': 'menu_ayuda_soporte',
+      'Ayuda': 'menu_ayuda',
       'Cerrar Sesión': 'logout_btn',
     };
     final key = map[label];
@@ -399,17 +492,26 @@ class _AppSidebarState extends State<AppSidebar> {
         }
       } else if (node.isLeaf) {
         // El índice viene EXPLÍCITO en el nodo. No se calcula por orden.
-        final idx = node.index ?? 0;
-        final isSelected = widget.selectedIndex == idx;
+        // Las hojas-acción (`accion`) las ejecuta el shell.
+        final idx = node.index;
+        final isSelected = idx != null && widget.selectedIndex == idx;
 
         widgets.add(
           _SidebarLeafTile(
             icon: node.icon!,
             activeIcon: node.activeIcon ?? node.icon!,
             label: labelTraducido,
+            shortcut: node.shortcut,
             isSelected: isSelected,
             isSubItem: node.isSubItem,
-            onTap: () => widget.onItemSelected(idx),
+            onTap: () {
+              final accion = node.accion;
+              if (accion != null) {
+                widget.onAction(accion);
+              } else {
+                widget.onItemSelected(idx ?? 0);
+              }
+            },
           ),
         );
       } else {
@@ -430,7 +532,6 @@ class _AppSidebarState extends State<AppSidebar> {
             }),
           ),
         );
-
 
         if (!isCollapsed && node.children != null) {
           widgets.add(
@@ -479,6 +580,14 @@ class MenuNode {
   final int? index;
   final List<MenuNode>? children;
 
+  /// Comando de acción para hojas que **no** son páginas del shell (p. ej.
+  /// `go:diagnostico`). Si está presente, el shell ejecuta el comando en vez
+  /// de cambiar de índice.
+  final String? accion;
+
+  /// Etiqueta del atajo mostrado a la derecha (p. ej. `Ctrl + ,`).
+  final String? shortcut;
+
   /// Roles con acceso al módulo (matriz por defecto). Si es `null`, el nodo
   /// (grupo/encabezado) no filtra por rol y depende de sus hijos.
   final Set<String>? rolesPermitidos;
@@ -492,12 +601,17 @@ class MenuNode {
     this.clave,
     this.index,
     this.children,
+    this.accion,
+    this.shortcut,
     this.rolesPermitidos,
     this.isSectionHeader = false,
     this.isSubItem = false,
   });
 
   bool get isLeaf => children == null && !isSectionHeader;
+
+  /// Hoja que abre una pantalla del shell (tiene índice) vs. hoja-acción.
+  bool get isPage => isLeaf && accion == null;
 
   MenuNode copyWith({bool? isSubItem, List<MenuNode>? children}) {
     return MenuNode(
@@ -507,6 +621,8 @@ class MenuNode {
       clave: clave,
       index: index,
       children: children ?? this.children,
+      accion: accion,
+      shortcut: shortcut,
       rolesPermitidos: rolesPermitidos,
       isSectionHeader: isSectionHeader,
       isSubItem: isSubItem ?? this.isSubItem,
@@ -520,6 +636,7 @@ class _SidebarLeafTile extends StatelessWidget {
   final IconData icon;
   final IconData activeIcon;
   final String label;
+  final String? shortcut;
   final bool isSelected;
   final bool isSubItem;
   final VoidCallback onTap;
@@ -531,6 +648,7 @@ class _SidebarLeafTile extends StatelessWidget {
     required this.isSelected,
     required this.isSubItem,
     required this.onTap,
+    this.shortcut,
   });
 
   @override
@@ -581,6 +699,26 @@ class _SidebarLeafTile extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (shortcut != null) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        shortcut!,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontFamily: 'monospace',
+                          color: Colors.white.withValues(
+                            alpha: isSelected ? 0.85 : 0.4,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

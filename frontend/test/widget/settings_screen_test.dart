@@ -14,6 +14,7 @@ import 'package:balansoft_ws/domain/usecases/auth_usecases.dart';
 import 'package:balansoft_ws/injection.dart' as di;
 import 'package:balansoft_ws/presentation/providers/bloc/auth/auth_bloc.dart';
 import 'package:balansoft_ws/presentation/screens/settings/settings_screen.dart';
+import 'package:balansoft_ws/presentation/screens/settings/system_diagnostics_screen.dart';
 
 class _FakeAuthRepository implements IAuthRepository {
   @override
@@ -94,6 +95,35 @@ class _FakeApiClient extends ApiClient {
   }
 
   @override
+  Future<bool> health() async => true;
+
+  @override
+  Future<Map<String, dynamic>?> environment({String? baseUrl}) async => {
+        'estado': 'ok',
+        'sistema': {'app_role': 'local'},
+        'api': {'version': '1.2.8'},
+        'postgres': {
+          'conectado': true,
+          'esquema_listo': true,
+          'n_tablas': 22,
+          'bd': 'balansoft_ws_local',
+        },
+      };
+
+  @override
+  Future<Map<String, dynamic>> getLicenseSnapshot() async => {
+        'valid': true,
+        'status': 'ACTIVA',
+        'tier': 'CENTRAL PRO',
+      };
+
+  @override
+  Future<Map<String, dynamic>?> syncStatus() async => {
+        'pendientes': 0,
+        'ultima_sync': null,
+      };
+
+  @override
   Future<Map<String, dynamic>?> getIdentity({bool refresh = false}) async {
     return {
       'nombre_comercial': 'Transportes Balansoft C.A.',
@@ -115,8 +145,10 @@ class _FakeLocalStorage extends LocalStorage {
 }
 
 void main() {
-  setUp(() {
-    di.sl.reset();
+  // El reset de GetIt es asíncrono: sin await su continuación se ejecuta dentro
+  // del FakeAsync de testWidgets y borra los registros hechos a continuación.
+  setUp(() async {
+    await di.sl.reset();
     di.sl.registerLazySingleton<ApiClient>(
       () => _FakeApiClient(),
     );
@@ -185,5 +217,22 @@ void main() {
     await tester.pumpAndSettle();
     final ex = tester.takeException();
     expect(ex, isNull, reason: 'Overflow/layout en 200px de ancho: $ex');
+  });
+
+  testWidgets('el tile de diagnóstico abre la pantalla propia, no el asistente',
+      (tester) async {
+    await renderAt(tester, const Size(1280, 900));
+    await tester.scrollUntilVisible(
+      find.text('Diagnóstico del Sistema'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Diagnóstico del Sistema'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SystemDiagnosticsScreen), findsOneWidget);
+    expect(find.text('API local'), findsOneWidget);
+    // El asistente de instalación no debe aparecer desde Ajustes.
+    expect(find.textContaining('PostgreSQL'), findsNothing);
   });
 }

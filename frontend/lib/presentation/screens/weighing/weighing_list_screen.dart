@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/focus_search_bus.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../data/repositories/catalog_repository.dart';
 import '../../../domain/entities/weighing.dart';
@@ -34,6 +35,7 @@ class WeighingListScreen extends StatefulWidget {
 
 class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware {
   final _placaCtrl = TextEditingController();
+  final _busquedaFocus = FocusNode();
   DateTimeRange? _rango;
   String? _estado;
   bool _soloPendientes = false;
@@ -54,7 +56,9 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
   void initState() {
     super.initState();
     _estado = widget.estadoInicial;
-    _loadCatalogs();
+    FocusSearchBus.instance.registrar(_busquedaFocus);
+    final pendiente = FocusSearchBus.instance.tomarTexto();
+    if (pendiente != null) _placaCtrl.text = pendiente;
     _loadCatalogs();
     _recargarLista();
   }
@@ -84,6 +88,8 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
   @override
   void dispose() {
     weighingListRouteObserver.unsubscribe(this);
+    FocusSearchBus.instance.liberar(_busquedaFocus);
+    _busquedaFocus.dispose();
     _placaCtrl.dispose();
     super.dispose();
   }
@@ -338,9 +344,12 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
   }
 
   bool _passesFilters(dynamic w) {
-    if (_placaCtrl.text.isNotEmpty &&
-        !(w.idVehiculo ?? '').toLowerCase().contains(_placaCtrl.text.trim().toLowerCase())) {
-      return false;
+    final q = _placaCtrl.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      // El buscador acepta placa **o** número de boleto (`t:#123` en la paleta).
+      final placa = (w.idVehiculo ?? '').toLowerCase();
+      final boleto = (w.boleto ?? '').toLowerCase();
+      if (!placa.contains(q) && !boleto.contains(q)) return false;
     }
     if (_estado != null && w.estadoBoleto != _estado) return false;
     if (_producto != null && w.idProducto != _producto!.id) return false;
@@ -365,8 +374,9 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
             Expanded(
               child: TextField(
                 controller: _placaCtrl,
+                focusNode: _busquedaFocus,
                 decoration: InputDecoration(
-                  hintText: 'Buscar por placa',
+                  hintText: 'Buscar por placa o boleto',
                   prefixIcon: const Icon(Icons.search),
                   isDense: true,
                   border: OutlineInputBorder(

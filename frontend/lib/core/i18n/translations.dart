@@ -17,7 +17,8 @@ class AppTranslations {
       'language_en': 'Inglés (EN)',
       'language_pt': 'Portugués (PT)',
       'language_title': 'Idioma del Sistema',
-      'language_subtitle': 'Selecciona el idioma de la interfaz o detecta el del dispositivo.',
+      'language_subtitle':
+          'Selecciona el idioma de la interfaz o detecta el del dispositivo.',
       'language_changed': 'Idioma actualizado a ',
 
       // Estado de red
@@ -92,16 +93,22 @@ class AppTranslations {
       'menu_almacenes': 'Almacenes',
       'menu_kardex': 'Kardex',
       'menu_reportes': 'REPORTES',
+      'menu_pesaje_automatico': 'Pesaje Automático',
+      'menu_pesaje_manual': 'Pesaje Manual',
+      'menu_ajustes_inventario': 'Ajustes de Inventario',
+      'menu_reportes_generales': 'Reportes Generales',
+      'menu_auditoria': 'Auditoría del Sistema',
+      'menu_ayuda_soporte': 'AYUDA Y SOPORTE',
+      'menu_ayuda': 'Ayuda',
       'menu_entradas': 'Ingresos (Entradas)',
       'menu_salidas': 'Despachos (Salidas)',
-      'menu_stock': 'Inventario (Stock Físico)',
-      'menu_mantenimiento': 'MANTENIMIENTO Y CONFIGURACIÓN',
+      'menu_mantenimiento': 'MANTENIMIENTO',
       'menu_usuarios': 'Usuarios del Sistema',
       'menu_dispositivos': 'Dispositivos de Campo',
       'menu_seguridad': 'Seguridad y Accesos',
       'menu_documentos_empresa': 'Empresa y Documentos',
       'menu_diseno_ticket': 'Diseño de Ticket',
-      'menu_configuracion': 'Configuración General',
+      'menu_configuracion': 'Configuración',
 
       // Módulo de Pesaje y Formularios
       'weighing_title': 'Registro de Pesaje',
@@ -198,7 +205,8 @@ class AppTranslations {
       'btn_reset': 'Reiniciar',
       'reports_exported': 'Reporte exportado: ',
       'reports_export_error': 'No se pudo exportar: ',
-      'ticket_not_synced': 'Este pesaje aún no tiene número de boleto (pendiente de sincronizar).',
+      'ticket_not_synced':
+          'Este pesaje aún no tiene número de boleto (pendiente de sincronizar).',
       'ticket_invalid': 'El servidor no devolvió un archivo válido.',
       'ticket_title': 'BOLETO DE PESAJE DE BALANSOFT',
       'ticket_weight_reading': 'LECTURA DE PESOS',
@@ -241,22 +249,28 @@ class AppTranslations {
       'connection_unreachable': 'No se pudo conectar a la API local',
       'connections_saved': 'Conexiones guardadas',
       'connection_reset_installation': 'Reiniciar instalación',
-      'connection_reset_confirm': 'Se borrará la URL de la API local configurada y la app volverá al modo instalación (verificación de entorno). ¿Deseas continuar?',
+      'connection_reset_confirm':
+          'Se borrará la URL de la API local configurada y la app volverá al modo instalación (verificación de entorno). ¿Deseas continuar?',
       // ── Instalación y onboarding (docs/I18N_Y_ONBOARDING.md) ──────────────
       'setup_preferences_title': 'Configuración inicial',
-      'setup_preferences_subtitle': 'Elige el idioma y el tema de la aplicación. Podrás cambiarlos más adelante en Ajustes.',
+      'setup_preferences_subtitle':
+          'Elige el idioma y el tema de la aplicación. Podrás cambiarlos más adelante en Ajustes.',
       'setup_step_language': 'Idioma',
       'setup_step_theme': 'Tema de la aplicación',
       'setup_continue': 'Continuar',
-      'setup_language_note': 'El idioma elegido se usará también en los boletos y reportes impresos.',
+      'setup_language_note':
+          'El idioma elegido se usará también en los boletos y reportes impresos.',
       'setup_mode_title': '¿Cómo funcionará esta máquina?',
-      'setup_mode_subtitle': 'Elija si esta máquina será el Servidor de la cuenta o un Trabajador conectado a ese servidor.',
+      'setup_mode_subtitle':
+          'Elija si esta máquina será el Servidor de la cuenta o un Trabajador conectado a ese servidor.',
       'setup_mode_license_note':
           'Solo la máquina titular de la licencia puede instalarse como Servidor. Si la licencia ya fue activada en otro equipo, configure esta estación como Trabajador.',
       'setup_mode_server': 'Servidor Local',
-      'setup_mode_server_desc': 'Esta máquina alojará la base de datos local, se conectará a la balanza y procesará los pesajes. Es el equipo titular de la licencia.',
+      'setup_mode_server_desc':
+          'Esta máquina alojará la base de datos local, se conectará a la balanza y procesará los pesajes. Es el equipo titular de la licencia.',
       'setup_mode_client': 'Trabajador Local',
-      'setup_mode_client_desc': 'Esta máquina operará el sistema conectándose al Servidor de la cuenta en su red. No crea base de datos propia.',
+      'setup_mode_client_desc':
+          'Esta máquina operará el sistema conectándose al Servidor de la cuenta en su red. No crea base de datos propia.',
 
       // ── Paso 3: activación de la cuenta y verificación de licencia ──────────
       'activation_title': 'Activación de la cuenta',
@@ -296,14 +310,16 @@ class AppTranslations {
 
       // ── Configuración inicial tras el primer login (ADMIN) ──────────────────
       'initial_setup_title': 'Configuración inicial',
-      'initial_setup_welcome': 'Completemos los datos de tu empresa. Puedes omitirlos y completarlos después en Ajustes.',
+      'initial_setup_welcome':
+          'Completemos los datos de tu empresa. Puedes omitirlos y completarlos después en Ajustes.',
       'initial_setup_step_company': 'Datos de la empresa',
       'initial_setup_step_appearance': 'Formatos de exportación',
       'initial_setup_step_reports': 'Carpeta de reportes',
       'report_format_excel': 'Excel',
       'report_format_txt': 'Texto (TXT)',
       'setup_company_title': 'Datos de la empresa',
-      'setup_company_subtitle': 'Estos datos se guardan en la estación y se aplican al iniciar sesión, para que el sistema ya esté listo para operar.',
+      'setup_company_subtitle':
+          'Estos datos se guardan en la estación y se aplican al iniciar sesión, para que el sistema ya esté listo para operar.',
       'setup_company_finish': 'Guardar y continuar al inicio de sesión',
       'initial_setup_company_legal_name': 'Nombre fiscal o razón social',
       'initial_setup_company_name': 'Nombre comercial',
@@ -316,10 +332,13 @@ class AppTranslations {
       'initial_setup_ticket_format': 'Formato del boleto',
       'initial_setup_report_format': 'Formato de los reportes',
       'initial_setup_reports_folder': 'Carpeta donde se guardan los reportes',
-      'initial_setup_reports_folder_hint': 'Ruta local de esta estación (ej. /home/operador/Reportes o C:\\ReportesBalansoft)',
-      'initial_setup_use_default_folder': 'Usar la carpeta predeterminada del sistema',
+      'initial_setup_reports_folder_hint':
+          'Ruta local de esta estación (ej. /home/operador/Reportes o C:\\ReportesBalansoft)',
+      'initial_setup_use_default_folder':
+          'Usar la carpeta predeterminada del sistema',
       'initial_setup_folder_ok': 'Carpeta válida',
-      'initial_setup_folder_not_writable': 'La carpeta no existe o no permite escritura. Se usará la carpeta predeterminada.',
+      'initial_setup_folder_not_writable':
+          'La carpeta no existe o no permite escritura. Se usará la carpeta predeterminada.',
       'initial_setup_finish': 'Finalizar',
       'initial_setup_skip': 'Omitir por ahora',
       'initial_setup_saving': 'Guardando configuración...',
@@ -328,19 +347,115 @@ class AppTranslations {
       'initial_setup_reopen': 'Configuración inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture el peso y guarde',
       'weighing_save_first': 'Guarde el pesaje primero para imprimir',
-      'weighing_min_fields_required': 'Complete los campos mínimos para guardar',
+      'weighing_min_fields_required':
+          'Complete los campos mínimos para guardar',
       'weighing_exit_weight_prompt': 'Ingrese el Peso de Salida del vehículo',
       'weighing_back_to_entry': 'Volver a Entrada',
       'weighing_has_trailer': 'Tiene remolque',
+      // Captura guiada de dos pesos (cabina + remolque)
+      'weighing_weight_fixed': 'Peso fijado',
+      'weighing_capture_cabina_first': 'Primero capture el peso de la cabina',
+      'weighing_trailer_advance':
+          'Por favor avanzar un poco para pesar el remolque',
+      'weighing_trailer_advance_hint':
+          'Capture ahora el peso del remolque en el campo marcado',
+      'weighing_trailer_capture_here': 'Introduzca aquí el peso del remolque',
+      'weighing_cabina_registered': 'Cabina registrada',
+      'weighing_trailer_waiting':
+          'Esperando la lectura del remolque en la báscula',
+      'weighing_trailer_required': 'Falta capturar el peso del remolque',
+      'weighing_trailer_weight_ok': 'Pesos de cabina y remolque completos',
+      'weighing_capture_weight': 'Capturar peso',
+      'weighing_capture_weight_cab': 'Capturar peso de la cabina',
+      'weighing_capture_weight_rem': 'Capturar peso del remolque',
+      'weighing_capture_weight_redo': 'Volver a capturar',
+      'weighing_capture_required':
+          'Presione Capturar peso para fijar el peso antes de guardar',
+      'weighing_peso_cabina': 'Cabina',
+      'weighing_peso_remolque': 'Remolque',
+      'weighing_peso_neto': 'Neto',
+      'weighing_move_truck_title': 'Mueva el camión',
+      'weighing_move_truck_msg':
+          'Por favor mueva el camión y asegúrese de que el remolque quede en la posición correcta para capturar su peso. Al continuar, la báscula y el indicador de peso pasarán a capturar el peso del remolque.',
+      'weighing_continue': 'Continuar',
+      'weighing_trailer_ready':
+          'Peso del remolque capturado. Complete los demás datos y presione Enter para guardar.',
+      'weighing_confirm_save_title': '¿Desea confirmar guardar este peso?',
+      'weighing_confirm_save_mode': 'Pesaje de {0}',
+      'weighing_confirm_save_hint': 'Revise los datos antes de continuar.',
+      'weighing_yes_save': 'Sí, guardar',
+      'weighing_no_edit': 'No, seguir editando',
+      'weighing_print_question': '¿Desea imprimir?',
+      'weighing_print_msg':
+          'Pesaje {0} guardado correctamente. ¿Desea imprimir el boleto?',
+      'weighing_print_yes': 'Imprimir',
+      'weighing_unsaved_cancel_title': 'Confirmar cancelación',
+      'weighing_unsaved_cancel_msg':
+          'Hay información capturada que no ha sido guardada. Si cancela ahora, esos datos se perderán.\n\n¿Desea cancelar de todos modos?',
+      'weighing_unsaved_keep_editing': 'Seguir editando',
+      'weighing_unsaved_confirm_cancel': 'Sí, cancelar',
+      'weighing_unsaved_exit_title': 'Confirmar salida',
+      'weighing_unsaved_exit_msg':
+          'Hay información del pesaje que no ha sido guardada. Si sale ahora, esos datos se perderán.\n\n¿Desea salir de todos modos?',
+      'weighing_unsaved_cancel_btn': 'Cancelar',
+      'weighing_unsaved_confirm_exit': 'Sí, salir',
+      'weighing_new_weight': 'Nuevo peso',
+      'weighing_mode_entry': 'ENTRADA',
+      'weighing_mode_exit': 'SALIDA',
+      'weighing_search_weights': 'Buscar pesos',
+      'weighing_search_hint':
+          'Buscar por placa, boleto, conductor o producto...',
+      'weighing_search_all': 'Todos',
+      'weighing_search_open': 'Pendientes',
+      'weighing_search_closed': 'Cerrados',
+      'weighing_search_no_results': 'No se encontraron pesos',
+      'weighing_load_copy': 'Traer al formulario',
+      'weighing_copy_origin_label': 'Origen',
+      'weighing_copy_title': 'COPIA DEL PESAJE {0}',
+      'weighing_copy_hint':
+          'Está editando una copia. Al guardar se registra un peso NUEVO con la fecha y hora de hoy; el peso original NO se modifica.',
+      'weighing_copy_discard': 'Descartar copia',
+      'weighing_copy_loaded':
+          'Pesaje {0} copiado al formulario. Se guardará como peso nuevo con la fecha de hoy.',
+      // Conversión de unidades (DATOS ADICIONALES)
+      'measure_kg': 'Kilogramos',
+      'measure_litros': 'Litros',
+      'measure_galones': 'Galones',
+      'measure_toneladas': 'Toneladas',
+      'measure_unidades': 'Unidades (sacos)',
+      'measure_formula_kg': 'Peso neto en kg',
+      'measure_formula_litros': 'Peso neto (kg) / densidad',
+      'measure_formula_galones': 'Peso neto (kg) / densidad / 3.78541',
+      'measure_formula_toneladas': 'Peso neto (kg) / 1000',
+      'measure_formula_unidades':
+          'Peso neto (kg) / peso por unidad del producto',
+      'measure_missing_density': 'Indique la densidad del producto',
+      'measure_missing_peso_unidad':
+          'Configure el peso por unidad del producto',
+      'measure_density_hint': 'kg/L — se usa para litros y galones',
+      'measure_density_not_used': 'Solo se usa con líquidos',
+      'measure_pending_entry': 'Se calcula al registrar la salida (peso neto)',
+      'measure_pending_weight': 'Capture el peso de salida',
+      'measure_peso_unidad_from_product': 'Del producto seleccionado',
+      'measure_peso_unidad_missing':
+          'El producto no tiene peso por unidad configurado',
+      'measure_recalculate': 'Recalcular',
+      // Básculas por defecto de entradas y salidas
+      'default_scale_entry_hint':
+          'Báscula que se usará por defecto al registrar ENTRADAS',
+      'default_scale_exit_hint':
+          'Báscula que se usará por defecto al registrar SALIDAS',
       'weighing_both': 'Ambos',
-      'weighing_manual_weight_no_scale': 'Peso manual — no hay báscula conectada',
+      'weighing_manual_weight_no_scale':
+          'Peso manual — no hay báscula conectada',
       'weighing_manual_record': 'Registro manual del peso',
       'weighing_supervisor_admin_only': 'Solo Supervisor/Admin',
       'weighing_pending_for_exit': 'Boletos Pendientes para Salida',
       'weighing_no_pending': 'No hay boletos pendientes de salida.',
       'weighing_load_exit': 'Cargar Salida',
       'weighing_print_ticket': 'Imprimir / Reimprimir Ticket de Pesaje',
-      'weighing_no_tickets_to_print': 'No hay boletos registrados para imprimir.',
+      'weighing_no_tickets_to_print':
+          'No hay boletos registrados para imprimir.',
       'weighing_last': 'ÚLTIMO',
       'weighing_preview': 'Previsualizar',
       'ticket_pdf': 'Ticket PDF',
@@ -349,7 +464,8 @@ class AppTranslations {
       'register_new_entry': 'Registrar nueva entrada',
       'all': 'Todos',
       'detail_weighing': 'Detalle del Pesaje',
-      'cannot_load_weighing': 'No se puede cargar el pesaje: identificador vacío.',
+      'cannot_load_weighing':
+          'No se puede cargar el pesaje: identificador vacío.',
       'weighing_closed_ok': 'Pesaje cerrado exitosamente',
       'weighing_voided_ok': 'Pesaje anulado exitosamente',
       'retry': 'Reintentar',
@@ -362,14 +478,16 @@ class AppTranslations {
       'summary': 'Resumen',
       'config_hint': 'Configuración: disponible en el menú lateral (Ctrl+,)',
       'unsynced_weighings': 'Pesajes no sincronizados',
-      'sync_retries_exhausted': 'Se agotaron los reintentos. Corrija y elimine el pesaje local.',
+      'sync_retries_exhausted':
+          'Se agotaron los reintentos. Corrija y elimine el pesaje local.',
       'no_vehicles_in_yard': 'No hay vehículos en planta.',
       'report_error_prefix': 'No se pudo obtener el reporte:',
       'daily': 'Diario',
       'monthly': 'Mensual',
       'advanced': 'Avanzados',
       'volume_transported': 'Volumen movilizado',
-      'no_transporters_movements': 'Sin movimientos de transportistas en el rango.',
+      'no_transporters_movements':
+          'Sin movimientos de transportistas en el rango.',
       'volume_by_customer': 'Volumen por cliente/proveedor',
       'no_thirds_movements': 'Sin movimientos de terceros en el rango.',
       'weight_range_distribution': 'Distribución por rango de peso neto',
@@ -383,7 +501,8 @@ class AppTranslations {
       'every_5_minutes': 'Cada 5 minutos',
       'sync_now': 'Sincronizar ahora',
       'syncing': 'Sincronizando...',
-      'default_scale_pick': 'Selecciona la báscula que el sistema usará por defecto',
+      'default_scale_pick':
+          'Selecciona la báscula que el sistema usará por defecto',
       'not_selected': '— Sin seleccionar —',
       'no_scales_hint': 'No hay básculas registradas. Añádelas desde',
       'no_scales_available': 'Sin básculas disponibles',
@@ -396,16 +515,44 @@ class AppTranslations {
       'turn_on': 'Encender',
       'turn_off': 'Apagar',
       'start_with_computer': 'Iniciar al encender la computadora',
-      'autostart_desc': 'La estación arranca el WServer automáticamente para operar sin abrir el sistema.',
+      'autostart_desc':
+          'La estación arranca el WServer automáticamente para operar sin abrir el sistema.',
       'local_connection': 'Conexión local',
-      'local_connection_desc': 'URL de la API local de esta estación y verificación de conexión.',
+      'local_connection_desc':
+          'URL de la API local de esta estación y verificación de conexión.',
       'system_integrity': 'Integridad del Sistema',
-      'system_integrity_desc': 'Verificar PostgreSQL, puerto y drivers locales.',
+      'system_integrity_desc':
+          'Verificar PostgreSQL, puerto y drivers locales.',
+      'system_diagnostics': 'Diagnóstico del Sistema',
+      'system_diagnostics_desc':
+          'Revisar API local, base de datos, licencia, sincronización y versión.',
+      'diag_api': 'API local',
+      'diag_api_unreachable': 'Sin respuesta en',
+      'diag_db': 'Base de datos',
+      'diag_db_unreachable':
+          'No se pudo consultar el estado de la base de datos.',
+      'diag_db_incomplete': 'Conexión o esquema incompletos.',
+      'diag_tables': '{0} tablas',
+      'diag_license': 'Licencia',
+      'diag_expires': 'Vence {0}',
+      'diag_sync': 'Sincronización',
+      'diag_sync_offline': 'Servidor central no disponible.',
+      'diag_sync_detail': '{0} pendientes · última: {1}',
+      'diag_never': 'sin sincronizar',
+      'diag_version': 'Versión',
+      'diag_all_ok': 'Todo en orden. La estación está lista para operar.',
+      'diag_warnings': 'Operativo con {0} aviso(s).',
+      'diag_problems': 'Se detectaron {0} problema(s). Revisa los detalles.',
+      'diag_checking': 'Verificando…',
+      'diag_checked_at': 'Verificado el {0}',
+      'diag_unavailable': 'No disponible.',
       'path_copied': 'Ruta copiada al portapapeles',
       'reports_export_path': 'Ruta de exportación de reportes',
-      'reports_export_path_desc': 'Esta carpeta se utilizará para almacenar las exportaciones de Excel, PDF y Kardex en todas las sesiones y estaciones de esta cuenta.',
+      'reports_export_path_desc':
+          'Esta carpeta se utilizará para almacenar las exportaciones de Excel, PDF y Kardex en todas las sesiones y estaciones de esta cuenta.',
       'reset_default': 'Restablecer por defecto',
-      'set_by_admin': 'Configurada por el administrador para todas las sesiones',
+      'set_by_admin':
+          'Configurada por el administrador para todas las sesiones',
       'scanning_scales': 'Escaneando básculas conectadas…',
       'no_scales_found': 'No se detectaron básculas conectadas',
       'delete_scale': 'Eliminar báscula',
@@ -421,7 +568,8 @@ class AppTranslations {
       'connection': 'Conexión',
       'tcp': 'TCP',
       'serial': 'Serial',
-      'printer_active_saved': 'Impresora activa guardada exitosamente en el módulo de dispositivos',
+      'printer_active_saved':
+          'Impresora activa guardada exitosamente en el módulo de dispositivos',
       'printers_connected': 'Impresoras Conectadas al Sistema',
       'thermal_80': 'Térmica Directa POS-80 (EscPOS)',
       'thermal_58': 'Térmica Directa POS-58 (EscPOS)',
@@ -438,7 +586,8 @@ class AppTranslations {
       'select_product_warehouse': 'Selecciona producto y almacén',
       'register_inventory_adjust': 'Registrar ajuste de inventario',
       'admin_only': 'Solo administrador',
-      'adjust_desc': 'Registra entradas/salidas manuales por mermas, conteos físicos',
+      'adjust_desc':
+          'Registra entradas/salidas manuales por mermas, conteos físicos',
       'movement_type': 'Tipo de movimiento:',
       'ingreso': '✚ INGRESO',
       'despacho': '✖ DESPACHO',
@@ -457,7 +606,8 @@ class AppTranslations {
       'no_users_yet': 'No hay usuarios. Crea el primero.',
       'readonly_mode': 'Modo solo lectura',
       'access_matrix': 'Matriz de accesos por rol',
-      'access_matrix_desc': 'Toca una celda para cambiar el nivel de acceso del rol al módulo.',
+      'access_matrix_desc':
+          'Toca una celda para cambiar el nivel de acceso del rol al módulo.',
       'station_roles': 'Roles de la estación',
       'legend': 'Leyenda',
       'access_level': 'Nivel de acceso',
@@ -479,9 +629,11 @@ class AppTranslations {
       'take_photo': 'Tomar foto',
       'upload': 'Cargar',
       'port_type_protocol': 'Tipo / Protocolo de Puerto',
-      'setup_company_pending_hint': 'Los datos de la empresa se aplicarán al iniciar sesión',
+      'setup_company_pending_hint':
+          'Los datos de la empresa se aplicarán al iniciar sesión',
       'works_offline': 'Funciona sin conexión',
-      'ticket_design_saved': 'Diseño y estilización del boleto guardados exitosamente',
+      'ticket_design_saved':
+          'Diseño y estilización del boleto guardados exitosamente',
       'ticket_design_title': 'Diseño y Estilización del Ticket',
       'ticket_dimensions': 'Dimensiones del Boleto y Distribución por Hoja',
       'paper_letter': 'Carta / Letter (216x279 mm)',
@@ -505,28 +657,38 @@ class AppTranslations {
       'default_format': 'Formato por Defecto',
       'visual_styling': 'Estilización Visual y Contenido',
       'header_company': 'Encabezado y Datos de Empresa',
-      'header_company_desc': 'Muestra el título de la empresa, RIF y número de boleto',
+      'header_company_desc':
+          'Muestra el título de la empresa, RIF y número de boleto',
       'obs_details': 'Observaciones y Detalles del Peso',
-      'obs_details_desc': 'Muestra observaciones adicionales, transporte y conductor',
+      'obs_details_desc':
+          'Muestra observaciones adicionales, transporte y conductor',
       'test_print_ticket': 'Probar e Imprimir Boleto',
       'ticket_type': 'Tipo de Ticket',
-      'ticket_type_desc': 'Básico: solo datos esenciales. Avanzado: formulario completo, catálogos y control.',
+      'ticket_type_desc':
+          'Básico: solo datos esenciales. Avanzado: formulario completo, catálogos y control.',
       'basic_ticket': 'Básico',
       'advanced_ticket': 'Avanzado',
       'demo_company': 'VARIEDADES S&S',
-      'test_ticket_caption': 'Prueba de diseño y estilización del boleto de pesaje',
+      'test_ticket_caption':
+          'Prueba de diseño y estilización del boleto de pesaje',
       'sheet_1_short': '1 por hoja',
       'sheet_2_short': '2 por hoja',
       'sheet_3_short': '3 por hoja',
       'sheet_4_short': '4 por hoja',
-      'delete_series_confirm': '¿Eliminar la serie activa? Los boletos existentes conservan su número; solo deja de usarse para nuevos boletos.',
-      'doc_numbering_desc': 'Los boletos y tickets se numeran de forma correlativa con la serie seleccionada. Ejemplo: TA-00000001, TA-00000002, …. La numeración es única por empresa y el siguiente número se reserva al instante (FOR UPDATE), sin salteos ni duplicados.',
-      'no_series_yet_desc': 'Aún no hay series. Crea la primera abajo (solo ADMIN) para que los boletos puedan numerarse.',
-      'custom_series_desc': 'Cada serie es un modelo: nombre, prefijo y cantidad de dígitos. Al guardar, queda activa y pasa a numerar los próximos boletos.',
+      'delete_series_confirm':
+          '¿Eliminar la serie activa? Los boletos existentes conservan su número; solo deja de usarse para nuevos boletos.',
+      'doc_numbering_desc':
+          'Los boletos y tickets se numeran de forma correlativa con la serie seleccionada. Ejemplo: TA-00000001, TA-00000002, …. La numeración es única por empresa y el siguiente número se reserva al instante (FOR UPDATE), sin salteos ni duplicados.',
+      'no_series_yet_desc':
+          'Aún no hay series. Crea la primera abajo (solo ADMIN) para que los boletos puedan numerarse.',
+      'custom_series_desc':
+          'Cada serie es un modelo: nombre, prefijo y cantidad de dígitos. Al guardar, queda activa y pasa a numerar los próximos boletos.',
       'recover_password': 'Recuperar Contraseña',
-      'recovery_email_desc': 'Te enviaremos un enlace para restablecer tu contraseña',
+      'recovery_email_desc':
+          'Te enviaremos un enlace para restablecer tu contraseña',
       'check_email': 'Revisa tu correo',
-      'recovery_desc': 'Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña.',
+      'recovery_desc':
+          'Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña.',
       'back_home': 'Volver al inicio',
       'create_account': 'Crear Cuenta',
       'register_desc': 'Registra tu empresa y primer usuario',
@@ -535,7 +697,8 @@ class AppTranslations {
       'back_to_login': 'Volver a Iniciar Sesión',
       'db_conn_ok': '✅ Conexión exitosa. Base de datos inicializada.',
       'local_server_connection': 'Conexión al Servidor Local',
-      'db_creds_desc': 'Ingresa las credenciales del motor PostgreSQL (rol SuperAdmin o propietario) para que el sistema pueda crear la estructura inicial de la base de datos.',
+      'db_creds_desc':
+          'Ingresa las credenciales del motor PostgreSQL (rol SuperAdmin o propietario) para que el sistema pueda crear la estructura inicial de la base de datos.',
       'paper_thermal_80': '80mm Térmico',
       'paper_thermal_58': '58mm Térmico',
       'password_updated': 'Contraseña actualizada, inicia sesión',
@@ -549,21 +712,33 @@ class AppTranslations {
       'no_results': 'Sin resultados',
       'cant_parse_record': 'No se pudo interpretar el registro creado',
       'next_phase': 'PRÓXIMA FASE',
-      'printer_scan_done': 'Escanéo completado: 4 impresoras encontradas y listas para usar.',
-      'audit_states_desc': 'Todo cambio de estado en un pesaje (entrada, salida,',
-      'install_postgres_desc': 'Para que esta máquina funcione como Servidor Principal, debes instalar PostgreSQL (versión 14 o superior).\n\n En Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n En Windows: descarga el instalador oficial.\n\n Luego vuelve a ejecutar la verificación.',
-      'env_ready_db': 'Entorno listo. Continúa para configurar la conexión a la base de datos local.',
-      'ready_to_install_desc': 'Todo listo para instalar. Solo falta crear la base de datos local. Ingresa las credenciales de PostgreSQL (usuario con permisos de superusuario) y el sistema creará «balansoft_ws_local» con su esquema automáticamente.',
+      'printer_scan_done':
+          'Escanéo completado: 4 impresoras encontradas y listas para usar.',
+      'audit_states_desc':
+          'Todo cambio de estado en un pesaje (entrada, salida,',
+      'install_postgres_desc':
+          'Para que esta máquina funcione como Servidor Principal, debes instalar PostgreSQL (versión 14 o superior).\n\n En Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n En Windows: descarga el instalador oficial.\n\n Luego vuelve a ejecutar la verificación.',
+      'env_ready_db':
+          'Entorno listo. Continúa para configurar la conexión a la base de datos local.',
+      'ready_to_install_desc':
+          'Todo listo para instalar. Solo falta crear la base de datos local. Ingresa las credenciales de PostgreSQL (usuario con permisos de superusuario) y el sistema creará «balansoft_ws_local» con su esquema automáticamente.',
       'continue': 'Continuar',
-      'env_check_intro': 'Antes de usar la estación verificamos que el entorno esté listo: API local, PostgreSQL, conexión a la BD y drivers de balanza.',
-      'readonly_mode_desc': 'Modo solo lectura: solo el rol ADMIN puede modificar los accesos.',
-      'first_config_hint': 'Primera configuración: indica la URL de la API local de esta estación.',
-      'default_scale_pick_full': 'Selecciona la báscula que el sistema usará por defecto para todos los pesajes.',
-      'no_scales_hint_full': 'No hay básculas registradas. Añádelas desde Dispositivos → Añadir báscula.',
+      'env_check_intro':
+          'Antes de usar la estación verificamos que el entorno esté listo: API local, PostgreSQL, conexión a la BD y drivers de balanza.',
+      'readonly_mode_desc':
+          'Modo solo lectura: solo el rol ADMIN puede modificar los accesos.',
+      'first_config_hint':
+          'Primera configuración: indica la URL de la API local de esta estación.',
+      'default_scale_pick_full':
+          'Selecciona la báscula que el sistema usará por defecto para todos los pesajes.',
+      'no_scales_hint_full':
+          'No hay básculas registradas. Añádelas desde Dispositivos → Añadir báscula.',
       'logout': 'Cerrar Sesión',
       'help': 'Ayuda',
-      'support_full': 'El soporte está gestionado por el equipo BALANSOFT. Incluye instalación del cliente, configuración de básculas (serial/TCP), licencias y resolución de incidencias en campo.',
-      'docs_full': 'docs/PRD.md y docs/MODELO_ESTANDAR.md definen el comportamiento esperado del sistema.',
+      'support_full':
+          'El soporte está gestionado por el equipo BALANSOFT. Incluye instalación del cliente, configuración de básculas (serial/TCP), licencias y resolución de incidencias en campo.',
+      'docs_full':
+          'docs/PRD.md y docs/MODELO_ESTANDAR.md definen el comportamiento esperado del sistema.',
       'weighing_station': 'Estación de Pesaje',
     },
     'en': {
@@ -574,7 +749,8 @@ class AppTranslations {
       'language_en': 'English (EN)',
       'language_pt': 'Portuguese (PT)',
       'language_title': 'System Language',
-      'language_subtitle': 'Select the interface language or auto-detect from device.',
+      'language_subtitle':
+          'Select the interface language or auto-detect from device.',
       'language_changed': 'Language changed to ',
 
       // Network status
@@ -649,16 +825,22 @@ class AppTranslations {
       'menu_almacenes': 'Warehouses',
       'menu_kardex': 'Kardex',
       'menu_reportes': 'REPORTS',
+      'menu_pesaje_automatico': 'Automatic Weighing',
+      'menu_pesaje_manual': 'Manual Weighing',
+      'menu_ajustes_inventario': 'Inventory Adjustments',
+      'menu_reportes_generales': 'General Reports',
+      'menu_auditoria': 'System Audit',
+      'menu_ayuda_soporte': 'HELP AND SUPPORT',
+      'menu_ayuda': 'Help',
       'menu_entradas': 'Inbound (Entries)',
       'menu_salidas': 'Outbound (Dispatches)',
-      'menu_stock': 'Inventory (Physical Stock)',
-      'menu_mantenimiento': 'MAINTENANCE & CONFIGURATION',
+      'menu_mantenimiento': 'MAINTENANCE',
       'menu_usuarios': 'System Users',
       'menu_dispositivos': 'Field Devices',
       'menu_seguridad': 'Security & Permissions',
       'menu_documentos_empresa': 'Company & Documents',
       'menu_diseno_ticket': 'Ticket Design',
-      'menu_configuracion': 'General Settings',
+      'menu_configuracion': 'Settings',
 
       // Weighing Module & Forms
       'weighing_title': 'Weighing Record',
@@ -755,7 +937,8 @@ class AppTranslations {
       'btn_reset': 'Reset',
       'reports_exported': 'Report exported: ',
       'reports_export_error': 'Could not export: ',
-      'ticket_not_synced': 'This weighing has no ticket number yet (pending sync).',
+      'ticket_not_synced':
+          'This weighing has no ticket number yet (pending sync).',
       'ticket_invalid': 'The server did not return a valid file.',
       'ticket_title': 'BALANSOFT WEIGHING TICKET',
       'ticket_weight_reading': 'WEIGHT READING',
@@ -798,22 +981,28 @@ class AppTranslations {
       'connection_unreachable': 'Could not connect to the local API',
       'connections_saved': 'Connections saved',
       'connection_reset_installation': 'Reset installation',
-      'connection_reset_confirm': 'The configured local API URL will be cleared and the app will return to installation mode (environment check). Do you want to continue?',
+      'connection_reset_confirm':
+          'The configured local API URL will be cleared and the app will return to installation mode (environment check). Do you want to continue?',
       // ── Setup and onboarding (docs/I18N_Y_ONBOARDING.md) ────────────────────
       'setup_preferences_title': 'Initial setup',
-      'setup_preferences_subtitle': 'Choose the application language and theme. You can change them later in Settings.',
+      'setup_preferences_subtitle':
+          'Choose the application language and theme. You can change them later in Settings.',
       'setup_step_language': 'Language',
       'setup_step_theme': 'Application theme',
       'setup_continue': 'Continue',
-      'setup_language_note': 'The selected language is also used for printed tickets and reports.',
+      'setup_language_note':
+          'The selected language is also used for printed tickets and reports.',
       'setup_mode_title': 'How will this machine work?',
-      'setup_mode_subtitle': 'Choose whether this machine will be the account Server or a Worker connected to that server.',
+      'setup_mode_subtitle':
+          'Choose whether this machine will be the account Server or a Worker connected to that server.',
       'setup_mode_license_note':
           'Only the machine holding the license can be installed as Server. If the license was already activated on another device, set this station up as a Worker.',
       'setup_mode_server': 'Local Server',
-      'setup_mode_server_desc': 'This machine will host the local database, connect to the scale and process the weighings. It is the device holding the license.',
+      'setup_mode_server_desc':
+          'This machine will host the local database, connect to the scale and process the weighings. It is the device holding the license.',
       'setup_mode_client': 'Local Worker',
-      'setup_mode_client_desc': 'This machine will run the system by connecting to the account Server on your network. It does not create its own database.',
+      'setup_mode_client_desc':
+          'This machine will run the system by connecting to the account Server on your network. It does not create its own database.',
 
       // ── Step 3: account activation and license verification ────────────────
       'activation_title': 'Account activation',
@@ -853,14 +1042,16 @@ class AppTranslations {
 
       // ── Initial configuration after the first login (ADMIN) ──────────────────
       'initial_setup_title': 'Initial configuration',
-      'initial_setup_welcome': '"Let\'s complete your company data. You can skip it and finish it later in Settings."',
+      'initial_setup_welcome':
+          '"Let\'s complete your company data. You can skip it and finish it later in Settings."',
       'initial_setup_step_company': 'Company data',
       'initial_setup_step_appearance': 'Export formats',
       'initial_setup_step_reports': 'Reports folder',
       'report_format_excel': 'Excel',
       'report_format_txt': 'Text (TXT)',
       'setup_company_title': 'Company data',
-      'setup_company_subtitle': 'This data is saved on the station and applied when you sign in, so the system is ready to operate right away.',
+      'setup_company_subtitle':
+          'This data is saved on the station and applied when you sign in, so the system is ready to operate right away.',
       'setup_company_finish': 'Save and continue to sign in',
       'initial_setup_company_legal_name': 'Legal name',
       'initial_setup_company_name': 'Trade name',
@@ -873,10 +1064,12 @@ class AppTranslations {
       'initial_setup_ticket_format': 'Ticket format',
       'initial_setup_report_format': 'Report format',
       'initial_setup_reports_folder': 'Folder where reports are saved',
-      'initial_setup_reports_folder_hint': 'Local path of this station (e.g. /home/operator/Reports or C:\\ReportsBalansoft)',
+      'initial_setup_reports_folder_hint':
+          'Local path of this station (e.g. /home/operator/Reports or C:\\ReportsBalansoft)',
       'initial_setup_use_default_folder': 'Use the system default folder',
       'initial_setup_folder_ok': 'Folder is valid',
-      'initial_setup_folder_not_writable': 'The folder does not exist or is not writable. The default folder will be used.',
+      'initial_setup_folder_not_writable':
+          'The folder does not exist or is not writable. The default folder will be used.',
       'initial_setup_finish': 'Finish',
       'initial_setup_skip': 'Skip for now',
       'initial_setup_saving': 'Saving configuration...',
@@ -889,6 +1082,96 @@ class AppTranslations {
       'weighing_exit_weight_prompt': 'Enter the vehicle exit weight',
       'weighing_back_to_entry': 'Back to Entry',
       'weighing_has_trailer': 'Has trailer',
+      // Guided two-step capture (cab + trailer)
+      'weighing_weight_fixed': 'Weight fixed',
+      'weighing_capture_cabina_first': 'Capture the cab weight first',
+      'weighing_trailer_advance':
+          'Please move forward a little to weigh the trailer',
+      'weighing_trailer_advance_hint':
+          'Now capture the trailer weight in the highlighted field',
+      'weighing_trailer_capture_here': 'Enter the trailer weight here',
+      'weighing_cabina_registered': 'Cab registered',
+      'weighing_trailer_waiting':
+          'Waiting for the trailer reading on the scale',
+      'weighing_trailer_required': 'The trailer weight is still missing',
+      'weighing_trailer_weight_ok': 'Cab and trailer weights are complete',
+      'weighing_capture_weight': 'Capture weight',
+      'weighing_capture_weight_cab': 'Capture cab weight',
+      'weighing_capture_weight_rem': 'Capture trailer weight',
+      'weighing_capture_weight_redo': 'Capture again',
+      'weighing_capture_required':
+          'Press Capture weight to fix the weight before saving',
+      'weighing_peso_cabina': 'Cab',
+      'weighing_peso_remolque': 'Trailer',
+      'weighing_peso_neto': 'Net',
+      'weighing_move_truck_title': 'Move the truck',
+      'weighing_move_truck_msg':
+          'Please move the truck and make sure the trailer is in the right position to capture its weight. On continue, the scale and the weight indicator will capture the trailer weight.',
+      'weighing_continue': 'Continue',
+      'weighing_trailer_ready':
+          'Trailer weight captured. Fill in the remaining data and press Enter to save.',
+      'weighing_confirm_save_title': 'Do you confirm saving this weight?',
+      'weighing_confirm_save_mode': 'Weighing type: {0}',
+      'weighing_confirm_save_hint': 'Review the data before continuing.',
+      'weighing_yes_save': 'Yes, save',
+      'weighing_no_edit': 'No, keep editing',
+      'weighing_print_question': 'Do you want to print?',
+      'weighing_print_msg':
+          'Weighing {0} saved successfully. Do you want to print the ticket?',
+      'weighing_print_yes': 'Print',
+      'weighing_unsaved_cancel_title': 'Confirm cancellation',
+      'weighing_unsaved_cancel_msg':
+          'There is captured information that has not been saved. If you cancel now, that data will be lost.\n\nDo you want to cancel anyway?',
+      'weighing_unsaved_keep_editing': 'Keep editing',
+      'weighing_unsaved_confirm_cancel': 'Yes, cancel',
+      'weighing_unsaved_exit_title': 'Confirm exit',
+      'weighing_unsaved_exit_msg':
+          'There is weighing information that has not been saved. If you exit now, that data will be lost.\n\nDo you want to exit anyway?',
+      'weighing_unsaved_cancel_btn': 'Cancel',
+      'weighing_unsaved_confirm_exit': 'Yes, exit',
+      'weighing_new_weight': 'New weight',
+      'weighing_mode_entry': 'ENTRY',
+      'weighing_mode_exit': 'EXIT',
+      'weighing_search_weights': 'Search weights',
+      'weighing_search_hint': 'Search by plate, ticket, driver or product...',
+      'weighing_search_all': 'All',
+      'weighing_search_open': 'Pending',
+      'weighing_search_closed': 'Closed',
+      'weighing_search_no_results': 'No weights found',
+      'weighing_load_copy': 'Bring to form',
+      'weighing_copy_origin_label': 'Origin',
+      'weighing_copy_title': 'COPY OF WEIGHING {0}',
+      'weighing_copy_hint':
+          'You are editing a copy. Saving registers a NEW weight with today date and time; the original weight is NOT modified.',
+      'weighing_copy_discard': 'Discard copy',
+      'weighing_copy_loaded':
+          'Weighing {0} copied to the form. It will be saved as a new weight with today date.',
+      // Unit conversion (ADDITIONAL DATA)
+      'measure_kg': 'Kilograms',
+      'measure_litros': 'Liters',
+      'measure_galones': 'Gallons',
+      'measure_toneladas': 'Metric tons',
+      'measure_unidades': 'Units (bags)',
+      'measure_formula_kg': 'Net weight in kg',
+      'measure_formula_litros': 'Net weight (kg) / density',
+      'measure_formula_galones': 'Net weight (kg) / density / 3.78541',
+      'measure_formula_toneladas': 'Net weight (kg) / 1000',
+      'measure_formula_unidades': 'Net weight (kg) / product unit weight',
+      'measure_missing_density': 'Enter the product density',
+      'measure_missing_peso_unidad': 'Set the product unit weight',
+      'measure_density_hint': 'kg/L — used for liters and gallons',
+      'measure_density_not_used': 'Only used for liquids',
+      'measure_pending_entry':
+          'Calculated when the exit is registered (net weight)',
+      'measure_pending_weight': 'Capture the exit weight',
+      'measure_peso_unidad_from_product': 'From the selected product',
+      'measure_peso_unidad_missing':
+          'The product has no unit weight configured',
+      'measure_recalculate': 'Recalculate',
+      // Default scales for entries and exits
+      'default_scale_entry_hint':
+          'Scale used by default when registering ENTRIES',
+      'default_scale_exit_hint': 'Scale used by default when registering EXITS',
       'weighing_both': 'Both',
       'weighing_manual_weight_no_scale': 'Manual weight — no scale connected',
       'weighing_manual_record': 'Manual weight entry',
@@ -897,7 +1180,8 @@ class AppTranslations {
       'weighing_no_pending': 'There are no pending exit tickets.',
       'weighing_load_exit': 'Load Exit',
       'weighing_print_ticket': 'Print / Reprint Weighing Ticket',
-      'weighing_no_tickets_to_print': 'There are no registered tickets to print.',
+      'weighing_no_tickets_to_print':
+          'There are no registered tickets to print.',
       'weighing_last': 'LATEST',
       'weighing_preview': 'Preview',
       'ticket_pdf': 'PDF ticket',
@@ -919,7 +1203,8 @@ class AppTranslations {
       'summary': 'Summary',
       'config_hint': 'Settings: available in the sidebar (Ctrl+,)',
       'unsynced_weighings': 'Unsynced weighings',
-      'sync_retries_exhausted': 'Retries exhausted. Fix it and delete the local weighing.',
+      'sync_retries_exhausted':
+          'Retries exhausted. Fix it and delete the local weighing.',
       'no_vehicles_in_yard': 'No vehicles on site.',
       'report_error_prefix': 'Could not get the report:',
       'daily': 'Daily',
@@ -953,14 +1238,39 @@ class AppTranslations {
       'turn_on': 'Turn on',
       'turn_off': 'Turn off',
       'start_with_computer': 'Start when the computer turns on',
-      'autostart_desc': 'The station starts WServer automatically so it can operate without opening the system.',
+      'autostart_desc':
+          'The station starts WServer automatically so it can operate without opening the system.',
       'local_connection': 'Local connection',
-      'local_connection_desc': 'Local API URL of this station and connection check.',
+      'local_connection_desc':
+          'Local API URL of this station and connection check.',
       'system_integrity': 'System Integrity',
       'system_integrity_desc': 'Verify PostgreSQL, port and local drivers.',
+      'system_diagnostics': 'System Diagnostics',
+      'system_diagnostics_desc':
+          'Check local API, database, license, sync and version.',
+      'diag_api': 'Local API',
+      'diag_api_unreachable': 'No response at',
+      'diag_db': 'Database',
+      'diag_db_unreachable': 'Could not read the database status.',
+      'diag_db_incomplete': 'Connection or schema incomplete.',
+      'diag_tables': '{0} tables',
+      'diag_license': 'License',
+      'diag_expires': 'Expires {0}',
+      'diag_sync': 'Synchronization',
+      'diag_sync_offline': 'Central server unavailable.',
+      'diag_sync_detail': '{0} pending · last: {1}',
+      'diag_never': 'never synced',
+      'diag_version': 'Version',
+      'diag_all_ok': 'Everything is fine. The station is ready to operate.',
+      'diag_warnings': 'Operational with {0} warning(s).',
+      'diag_problems': '{0} problem(s) detected. Review the details.',
+      'diag_checking': 'Checking…',
+      'diag_checked_at': 'Checked on {0}',
+      'diag_unavailable': 'Unavailable.',
       'path_copied': 'Path copied to clipboard',
       'reports_export_path': 'Reports export path',
-      'reports_export_path_desc': 'This folder stores the Excel, PDF and Kardex exports for all sessions and stations of this account.',
+      'reports_export_path_desc':
+          'This folder stores the Excel, PDF and Kardex exports for all sessions and stations of this account.',
       'reset_default': 'Reset to default',
       'set_by_admin': 'Set by the administrator for all sessions',
       'scanning_scales': 'Scanning connected scales…',
@@ -978,7 +1288,8 @@ class AppTranslations {
       'connection': 'Connection',
       'tcp': 'TCP',
       'serial': 'Serial',
-      'printer_active_saved': 'Active printer saved successfully in the devices module',
+      'printer_active_saved':
+          'Active printer saved successfully in the devices module',
       'printers_connected': 'Printers Connected to the System',
       'thermal_80': 'Direct Thermal POS-80 (EscPOS)',
       'thermal_58': 'Direct Thermal POS-58 (EscPOS)',
@@ -1014,7 +1325,8 @@ class AppTranslations {
       'no_users_yet': 'No users. Create the first one.',
       'readonly_mode': 'Read-only mode',
       'access_matrix': 'Access matrix by role',
-      'access_matrix_desc': 'Tap a cell to change the role access level for the module.',
+      'access_matrix_desc':
+          'Tap a cell to change the role access level for the module.',
       'station_roles': 'Station roles',
       'legend': 'Legend',
       'access_level': 'Access level',
@@ -1036,7 +1348,8 @@ class AppTranslations {
       'take_photo': 'Take photo',
       'upload': 'Upload',
       'port_type_protocol': 'Port Type / Protocol',
-      'setup_company_pending_hint': 'Company details will be applied when you sign in',
+      'setup_company_pending_hint':
+          'Company details will be applied when you sign in',
       'works_offline': 'Works offline',
       'ticket_design_saved': 'Ticket design and styling saved successfully',
       'ticket_design_title': 'Ticket Design and Styling',
@@ -1067,7 +1380,8 @@ class AppTranslations {
       'obs_details_desc': 'Shows additional notes, transport and driver',
       'test_print_ticket': 'Test and Print Ticket',
       'ticket_type': 'Ticket Type',
-      'ticket_type_desc': 'Basic: essential data only. Advanced: full form, catalogs and control.',
+      'ticket_type_desc':
+          'Basic: essential data only. Advanced: full form, catalogs and control.',
       'basic_ticket': 'Basic',
       'advanced_ticket': 'Advanced',
       'demo_company': 'VARIEDADES S&S',
@@ -1076,14 +1390,19 @@ class AppTranslations {
       'sheet_2_short': '2 per sheet',
       'sheet_3_short': '3 per sheet',
       'sheet_4_short': '4 per sheet',
-      'delete_series_confirm': 'Delete the active series? Existing tickets keep their number; it just stops being used for new tickets.',
-      'doc_numbering_desc': 'Tickets are numbered consecutively using the selected series. Example: TA-00000001, TA-00000002, …. Numbering is unique per company and the next number is reserved instantly (FOR UPDATE), with no gaps or duplicates.',
-      'no_series_yet_desc': 'There are no series yet. Create the first one below (ADMIN only) so tickets can be numbered.',
-      'custom_series_desc': 'Each series is a template: name, prefix and digit count. When saved it becomes active and starts numbering the next tickets.',
+      'delete_series_confirm':
+          'Delete the active series? Existing tickets keep their number; it just stops being used for new tickets.',
+      'doc_numbering_desc':
+          'Tickets are numbered consecutively using the selected series. Example: TA-00000001, TA-00000002, …. Numbering is unique per company and the next number is reserved instantly (FOR UPDATE), with no gaps or duplicates.',
+      'no_series_yet_desc':
+          'There are no series yet. Create the first one below (ADMIN only) so tickets can be numbered.',
+      'custom_series_desc':
+          'Each series is a template: name, prefix and digit count. When saved it becomes active and starts numbering the next tickets.',
       'recover_password': 'Recover Password',
       'recovery_email_desc': 'We will send you a link to reset your password',
       'check_email': 'Check your email',
-      'recovery_desc': 'If an account exists with that email, you will receive a link to reset your password.',
+      'recovery_desc':
+          'If an account exists with that email, you will receive a link to reset your password.',
       'back_home': 'Back to start',
       'create_account': 'Create Account',
       'register_desc': 'Register your company and first user',
@@ -1092,7 +1411,8 @@ class AppTranslations {
       'back_to_login': 'Back to Sign In',
       'db_conn_ok': '✅ Connection successful. Database initialized.',
       'local_server_connection': 'Connection to the Local Server',
-      'db_creds_desc': 'Enter the PostgreSQL engine credentials (SuperAdmin role or owner) so the system can create the initial database structure.',
+      'db_creds_desc':
+          'Enter the PostgreSQL engine credentials (SuperAdmin role or owner) so the system can create the initial database structure.',
       'paper_thermal_80': '80mm Thermal',
       'paper_thermal_58': '58mm Thermal',
       'password_updated': 'Password updated, sign in',
@@ -1108,19 +1428,29 @@ class AppTranslations {
       'next_phase': 'NEXT PHASE',
       'printer_scan_done': 'Scan completed: 4 printers found and ready to use.',
       'audit_states_desc': 'Every weighing state change (entry, exit,',
-      'install_postgres_desc': 'For this machine to work as the Main Server you must install PostgreSQL (version 14 or later).\n\n On Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n On Windows: download the official installer.\n\n Then run the verification again.',
-      'env_ready_db': 'Environment ready. Continue to configure the connection to the local database.',
-      'ready_to_install_desc': 'Everything is ready to install. Only the local database is missing. Enter the PostgreSQL credentials (a user with superuser rights) and the system will create «balansoft_ws_local» with its schema automatically.',
+      'install_postgres_desc':
+          'For this machine to work as the Main Server you must install PostgreSQL (version 14 or later).\n\n On Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n On Windows: download the official installer.\n\n Then run the verification again.',
+      'env_ready_db':
+          'Environment ready. Continue to configure the connection to the local database.',
+      'ready_to_install_desc':
+          'Everything is ready to install. Only the local database is missing. Enter the PostgreSQL credentials (a user with superuser rights) and the system will create «balansoft_ws_local» with its schema automatically.',
       'continue': 'Continue',
-      'env_check_intro': 'Before using the station we verify that the environment is ready: local API, PostgreSQL, database connection and scale drivers.',
-      'readonly_mode_desc': 'Read-only mode: only the ADMIN role can modify the accesses.',
-      'first_config_hint': 'First configuration: enter the local API URL of this station.',
-      'default_scale_pick_full': 'Select the scale the system will use by default for all weighings.',
-      'no_scales_hint_full': 'No scales registered. Add them from Devices → Add scale.',
+      'env_check_intro':
+          'Before using the station we verify that the environment is ready: local API, PostgreSQL, database connection and scale drivers.',
+      'readonly_mode_desc':
+          'Read-only mode: only the ADMIN role can modify the accesses.',
+      'first_config_hint':
+          'First configuration: enter the local API URL of this station.',
+      'default_scale_pick_full':
+          'Select the scale the system will use by default for all weighings.',
+      'no_scales_hint_full':
+          'No scales registered. Add them from Devices → Add scale.',
       'logout': 'Log Out',
       'help': 'Help',
-      'support_full': 'Support is handled by the BALANSOFT team. It covers client installation, scale configuration (serial/TCP), licenses and on-site issue resolution.',
-      'docs_full': 'docs/PRD.md and docs/MODELO_ESTANDAR.md define the expected system behavior.',
+      'support_full':
+          'Support is handled by the BALANSOFT team. It covers client installation, scale configuration (serial/TCP), licenses and on-site issue resolution.',
+      'docs_full':
+          'docs/PRD.md and docs/MODELO_ESTANDAR.md define the expected system behavior.',
       'weighing_station': 'Weighing Station',
     },
     'pt': {
@@ -1131,7 +1461,8 @@ class AppTranslations {
       'language_en': 'Inglês (EN)',
       'language_pt': 'Português (PT)',
       'language_title': 'Idioma do Sistema',
-      'language_subtitle': 'Selecione o idioma da interface ou detecte pelo dispositivo.',
+      'language_subtitle':
+          'Selecione o idioma da interface ou detecte pelo dispositivo.',
       'language_changed': 'Idioma alterado para ',
 
       // Status de rede
@@ -1206,16 +1537,22 @@ class AppTranslations {
       'menu_almacenes': 'Armazéns',
       'menu_kardex': 'Kardex',
       'menu_reportes': 'RELATÓRIOS',
+      'menu_pesaje_automatico': 'Pesagem Automática',
+      'menu_pesaje_manual': 'Pesagem Manual',
+      'menu_ajustes_inventario': 'Ajustes de Inventário',
+      'menu_reportes_generales': 'Relatórios Gerais',
+      'menu_auditoria': 'Auditoria do Sistema',
+      'menu_ayuda_soporte': 'AJUDA E SUPORTE',
+      'menu_ayuda': 'Ajuda',
       'menu_entradas': 'Entradas',
       'menu_salidas': 'Saídas (Expedição)',
-      'menu_stock': 'Estoque Físico',
-      'menu_mantenimiento': 'MANUTENÇÃO E CONFIGURAÇÃO',
+      'menu_mantenimiento': 'MANUTENÇÃO',
       'menu_usuarios': 'Usuários do Sistema',
       'menu_dispositivos': 'Dispositivos de Campo',
       'menu_seguridad': 'Segurança e Acessos',
       'menu_documentos_empresa': 'Empresa e Documentos',
       'menu_diseno_ticket': 'Design do Bilhete',
-      'menu_configuracion': 'Configurações Gerais',
+      'menu_configuracion': 'Configurações',
 
       // Módulo de Pesagem e Formulários
       'weighing_title': 'Registro de Pesagem',
@@ -1312,7 +1649,8 @@ class AppTranslations {
       'btn_reset': 'Reiniciar',
       'reports_exported': 'Relatório exportado: ',
       'reports_export_error': 'Não foi possível exportar: ',
-      'ticket_not_synced': 'Esta pesagem ainda não tem número de bilhete (pendente de sincronização).',
+      'ticket_not_synced':
+          'Esta pesagem ainda não tem número de bilhete (pendente de sincronização).',
       'ticket_invalid': 'O servidor não retornou um arquivo válido.',
       'ticket_title': 'BOLETO DE PESAGEM BALANSOFT',
       'ticket_weight_reading': 'LEITURA DE PESOS',
@@ -1355,22 +1693,28 @@ class AppTranslations {
       'connection_unreachable': 'Não foi possível conectar à API local',
       'connections_saved': 'Conexões salvas',
       'connection_reset_installation': 'Reinstalar configuração',
-      'connection_reset_confirm': 'A URL da API local configurada será apagada e o aplicativo voltará ao modo de instalação (verificação de ambiente). Deseja continuar?',
+      'connection_reset_confirm':
+          'A URL da API local configurada será apagada e o aplicativo voltará ao modo de instalação (verificação de ambiente). Deseja continuar?',
       // ── Instalação e onboarding (docs/I18N_Y_ONBOARDING.md) ────────────────
       'setup_preferences_title': 'Configuração inicial',
-      'setup_preferences_subtitle': 'Escolha o idioma e o tema do aplicativo. Você pode alterá-los depois em Ajustes.',
+      'setup_preferences_subtitle':
+          'Escolha o idioma e o tema do aplicativo. Você pode alterá-los depois em Ajustes.',
       'setup_step_language': 'Idioma',
       'setup_step_theme': 'Tema do aplicativo',
       'setup_continue': 'Continuar',
-      'setup_language_note': 'O idioma escolhido também será usado nos bilhetes e relatórios impressos.',
+      'setup_language_note':
+          'O idioma escolhido também será usado nos bilhetes e relatórios impressos.',
       'setup_mode_title': 'Como esta máquina funcionará?',
-      'setup_mode_subtitle': 'Escolha se esta máquina será o Servidor da conta ou um Trabalhador conectado a esse servidor.',
+      'setup_mode_subtitle':
+          'Escolha se esta máquina será o Servidor da conta ou um Trabalhador conectado a esse servidor.',
       'setup_mode_license_note':
           'Somente a máquina titular da licença pode ser instalada como Servidor. Se a licença já foi ativada em outro equipamento, configure esta estação como Trabalhador.',
       'setup_mode_server': 'Servidor Local',
-      'setup_mode_server_desc': 'Esta máquina hospedará o banco de dados local, conectará à balança e processará as pesagens. É o equipamento titular da licença.',
+      'setup_mode_server_desc':
+          'Esta máquina hospedará o banco de dados local, conectará à balança e processará as pesagens. É o equipamento titular da licença.',
       'setup_mode_client': 'Trabalhador Local',
-      'setup_mode_client_desc': 'Esta máquina operará o sistema conectando-se ao Servidor da conta na sua rede. Não cria banco de dados próprio.',
+      'setup_mode_client_desc':
+          'Esta máquina operará o sistema conectando-se ao Servidor da conta na sua rede. Não cria banco de dados próprio.',
 
       // ── Passo 3: ativação da conta e verificação da licença ──────────────────
       'activation_title': 'Ativação da conta',
@@ -1410,14 +1754,16 @@ class AppTranslations {
 
       // ── Configuração inicial após o primeiro login (ADMIN) ──────────────────
       'initial_setup_title': 'Configuração inicial',
-      'initial_setup_welcome': 'Vamos completar os dados da sua empresa. Você pode pular e concluir depois em Ajustes.',
+      'initial_setup_welcome':
+          'Vamos completar os dados da sua empresa. Você pode pular e concluir depois em Ajustes.',
       'initial_setup_step_company': 'Dados da empresa',
       'initial_setup_step_appearance': 'Formatos de exportação',
       'initial_setup_step_reports': 'Pasta de relatórios',
       'report_format_excel': 'Excel',
       'report_format_txt': 'Texto (TXT)',
       'setup_company_title': 'Dados da empresa',
-      'setup_company_subtitle': 'Estes dados são salvos na estação e aplicados ao entrar no sistema, para que ele já fique pronto para operar.',
+      'setup_company_subtitle':
+          'Estes dados são salvos na estação e aplicados ao entrar no sistema, para que ele já fique pronto para operar.',
       'setup_company_finish': 'Salvar e continuar para o login',
       'initial_setup_company_legal_name': 'Razão social',
       'initial_setup_company_name': 'Nome fantasia',
@@ -1430,10 +1776,12 @@ class AppTranslations {
       'initial_setup_ticket_format': 'Formato do bilhete',
       'initial_setup_report_format': 'Formato dos relatórios',
       'initial_setup_reports_folder': 'Pasta onde os relatórios são salvos',
-      'initial_setup_reports_folder_hint': 'Caminho local desta estação (ex.: /home/operador/Relatorios ou C:\\RelatoriosBalansoft)',
+      'initial_setup_reports_folder_hint':
+          'Caminho local desta estação (ex.: /home/operador/Relatorios ou C:\\RelatoriosBalansoft)',
       'initial_setup_use_default_folder': 'Usar a pasta padrão do sistema',
       'initial_setup_folder_ok': 'Pasta válida',
-      'initial_setup_folder_not_writable': 'A pasta não existe ou não permite escrita. Será usada a pasta padrão.',
+      'initial_setup_folder_not_writable':
+          'A pasta não existe ou não permite escrita. Será usada a pasta padrão.',
       'initial_setup_finish': 'Concluir',
       'initial_setup_skip': 'Pular por enquanto',
       'initial_setup_saving': 'Salvando configuração...',
@@ -1442,19 +1790,111 @@ class AppTranslations {
       'initial_setup_reopen': 'Configuração inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture o peso e salve',
       'weighing_save_first': 'Salve a pesagem primeiro para imprimir',
-      'weighing_min_fields_required': 'Preencha os campos obrigatórios para salvar',
+      'weighing_min_fields_required':
+          'Preencha os campos obrigatórios para salvar',
       'weighing_exit_weight_prompt': 'Informe o peso de saída do veículo',
       'weighing_back_to_entry': 'Voltar para Entrada',
       'weighing_has_trailer': 'Possui reboque',
+      // Captura guiada em duas etapas (cabine + reboque)
+      'weighing_weight_fixed': 'Peso fixado',
+      'weighing_capture_cabina_first': 'Primeiro capture o peso da cabine',
+      'weighing_trailer_advance':
+          'Por favor avance um pouco para pesar o reboque',
+      'weighing_trailer_advance_hint':
+          'Capture agora o peso do reboque no campo indicado',
+      'weighing_trailer_capture_here': 'Informe aqui o peso do reboque',
+      'weighing_cabina_registered': 'Cabine registada',
+      'weighing_trailer_waiting': 'À espera da leitura do reboque na balança',
+      'weighing_trailer_required': 'Falta capturar o peso do reboque',
+      'weighing_trailer_weight_ok': 'Pesos da cabine e do reboque completos',
+      'weighing_capture_weight': 'Capturar peso',
+      'weighing_capture_weight_cab': 'Capturar peso da cabine',
+      'weighing_capture_weight_rem': 'Capturar peso do reboque',
+      'weighing_capture_weight_redo': 'Capturar novamente',
+      'weighing_capture_required':
+          'Pressione Capturar peso para fixar o peso antes de gravar',
+      'weighing_peso_cabina': 'Cabine',
+      'weighing_peso_remolque': 'Reboque',
+      'weighing_peso_neto': 'Liquido',
+      'weighing_move_truck_title': 'Mova o caminhao',
+      'weighing_move_truck_msg':
+          'Favor mova o caminhao e certifique-se de que o reboque fique na posicao correta para capturar o peso. Ao continuar, a balanca e o indicador de peso passarao a capturar o peso do reboque.',
+      'weighing_continue': 'Continuar',
+      'weighing_trailer_ready':
+          'Peso do reboque capturado. Preencha os demais dados e pressione Enter para gravar.',
+      'weighing_confirm_save_title': 'Deseja confirmar a gravacao deste peso?',
+      'weighing_confirm_save_mode': 'Tipo de pesagem: {0}',
+      'weighing_confirm_save_hint': 'Revise os dados antes de continuar.',
+      'weighing_yes_save': 'Sim, gravar',
+      'weighing_no_edit': 'Nao, seguir editando',
+      'weighing_print_question': 'Deseja imprimir?',
+      'weighing_print_msg':
+          'Pesagem {0} gravada com sucesso. Deseja imprimir o bilhete?',
+      'weighing_print_yes': 'Imprimir',
+      'weighing_unsaved_cancel_title': 'Confirmar cancelamento',
+      'weighing_unsaved_cancel_msg':
+          'Há informações capturadas que não foram salvas. Se cancelar agora, esses dados serão perdidos.\n\nDeseja cancelar de qualquer forma?',
+      'weighing_unsaved_keep_editing': 'Continuar editando',
+      'weighing_unsaved_confirm_cancel': 'Sim, cancelar',
+      'weighing_unsaved_exit_title': 'Confirmar saída',
+      'weighing_unsaved_exit_msg':
+          'Há informações de pesagem que não foram salvas. Se sair agora, esses dados serão perdidos.\n\nDeseja sair de qualquer forma?',
+      'weighing_unsaved_cancel_btn': 'Cancelar',
+      'weighing_unsaved_confirm_exit': 'Sim, sair',
+      'weighing_new_weight': 'Novo peso',
+      'weighing_mode_entry': 'ENTRADA',
+      'weighing_mode_exit': 'SAIDA',
+      'weighing_search_weights': 'Buscar pesagens',
+      'weighing_search_hint':
+          'Buscar por placa, bilhete, motorista ou produto...',
+      'weighing_search_all': 'Todos',
+      'weighing_search_open': 'Pendentes',
+      'weighing_search_closed': 'Fechados',
+      'weighing_search_no_results': 'Nenhuma pesagem encontrada',
+      'weighing_load_copy': 'Trazer ao formulario',
+      'weighing_copy_origin_label': 'Origem',
+      'weighing_copy_title': 'COPIA DA PESAGEM {0}',
+      'weighing_copy_hint':
+          'Voce esta editando uma copia. Ao gravar registra-se um peso NOVO com a data e hora de hoje; o peso original NAO e modificado.',
+      'weighing_copy_discard': 'Descartar copia',
+      'weighing_copy_loaded':
+          'Pesagem {0} copiada para o formulario. Sera gravada como peso novo com a data de hoje.',
+      // Conversão de unidades (DADOS ADICIONAIS)
+      'measure_kg': 'Quilos',
+      'measure_litros': 'Litros',
+      'measure_galones': 'Galões',
+      'measure_toneladas': 'Toneladas',
+      'measure_unidades': 'Unidades (sacos)',
+      'measure_formula_kg': 'Peso líquido em kg',
+      'measure_formula_litros': 'Peso líquido (kg) / densidade',
+      'measure_formula_galones': 'Peso líquido (kg) / densidade / 3.78541',
+      'measure_formula_toneladas': 'Peso líquido (kg) / 1000',
+      'measure_formula_unidades':
+          'Peso líquido (kg) / peso por unidade do produto',
+      'measure_missing_density': 'Informe a densidade do produto',
+      'measure_missing_peso_unidad': 'Cadastre o peso por unidade do produto',
+      'measure_density_hint': 'kg/L — usado para litros e galões',
+      'measure_density_not_used': 'Usado apenas para líquidos',
+      'measure_pending_entry': 'Calculado ao registrar a saída (peso líquido)',
+      'measure_pending_weight': 'Capture o peso de saída',
+      'measure_peso_unidad_from_product': 'Do produto selecionado',
+      'measure_peso_unidad_missing': 'O produto não tem peso por unidade',
+      'measure_recalculate': 'Recalcular',
+      // Balanças padrão de entradas e saídas
+      'default_scale_entry_hint':
+          'Balança usada por padrão ao registrar ENTRADAS',
+      'default_scale_exit_hint': 'Balança usada por padrão ao registrar SAÍDAS',
       'weighing_both': 'Ambos',
-      'weighing_manual_weight_no_scale': 'Peso manual — nenhuma balança conectada',
+      'weighing_manual_weight_no_scale':
+          'Peso manual — nenhuma balança conectada',
       'weighing_manual_record': 'Registro manual do peso',
       'weighing_supervisor_admin_only': 'Somente Supervisor/Admin',
       'weighing_pending_for_exit': 'Bilhetes pendentes para Saída',
       'weighing_no_pending': 'Não há bilhetes pendentes de saída.',
       'weighing_load_exit': 'Carregar Saída',
       'weighing_print_ticket': 'Imprimir / Reimprimir Bilhete de Pesagem',
-      'weighing_no_tickets_to_print': 'Não há bilhetes registrados para imprimir.',
+      'weighing_no_tickets_to_print':
+          'Não há bilhetes registrados para imprimir.',
       'weighing_last': 'ÚLTIMO',
       'weighing_preview': 'Pré-visualizar',
       'ticket_pdf': 'Bilhete PDF',
@@ -1463,7 +1903,8 @@ class AppTranslations {
       'register_new_entry': 'Registrar nova entrada',
       'all': 'Todos',
       'detail_weighing': 'Detalhe da Pesagem',
-      'cannot_load_weighing': 'Não é possível carregar a pesagem: identificador vazio.',
+      'cannot_load_weighing':
+          'Não é possível carregar a pesagem: identificador vazio.',
       'weighing_closed_ok': 'Pesagem fechada com sucesso',
       'weighing_voided_ok': 'Pesagem anulada com sucesso',
       'retry': 'Tentar novamente',
@@ -1476,14 +1917,16 @@ class AppTranslations {
       'summary': 'Resumo',
       'config_hint': 'Configurações: disponível no menu lateral (Ctrl+,)',
       'unsynced_weighings': 'Pesagens não sincronizadas',
-      'sync_retries_exhausted': 'As tentativas acabaram. Corrija e exclua a pesagem local.',
+      'sync_retries_exhausted':
+          'As tentativas acabaram. Corrija e exclua a pesagem local.',
       'no_vehicles_in_yard': 'Não há veículos na planta.',
       'report_error_prefix': 'Não foi possível obter o relatório:',
       'daily': 'Diário',
       'monthly': 'Mensal',
       'advanced': 'Avançados',
       'volume_transported': 'Volume movimentado',
-      'no_transporters_movements': 'Sem movimentos de transportadoras no período.',
+      'no_transporters_movements':
+          'Sem movimentos de transportadoras no período.',
       'volume_by_customer': 'Volume por cliente/fornecedor',
       'no_thirds_movements': 'Sem movimentos de terceiros no período.',
       'weight_range_distribution': 'Distribuição por faixa de peso líquido',
@@ -1497,7 +1940,8 @@ class AppTranslations {
       'every_5_minutes': 'A cada 5 minutos',
       'sync_now': 'Sincronizar agora',
       'syncing': 'Sincronizando...',
-      'default_scale_pick': 'Selecione a balança que o sistema usará por padrão',
+      'default_scale_pick':
+          'Selecione a balança que o sistema usará por padrão',
       'not_selected': '— Não selecionada —',
       'no_scales_hint': 'Nenhuma balança registrada. Adicione em',
       'no_scales_available': 'Nenhuma balança disponível',
@@ -1510,14 +1954,40 @@ class AppTranslations {
       'turn_on': 'Ligar',
       'turn_off': 'Desligar',
       'start_with_computer': 'Iniciar ao ligar o computador',
-      'autostart_desc': 'A estação inicia o WServer automaticamente para operar sem abrir o sistema.',
+      'autostart_desc':
+          'A estação inicia o WServer automaticamente para operar sem abrir o sistema.',
       'local_connection': 'Conexão local',
-      'local_connection_desc': 'URL da API local desta estação e verificação de conexão.',
+      'local_connection_desc':
+          'URL da API local desta estação e verificação de conexão.',
       'system_integrity': 'Integridade do Sistema',
       'system_integrity_desc': 'Verificar PostgreSQL, porta e drivers locais.',
+      'system_diagnostics': 'Diagnóstico do Sistema',
+      'system_diagnostics_desc':
+          'Verificar API local, banco de dados, licença, sincronização e versão.',
+      'diag_api': 'API local',
+      'diag_api_unreachable': 'Sem resposta em',
+      'diag_db': 'Banco de dados',
+      'diag_db_unreachable':
+          'Não foi possível consultar o estado do banco de dados.',
+      'diag_db_incomplete': 'Conexão ou esquema incompletos.',
+      'diag_tables': '{0} tabelas',
+      'diag_license': 'Licença',
+      'diag_expires': 'Expira {0}',
+      'diag_sync': 'Sincronização',
+      'diag_sync_offline': 'Servidor central indisponível.',
+      'diag_sync_detail': '{0} pendentes · última: {1}',
+      'diag_never': 'sem sincronizar',
+      'diag_version': 'Versão',
+      'diag_all_ok': 'Tudo em ordem. A estação está pronta para operar.',
+      'diag_warnings': 'Operacional com {0} aviso(s).',
+      'diag_problems': 'Foram detectados {0} problema(s). Reveja os detalhes.',
+      'diag_checking': 'Verificando…',
+      'diag_checked_at': 'Verificado em {0}',
+      'diag_unavailable': 'Indisponível.',
       'path_copied': 'Caminho copiado para a área de transferência',
       'reports_export_path': 'Caminho de exportação de relatórios',
-      'reports_export_path_desc': 'Esta pasta armazena as exportações de Excel, PDF e Kardex de todas as sessões e estações desta conta.',
+      'reports_export_path_desc':
+          'Esta pasta armazena as exportações de Excel, PDF e Kardex de todas as sessões e estações desta conta.',
       'reset_default': 'Restaurar padrão',
       'set_by_admin': 'Configurada pelo administrador para todas as sessões',
       'scanning_scales': 'Escaneando balanças conectadas…',
@@ -1535,7 +2005,8 @@ class AppTranslations {
       'connection': 'Conexão',
       'tcp': 'TCP',
       'serial': 'Serial',
-      'printer_active_saved': 'Impressora ativa salva com sucesso no módulo de dispositivos',
+      'printer_active_saved':
+          'Impressora ativa salva com sucesso no módulo de dispositivos',
       'printers_connected': 'Impressoras Conectadas ao Sistema',
       'thermal_80': 'Térmica Direta POS-80 (EscPOS)',
       'thermal_58': 'Térmica Direta POS-58 (EscPOS)',
@@ -1552,7 +2023,8 @@ class AppTranslations {
       'select_product_warehouse': 'Selecione produto e armazém',
       'register_inventory_adjust': 'Registrar ajuste de estoque',
       'admin_only': 'Somente administrador',
-      'adjust_desc': 'Registra entradas/saídas manuais por perdas, contagens físicas',
+      'adjust_desc':
+          'Registra entradas/saídas manuais por perdas, contagens físicas',
       'movement_type': 'Tipo de movimento:',
       'ingreso': '✚ ENTRADA',
       'despacho': '✖ SAÍDA',
@@ -1571,7 +2043,8 @@ class AppTranslations {
       'no_users_yet': 'Nenhum usuário. Crie o primeiro.',
       'readonly_mode': 'Modo somente leitura',
       'access_matrix': 'Matriz de acessos por papel',
-      'access_matrix_desc': 'Toque em uma célula para mudar o nível de acesso do papel ao módulo.',
+      'access_matrix_desc':
+          'Toque em uma célula para mudar o nível de acesso do papel ao módulo.',
       'station_roles': 'Papéis da estação',
       'legend': 'Legenda',
       'access_level': 'Nível de acesso',
@@ -1593,7 +2066,8 @@ class AppTranslations {
       'take_photo': 'Tirar foto',
       'upload': 'Enviar',
       'port_type_protocol': 'Tipo / Protocolo da Porta',
-      'setup_company_pending_hint': 'Os dados da empresa serão aplicados ao iniciar sessão',
+      'setup_company_pending_hint':
+          'Os dados da empresa serão aplicados ao iniciar sessão',
       'works_offline': 'Funciona sem conexão',
       'ticket_design_saved': 'Design e estilo do bilhete salvos com sucesso',
       'ticket_design_title': 'Design e Estilização do Bilhete',
@@ -1619,12 +2093,15 @@ class AppTranslations {
       'default_format': 'Formato Padrão',
       'visual_styling': 'Estilo Visual e Conteúdo',
       'header_company': 'Cabeçalho e Dados da Empresa',
-      'header_company_desc': 'Mostra o nome da empresa, RIF e número do bilhete',
+      'header_company_desc':
+          'Mostra o nome da empresa, RIF e número do bilhete',
       'obs_details': 'Observações e Detalhes do Peso',
-      'obs_details_desc': 'Mostra observações adicionais, transporte e motorista',
+      'obs_details_desc':
+          'Mostra observações adicionais, transporte e motorista',
       'test_print_ticket': 'Testar e Imprimir Bilhete',
       'ticket_type': 'Tipo de Bilhete',
-      'ticket_type_desc': 'Básico: apenas dados essenciais. Avançado: formulário completo, catálogos e controle.',
+      'ticket_type_desc':
+          'Básico: apenas dados essenciais. Avançado: formulário completo, catálogos e controle.',
       'basic_ticket': 'Básico',
       'advanced_ticket': 'Avançado',
       'demo_company': 'VARIEDADES S&S',
@@ -1633,14 +2110,19 @@ class AppTranslations {
       'sheet_2_short': '2 por folha',
       'sheet_3_short': '3 por folha',
       'sheet_4_short': '4 por folha',
-      'delete_series_confirm': 'Excluir a série ativa? Os bilhetes existentes mantêm seu número; ela apenas deixa de ser usada para novos bilhetes.',
-      'doc_numbering_desc': 'Os bilhetes são numerados consecutivamente com a série selecionada. Exemplo: TA-00000001, TA-00000002, …. A numeração é única por empresa e o próximo número é reservado na hora (FOR UPDATE), sem saltos nem duplicados.',
-      'no_series_yet_desc': 'Ainda não há séries. Crie a primeira abaixo (somente ADMIN) para que os bilhetes possam ser numerados.',
-      'custom_series_desc': 'Cada série é um modelo: nome, prefixo e quantidade de dígitos. Ao salvar, fica ativa e passa a numerar os próximos bilhetes.',
+      'delete_series_confirm':
+          'Excluir a série ativa? Os bilhetes existentes mantêm seu número; ela apenas deixa de ser usada para novos bilhetes.',
+      'doc_numbering_desc':
+          'Os bilhetes são numerados consecutivamente com a série selecionada. Exemplo: TA-00000001, TA-00000002, …. A numeração é única por empresa e o próximo número é reservado na hora (FOR UPDATE), sem saltos nem duplicados.',
+      'no_series_yet_desc':
+          'Ainda não há séries. Crie a primeira abaixo (somente ADMIN) para que os bilhetes possam ser numerados.',
+      'custom_series_desc':
+          'Cada série é um modelo: nome, prefixo e quantidade de dígitos. Ao salvar, fica ativa e passa a numerar os próximos bilhetes.',
       'recover_password': 'Recuperar Senha',
       'recovery_email_desc': 'Enviaremos um link para redefinir sua senha',
       'check_email': 'Verifique seu e-mail',
-      'recovery_desc': 'Se existir uma conta com esse e-mail, você receberá um link para redefinir sua senha.',
+      'recovery_desc':
+          'Se existir uma conta com esse e-mail, você receberá um link para redefinir sua senha.',
       'back_home': 'Voltar ao início',
       'create_account': 'Criar Conta',
       'register_desc': 'Registre sua empresa e primeiro usuário',
@@ -1649,7 +2131,8 @@ class AppTranslations {
       'back_to_login': 'Voltar para Entrar',
       'db_conn_ok': '✅ Conexão bem-sucedida. Banco de dados inicializado.',
       'local_server_connection': 'Conexão ao Servidor Local',
-      'db_creds_desc': 'Informe as credenciais do motor PostgreSQL (papel SuperAdmin ou proprietário) para que o sistema possa criar a estrutura inicial do banco de dados.',
+      'db_creds_desc':
+          'Informe as credenciais do motor PostgreSQL (papel SuperAdmin ou proprietário) para que o sistema possa criar a estrutura inicial do banco de dados.',
       'paper_thermal_80': '80mm Térmico',
       'paper_thermal_58': '58mm Térmico',
       'password_updated': 'Senha atualizada, entre',
@@ -1663,21 +2146,33 @@ class AppTranslations {
       'no_results': 'Sem resultados',
       'cant_parse_record': 'Não foi possível interpretar o registro criado',
       'next_phase': 'PRÓXIMA FASE',
-      'printer_scan_done': 'Varredura concluída: 4 impressoras encontradas e prontas para uso.',
-      'audit_states_desc': 'Toda mudança de estado de uma pesagem (entrada, saída,',
-      'install_postgres_desc': 'Para que esta máquina funcione como Servidor Principal, você deve instalar o PostgreSQL (versão 14 ou superior).\n\n No Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n No Windows: baixe o instalador oficial.\n\n Depois execute a verificação novamente.',
-      'env_ready_db': 'Ambiente pronto. Continue para configurar a conexão com o banco de dados local.',
-      'ready_to_install_desc': 'Tudo pronto para instalar. Falta apenas criar o banco de dados local. Informe as credenciais do PostgreSQL (usuário com permissões de superusuário) e o sistema criará «balansoft_ws_local» com seu esquema automaticamente.',
+      'printer_scan_done':
+          'Varredura concluída: 4 impressoras encontradas e prontas para uso.',
+      'audit_states_desc':
+          'Toda mudança de estado de uma pesagem (entrada, saída,',
+      'install_postgres_desc':
+          'Para que esta máquina funcione como Servidor Principal, você deve instalar o PostgreSQL (versão 14 ou superior).\n\n No Linux (Debian/Ubuntu):\n   sudo apt install postgresql postgresql-contrib\n\n No Windows: baixe o instalador oficial.\n\n Depois execute a verificação novamente.',
+      'env_ready_db':
+          'Ambiente pronto. Continue para configurar a conexão com o banco de dados local.',
+      'ready_to_install_desc':
+          'Tudo pronto para instalar. Falta apenas criar o banco de dados local. Informe as credenciais do PostgreSQL (usuário com permissões de superusuário) e o sistema criará «balansoft_ws_local» com seu esquema automaticamente.',
       'continue': 'Continuar',
-      'env_check_intro': 'Antes de usar a estação verificamos se o ambiente está pronto: API local, PostgreSQL, conexão com o banco e drivers de balança.',
-      'readonly_mode_desc': 'Modo somente leitura: somente o papel ADMIN pode modificar os acessos.',
-      'first_config_hint': 'Primeira configuração: informe a URL da API local desta estação.',
-      'default_scale_pick_full': 'Selecione a balança que o sistema usará por padrão para todas as pesagens.',
-      'no_scales_hint_full': 'Nenhuma balança registrada. Adicione em Dispositivos → Adicionar balança.',
+      'env_check_intro':
+          'Antes de usar a estação verificamos se o ambiente está pronto: API local, PostgreSQL, conexão com o banco e drivers de balança.',
+      'readonly_mode_desc':
+          'Modo somente leitura: somente o papel ADMIN pode modificar os acessos.',
+      'first_config_hint':
+          'Primeira configuração: informe a URL da API local desta estação.',
+      'default_scale_pick_full':
+          'Selecione a balança que o sistema usará por padrão para todas as pesagens.',
+      'no_scales_hint_full':
+          'Nenhuma balança registrada. Adicione em Dispositivos → Adicionar balança.',
       'logout': 'Sair',
       'help': 'Ajuda',
-      'support_full': 'O suporte é gerenciado pela equipe BALANSOFT. Inclui instalação do cliente, configuração de balanças (serial/TCP), licenças e resolução de ocorrências em campo.',
-      'docs_full': 'docs/PRD.md e docs/MODELO_ESTANDAR.md definem o comportamento esperado do sistema.',
+      'support_full':
+          'O suporte é gerenciado pela equipe BALANSOFT. Inclui instalação do cliente, configuração de balanças (serial/TCP), licenças e resolução de ocorrências em campo.',
+      'docs_full':
+          'docs/PRD.md e docs/MODELO_ESTANDAR.md definem o comportamento esperado do sistema.',
       'weighing_station': 'Estação de Pesagem',
     },
   };
@@ -1718,7 +2213,8 @@ class AppTranslations {
           .keys
           .toSet();
 
-  static String tr(String keyOrSpanishText, {String? langCode, List<String>? args}) {
+  static String tr(String keyOrSpanishText,
+      {String? langCode, List<String>? args}) {
     final base = _traducir(keyOrSpanishText, langCode: langCode);
     if (args == null || args.isEmpty) return base;
     var salida = base;
@@ -1754,7 +2250,8 @@ class AppTranslations {
   }
 
   /// Obtiene la traducción utilizando un `LocaleController` explícito.
-  static String of(BuildContext context, String key, LocaleController controller) {
+  static String of(
+      BuildContext context, String key, LocaleController controller) {
     return tr(key, langCode: controller.activeLanguageCode);
   }
 }

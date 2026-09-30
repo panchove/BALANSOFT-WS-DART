@@ -219,9 +219,9 @@ preferencias está en `MANEJO_DB.md §13`.
 | Trabajador cliente delgado | ✅ | `worker_connection_screen.dart` verifica `/health`; `LoginScreen` no levanta WServer en ese modo |
 | Respaldo pre-login (sin sesión) | ✅ | `CompanyDraft` se conserva como camino legacy y lo aplica `AuthRepository.login()` |
 | Idioma de empresa aplicado en la estación | ✅ | Ajustes hace `PUT /api/v1/empresa`; también al cambiar idioma |
-| Paridad de claves Flutter | ✅ | 489 claves × 3 idiomas (`test/unit/i18n_test.dart`) |
+| Paridad de claves Flutter | ✅ | 541 claves × 3 idiomas (`test/unit/i18n_test.dart`) |
 | Textos fijos en pantallas | ✅ | Lotes cerrados: pesajes, ajustes, dispositivos, ticket design/preview, kardex, catálogos, empresa/documentos, usuarios, seguridad, auditoría, ayuda, auth y setup |
-| Verificación de integridad sin reinicio | ✅ | `EnvironmentCheckScreen(setupMode: false)` es de solo lectura (`WServerManager.isOnline()`), no arranca el WServer y libera el estado en `finally` |
+| Verificación de integridad sin reinicio | ✅ | Diagnóstico propio `SystemDiagnosticsScreen` (Ajustes): 5 tarjetas de solo lectura (API, BD, licencia, sync, versión) con 4 llamadas GET en paralelo. El wizard `EnvironmentCheckScreen` queda solo para instalación |
 | Pruebas del borrador de empresa | ✅ | `test/unit/company_draft_test.dart` (round-trip, logo base64, limpieza, normalización de idioma) |
 | Vista previa del boleto vs. boleto impreso | ✅ | `ticket_preview_dialog.dart` usa las mismas claves del ticket |
 | Panel web del proveedor (`BALASOFT-UI`) | ⏳ | Fuera de la app de estación: se traduce después |
