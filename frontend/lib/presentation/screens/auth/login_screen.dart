@@ -121,7 +121,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 32),
                     Text(
                       'works_offline'.tr(),
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -221,7 +222,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 20),
                     Text(
                       'works_offline'.tr(),
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -337,30 +339,39 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextButton.icon(
-                onPressed: () =>
-                    Navigator.pushNamed(context, '/connections'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 0, vertical: 8),
-                ),
-                icon: const Icon(Icons.wifi_tethering, size: 15),
-                label: Text(
-                  context.tr('Conexión local'),
-                  style: const TextStyle(fontSize: 12),
+              // `Flexible`: con etiquetas largas los dos botones sumaban más
+              // que el ancho de la tarjeta y el Row se desbordaba.
+              Flexible(
+                child: TextButton.icon(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/connections'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.wifi_tethering, size: 15),
+                  label: Text(
+                    context.tr('Conexión local'),
+                    style: const TextStyle(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-              TextButton(
-                onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 0, vertical: 8),
-                ),
-                child: Text(
-                  context.tr('¿Olvidaste tu contraseña?'),
-                  style: const TextStyle(fontSize: 12),
+              Flexible(
+                child: TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/forgot-password'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                  ),
+                  child: Text(
+                    context.tr('¿Olvidaste tu contraseña?'),
+                    style: const TextStyle(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -380,8 +391,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: SwsColors.accent,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(52),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
@@ -450,40 +461,48 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildLanguageSelector(BuildContext context) {
     if (!di.sl.isRegistered<LocaleController>()) return const SizedBox.shrink();
     final localeCtrl = di.sl<LocaleController>();
-    return PopupMenuButton<AppLanguage>(
-      tooltip: context.tr('Idioma del Sistema'),
-      icon: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.language, size: 16, color: Colors.white70),
-          const SizedBox(width: 4),
-          Text(
-            localeCtrl.activeLanguageCode.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+    // El código de idioma va FUERA del botón: dentro de `PopupMenuButton.icon`
+    // el `Row` recibía el ancho mínimo del botón y se desbordaba (RenderFlex
+    // overflow de 6-10 px, detectado por el E2E de Flutter).
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const Icon(Icons.language, size: 16, color: Colors.white70),
+        const SizedBox(width: 4),
+        Text(
+          localeCtrl.activeLanguageCode.toUpperCase(),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
-      onSelected: (lang) => localeCtrl.setLanguage(lang),
-      itemBuilder: (ctx) => [
-        PopupMenuItem(
-          value: AppLanguage.system,
-          child: Text(context.tr('Detectar idioma del dispositivo (automático)')),
         ),
-        const PopupMenuItem(
-          value: AppLanguage.es,
-          child: Text('Español (ES)'),
-        ),
-        const PopupMenuItem(
-          value: AppLanguage.en,
-          child: Text('English (EN)'),
-        ),
-        const PopupMenuItem(
-          value: AppLanguage.pt,
-          child: Text('Português (PT)'),
+        PopupMenuButton<AppLanguage>(
+          tooltip: context.tr('Idioma del Sistema'),
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.arrow_drop_down,
+              size: 18, color: Colors.white70),
+          onSelected: (lang) => localeCtrl.setLanguage(lang),
+          itemBuilder: (ctx) => [
+            PopupMenuItem(
+              value: AppLanguage.system,
+              child: Text(
+                  context.tr('Detectar idioma del dispositivo (automático)')),
+            ),
+            const PopupMenuItem(
+              value: AppLanguage.es,
+              child: Text('Español (ES)'),
+            ),
+            const PopupMenuItem(
+              value: AppLanguage.en,
+              child: Text('English (EN)'),
+            ),
+            const PopupMenuItem(
+              value: AppLanguage.pt,
+              child: Text('Português (PT)'),
+            ),
+          ],
         ),
       ],
     );

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,14 +80,65 @@ def _mensaje_conflicto_codigo(name: str, data: dict) -> str:
 
 
 class CatalogService:
-    async def list_all(self, db: AsyncSession, empresa_id: uuid.UUID) -> dict[str, list]:
-        result: dict[str, list] = {}
-        for name, cfg in CATALOGS.items():
-            model = cfg["model"]
-            stmt = select(model).where(getattr(model, cfg["empresa_col"]) == empresa_id)
-            rows = (await db.execute(stmt)).scalars().all()
-            result[name] = [self._dump(r) for r in rows]
+    async def list_all(
+        self,
+        db: AsyncSession,
+        empresa_id: uuid.UUID,
+        *,
+        limite: int | None = None,
+        skip: int = 0,
+        solo: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Devuelve todos los catálogos de la empresa.
+
+        ``limite``/``skip`` paginan cada catálogo (H11). Sin ``limite`` el
+        comportamiento es el histórico: se devuelve el catálogo completo. La
+        clave ``__totales__`` lleva el número real de filas por catálogo y
+        ``__truncado__`` indica si alguna respuesta quedó recortada.
+        """
+        pedidos = [n for n in CATALOGS if solo is None or n in solo]
+        desconocidos = [n for n in (solo or []) if n not in CATALOGS]
+        if desconocidos:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Catálogo desconocido: {', '.join(sorted(desconocidos))}",
+            )
+
+        result: dict[str, Any] = {}
+        totales: dict[str, int] = {}
+        truncado = False
+        for name in pedidos:
+            filas, total = await self._listar_paginado(
+                db, empresa_id, name, limite=limite, skip=skip
+            )
+            result[name] = filas
+            totales[name] = total
+            if limite is not None and total > skip + len(filas):
+                truncado = True
+        result["__totales__"] = totales
+        result["__truncado__"] = truncado
         return result
+
+    async def _listar_paginado(
+        self,
+        db: AsyncSession,
+        empresa_id: uuid.UUID,
+        name: str,
+        *,
+        limite: int | None,
+        skip: int,
+    ) -> tuple[list[dict], int]:
+        cfg = CATALOGS[name]
+        model = cfg["model"]
+        filtro = getattr(model, cfg["empresa_col"]) == empresa_id
+        total = await db.scalar(select(func.count()).select_from(model).where(filtro))
+        stmt = select(model).where(filtro)
+        if skip:
+            stmt = stmt.offset(skip)
+        if limite is not None:
+            stmt = stmt.limit(limite)
+        rows = (await db.execute(stmt)).scalars().all()
+        return [self._dump(r) for r in rows], int(total or 0)
 
     async def list_by_name(self, db: AsyncSession, empresa_id: uuid.UUID, name: str) -> list:
         cfg = CATALOGS.get(name)

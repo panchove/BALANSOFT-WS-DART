@@ -24,19 +24,7 @@ from sqlalchemy import text
 
 from app.core.database import AsyncSessionLocal
 from app.models import (
-    Almacen,
-    Balanza,
-    BoletoPesaje,
-    Camion,
-    Conductor,
     Empresa,
-    Marca,
-    ModeloCamion,
-    Producto,
-    Remolque,
-    Tercero,
-    Transporte,
-    Usuario,
 )
 
 EMPRESA_DEMO_ID = "ca567509-3376-476b-afcc-a7e96612a37b"

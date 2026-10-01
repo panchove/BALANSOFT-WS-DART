@@ -127,6 +127,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextFormField(
+                  key: const Key('activacion_email_field'),
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
@@ -148,6 +149,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
+                  key: const Key('activacion_password_field'),
                   controller: _passCtrl,
                   obscureText: _verOculta,
                   style: const TextStyle(color: SwsColors.white),
@@ -207,6 +209,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
           SizedBox(
             height: 48,
             child: FilledButton.icon(
+              key: const Key('activacion_enviar_btn'),
               onPressed: _enviando ? null : _activar,
               icon: _enviando
                   ? const SizedBox(

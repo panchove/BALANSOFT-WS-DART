@@ -41,6 +41,9 @@ class ApiConstants {
   // Seguridad y Accesos
   static const String seguridadMatriz = '$apiPrefix/seguridad/matriz';
 
+  // Auditoría
+  static const String auditoria = '$apiPrefix/auditoria';
+
   // Flota
   static const String camiones = '$apiPrefix/camiones';
   static String camion(String id) => '$apiPrefix/camiones/$id';

@@ -14,6 +14,9 @@ class AppConfig {
   static bool offline = false;
   static bool wserverAutostart = false;
 
+  /// Sincronización automática por timer (Ajustes → Sincronización).
+  static bool syncAutoEnabled = true;
+
   // ── Onboarding de primera instalación (docs/I18N_Y_ONBOARDING.md) ──────────
   /// El usuario ya eligió idioma y tema (paso 1 del modo instalación).
   static bool setupPreferenciasCompletado = false;
@@ -79,6 +82,7 @@ class AppConfig {
     publicKey = _prefs.getString('public_key');
     offline = _prefs.getBool('offline') ?? false;
     wserverAutostart = _prefs.getBool('wserver_autostart') ?? false;
+    syncAutoEnabled = _prefs.getBool('sync_auto_enabled') ?? true;
     setupPreferenciasCompletado =
         _prefs.getBool('setup_preferencias_completado') ?? false;
     modoEstacion = _prefs.getString('modo_estacion');
@@ -120,6 +124,12 @@ class AppConfig {
   static Future<void> setWServerAutostart(bool value) async {
     wserverAutostart = value;
     await _prefs.setBool('wserver_autostart', value);
+  }
+
+  /// Activa o desactiva la sincronización automática por timer.
+  static Future<void> setSyncAutoEnabled(bool value) async {
+    syncAutoEnabled = value;
+    await _prefs.setBool('sync_auto_enabled', value);
   }
 
   /// Marca que el paso 1 de instalación (idioma y tema) ya se completó.

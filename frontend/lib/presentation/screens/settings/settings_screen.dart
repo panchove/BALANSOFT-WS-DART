@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
+import '../../providers/bloc/sync/sync_bloc.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_controller.dart';
@@ -52,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Scale? _balanzaEntrada;
   Scale? _balanzaSalida;
   bool _cargandoBalanzas = true;
+  bool _syncAuto = AppConfig.syncAutoEnabled;
 
   @override
   void initState() {
@@ -328,24 +331,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   List<Widget> _syncChildren(BuildContext context) {
+    final syncBloc = context.read<SyncBloc?>();
+    final autoTile = SwitchListTile(
+      secondary: const Icon(Icons.sync_outlined),
+      title: Text('sync_auto'.tr()),
+      subtitle: Text(
+        'auto_sync_every'.tr(
+          null,
+          [AppConstants.syncIntervalMinutes.toString()],
+        ),
+      ),
+      value: _syncAuto,
+      dense: true,
+      onChanged: (v) async {
+        await AppConfig.setSyncAutoEnabled(v);
+        if (!mounted) return;
+        setState(() => _syncAuto = v);
+        syncBloc?.add(SetAutoSyncEnabledEvent(v));
+      },
+    );
+    final nowTile = ListTile(
+      leading: const Icon(Icons.cloud_upload_outlined),
+      title: Text('sync_now'.tr()),
+      onTap: () {
+        syncBloc?.add(SyncWeighingsEvent());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('syncing'.tr())),
+        );
+      },
+    );
+    if (syncBloc == null) return [autoTile, nowTile];
     return [
-      SwitchListTile(
-        secondary: const Icon(Icons.sync_outlined),
-        title: Text('sync_auto'.tr()),
-        subtitle: Text('every_5_minutes'.tr()),
-        value: true,
-        dense: true,
-        onChanged: (v) {},
-      ),
-      ListTile(
-        leading: const Icon(Icons.cloud_upload_outlined),
-        title: Text('sync_now'.tr()),
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('syncing'.tr())),
-          );
+      BlocListener<SyncBloc, SyncState>(
+        listenWhen: (prev, curr) =>
+            curr is SyncComplete || curr is SyncError,
+        listener: (context, state) {
+          final messenger = ScaffoldMessenger.of(context);
+          if (state is SyncComplete) {
+            messenger.showSnackBar(
+              SnackBar(content: Text('sync_complete'.tr())),
+            );
+          } else if (state is SyncError) {
+            messenger.showSnackBar(
+              SnackBar(content: Text('sync_error'.tr())),
+            );
+          }
         },
+        child: autoTile,
       ),
+      nowTile,
     ];
   }
 

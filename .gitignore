@@ -21,6 +21,7 @@ backend/WServer.spec.manifest
 # Flutter / frontend (los demás build/deploy los cubre frontend/.gitignore)
 frontend/build/
 frontend/.dart_tool/
+.dart_tool/
 
 # Misc
 .ruff_cache/

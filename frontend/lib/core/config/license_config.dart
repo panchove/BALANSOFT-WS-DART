@@ -1,5 +1,5 @@
 class LicenseConfig {
-  static const String productCode = 'BWS';
+  static const String productCode = 'WS';
   static const int demoMaxRecords = 10;
   static const int monopuestaMaxUsers = 1;
   static const int centralMaxUsers = 10;

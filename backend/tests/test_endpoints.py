@@ -22,7 +22,7 @@ from app.api.v1.endpoints import pesajes as pesajes_module
 from app.core import scale_session as scale_session_module
 from app.core.database import get_db
 from app.core.license_client import LicenseInfo
-from app.models import Usuario
+from app.models import Auditoria, Usuario
 
 
 class FakeLM:
@@ -547,3 +547,97 @@ class TestDispositivosEndpoints:
         assert r.status_code == 200
         balanzas = r.json()["balanzas"]
         assert any(b["ip_address"] == "10.0.0.7" and b["puerto_tcp"] == 5556 for b in balanzas)
+
+
+class TestCatalogoSyncPaginacion:
+    """Paginación de /catalogo/sync (H11)."""
+
+    async def _crear_almacenes(self, client, n: int) -> None:
+        for i in range(n):
+            r = await client.post(
+                "/api/v1/almacenes",
+                json={"codigo": f"ALM-{i:02d}", "nombre": f"Patio {i}"},
+            )
+            assert r.status_code == 200, r.text
+
+    async def test_totales_sin_recorte(self, client):
+        await self._crear_almacenes(client, 3)
+        r = await client.get("/api/v1/catalogo/sync")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["truncado"] is False
+        assert body["totales"]["almacenes"] == 3
+        assert len(body["almacenes"]) == 3
+
+    async def test_limit_y_skip_paginan(self, client):
+        await self._crear_almacenes(client, 3)
+        r1 = await client.get("/api/v1/catalogo/sync?limit=2")
+        assert r1.status_code == 200, r1.text
+        page1 = r1.json()
+        assert page1["truncado"] is True
+        assert len(page1["almacenes"]) == 2
+        assert page1["totales"]["almacenes"] == 3
+
+        r2 = await client.get("/api/v1/catalogo/sync?limit=2&skip=2")
+        page2 = r2.json()
+        assert page2["truncado"] is False
+        assert len(page2["almacenes"]) == 1
+        ids1 = {a["id_almacen"] for a in page1["almacenes"]}
+        ids2 = {a["id_almacen"] for a in page2["almacenes"]}
+        assert not (ids1 & ids2)
+
+    async def test_filtra_por_catalogo(self, client):
+        await self._crear_almacenes(client, 2)
+        r = await client.get("/api/v1/catalogo/sync?catalogo=almacenes")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert set(body["totales"]) == {"almacenes"}
+        assert body["productos"] == []
+        assert len(body["almacenes"]) == 2
+
+    async def test_catalogo_desconocido_404(self, client):
+        r = await client.get("/api/v1/catalogo/sync?catalogo=inventado")
+        assert r.status_code == 404
+
+
+class TestAuditoriaEndpoint:
+    """Consulta del registro de auditoría (D4)."""
+
+    async def _sembrar(self, db, empresa):
+        db.add_all(
+            [
+                Auditoria(
+                    id_empresa=empresa.id_empresa,
+                    accion="CREATE",
+                    entidad="boletos_pesaje",
+                    entidad_id="TA-1",
+                    detalle={"numero_boleto": "TA-00000001"},
+                    ip="127.0.0.1",
+                ),
+                Auditoria(
+                    id_empresa=empresa.id_empresa,
+                    accion="DELETE",
+                    entidad="marcas",
+                    entidad_id="m-1",
+                    ip="10.0.0.9",
+                ),
+            ]
+        )
+        await db.commit()
+
+    async def test_listar_auditoria(self, client, db, empresa):
+        await self._sembrar(db, empresa)
+        r = await client.get("/api/v1/auditoria")
+        assert r.status_code == 200, r.text
+        filas = r.json()
+        assert len(filas) == 2
+        assert {f["accion"] for f in filas} == {"CREATE", "DELETE"}
+        assert all(f["created_at"] for f in filas)
+
+    async def test_filtra_por_entidad(self, client, db, empresa):
+        await self._sembrar(db, empresa)
+        r = await client.get("/api/v1/auditoria?entidad=marcas")
+        assert r.status_code == 200, r.text
+        filas = r.json()
+        assert len(filas) == 1
+        assert filas[0]["entidad"] == "marcas"

@@ -13,7 +13,7 @@ class _FakeApiClient extends ApiClient {
   _FakeApiClient() : super();
 
   @override
-  Future<Response> getList(String path) async {
+  Future<Response> getList(String path, {Map<String, dynamic>? queryParameters}) async {
     return Response(
       data: {
         'data': [

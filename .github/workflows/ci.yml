@@ -1,0 +1,218 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: balansoft
+          POSTGRES_PASSWORD: balansoft
+          POSTGRES_DB: balansoft_ws_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U balansoft"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DEBUG_MODE: "true"
+      SECRET_KEY: clave-ci-no-usar-en-produccion-0000000000000000000000000000
+      DATABASE_URL: postgresql+asyncpg://balansoft:balansoft@localhost:5432/balansoft_ws_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://balansoft:balansoft@localhost:5432/balansoft_ws_test
+      SERVER_DATABASE_URL: postgresql+asyncpg://balansoft:balansoft@localhost:5432/balansoft_ws_server_test
+      SERVER_DATABASE_URL_SYNC: postgresql+psycopg2://balansoft:balansoft@localhost:5432/balansoft_ws_server_test
+      APP_ROLE: local
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear bases de datos de test
+        env:
+          PGPASSWORD: balansoft
+        run: |
+          for db in balansoft_ws_test balansoft_ws_server_test; do
+            psql -h localhost -U balansoft -d postgres \
+              -tc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 \
+              || psql -h localhost -U balansoft -d postgres -c "CREATE DATABASE $db"
+          done
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias (backend)
+        run: uv sync --directory backend --all-groups
+
+      - name: Lint (ruff)
+        run: uv run --directory backend ruff check app tests
+
+      - name: Tipos (mypy)
+        run: uv run --directory backend mypy tests/
+
+      - name: Tests (pytest)
+        run: uv run --directory backend pytest -q -m "not e2e"
+
+  e2e:
+    name: E2E (stub LM + contrato firmado)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: balansoft
+          POSTGRES_PASSWORD: balansoft
+          POSTGRES_DB: balansoft_ws_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U balansoft"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DEBUG_MODE: "true"
+      SECRET_KEY: clave-ci-e2e-no-usar-en-produccion-000000000000000000
+      DATABASE_URL: postgresql+asyncpg://balansoft:balansoft@localhost:5432/balansoft_ws_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://balansoft:balansoft@localhost:5432/balansoft_ws_test
+      SERVER_DATABASE_URL: postgresql+asyncpg://balansoft:balansoft@localhost:5432/balansoft_ws_server_test
+      SERVER_DATABASE_URL_SYNC: postgresql+psycopg2://balansoft:balansoft@localhost:5432/balansoft_ws_server_test
+      APP_ROLE: local
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear base de datos e2e
+        env:
+          PGPASSWORD: balansoft
+        run: |
+          psql -h localhost -U balansoft -d postgres \
+            -tc "SELECT 1 FROM pg_database WHERE datname='balansoft_ws_test'" | grep -q 1 \
+            || psql -h localhost -U balansoft -d postgres -c "CREATE DATABASE balansoft_ws_test"
+          psql -h localhost -U balansoft -d postgres \
+            -tc "SELECT 1 FROM pg_database WHERE datname='balansoft_ws_server_test'" | grep -q 1 \
+            || psql -h localhost -U balansoft -d postgres -c "CREATE DATABASE balansoft_ws_server_test"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias (backend)
+        run: uv sync --directory backend --all-groups
+
+      - name: Generar claves Ed25519 de test
+        run: |
+          mkdir -p /tmp/lm-keys
+          uv run --directory backend python scripts/generate_signing_keys.py /tmp/lm-keys
+
+      - name: Tests E2E
+        run: uv run --directory backend pytest tests/e2e -q
+        env:
+          LICENSE_PRIVATE_KEY_PATH: /tmp/lm-keys/key_privada.pem
+          LICENSE_PUBLIC_KEY_PATH: /tmp/lm-keys/key_publica.pem
+          LM_STUB_PORT: 9100
+
+  frontend:
+    name: Frontend (analyze + test)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: cd frontend && flutter pub get
+
+      - name: Análisis estático
+        run: cd frontend && flutter analyze
+
+      - name: Tests
+        run: cd frontend && flutter test
+
+  e2e-flutter:
+    name: E2E Flutter (login → entrada → salida → CERRADO)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: balansoft
+          POSTGRES_PASSWORD: balansoft
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U balansoft"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # El script lee las credenciales de la BD de aquí para crear el esquema
+      # y apuntar la API del E2E a su propia base.
+      DATABASE_URL_SYNC: postgresql+psycopg2://balansoft:balansoft@localhost:5432/balansoft_ws_test
+    steps:
+      - uses: actions/checkout@v4
+
+      # El E2E corre la app Flutter de escritorio (Linux + GTK) contra la API.
+      - name: Dependencias de escritorio Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev \
+            liblzma-dev libstdc++-12-dev xvfb
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Dependencias (backend)
+        run: uv sync --directory backend --all-groups
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - name: Habilitar escritorio Linux
+        run: flutter config --enable-linux-desktop
+
+      - name: Dependencias
+        run: cd frontend && flutter pub get
+
+      - name: Levantar entorno E2E (BD + seed + stub LM + API)
+        run: bash backend/scripts/e2e_flutter.sh up
+
+      # El runner no tiene display: xvfb da el servidor gráfico que necesita
+      # el runner GTK. El retry absorbe la deriva del primer arranque.
+      - name: E2E Flutter
+        run: |
+          cd frontend
+          xvfb-run -a flutter test integration_test/pesaje_flow_test.dart \
+            -d linux --no-pub || \
+          xvfb-run -a flutter test integration_test/pesaje_flow_test.dart \
+            -d linux --no-pub
+
+      - name: Logs de la API del E2E
+        if: failure()
+        run: tail -100 /tmp/balansoft-e2e-flutter/api.log /tmp/balansoft-e2e-flutter/lm.log || true

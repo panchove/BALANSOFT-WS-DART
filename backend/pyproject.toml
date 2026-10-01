@@ -23,6 +23,7 @@ dependencies = [
     "cachetools>=5.3",
     "prometheus-client>=0.20",
     "pyserial>=3.5",
+    "pillow>=10.0",
 ]
 
 [dependency-groups]
@@ -58,8 +59,15 @@ filterwarnings = [
     # anyio depreca el alias BlockingPortal en starlette/testclient.py — externo.
     "ignore:The anyio.abc.BlockingPortal alias",
 ]
+markers = [
+    "e2e: flujo end-to-end con el stub firmante del LM (ver tests/e2e)",
+]
 
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
+# `tests/` no tiene __init__.py pero `tests/e2e/` sí: sin esto mypy ve el
+# mismo archivo como "e2e.conftest" y "tests.e2e.conftest".
+explicit_package_bases = true
+mypy_path = ["."]

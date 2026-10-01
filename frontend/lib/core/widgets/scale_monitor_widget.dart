@@ -98,16 +98,19 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     final peso = widget.client.pesoActual;
     if (peso != null) {
       _peso = peso;
-      widget.onPesoLeido?.call(peso);
     }
+    // El notificador puede disparar durante la fase de build; tanto el
+    // setState local como el callback del padre deben diferirse para evitar
+    // "setState() called during build".
     if (WidgetsBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {});
-        }
+        if (!mounted) return;
+        if (peso != null) widget.onPesoLeido?.call(peso);
+        setState(() {});
       });
     } else {
+      if (peso != null) widget.onPesoLeido?.call(peso);
       setState(() {});
     }
   }
@@ -233,7 +236,8 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                 ),
                 if (conectado)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: estadoColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(5),

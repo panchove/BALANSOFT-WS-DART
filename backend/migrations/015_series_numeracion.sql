@@ -29,13 +29,12 @@ ALTER TABLE boletos_pesaje
 
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'uq_series_numeracion_activa_empresa'
-    ) THEN
-        -- Solo UNA serie activa por empresa (la que usa el campo de trabajo).
-        CREATE UNIQUE INDEX uq_series_numeracion_activa_empresa
-            ON series_numeracion (id_empresa) WHERE activa;
-    END IF;
+    -- Solo UNA serie activa por empresa (la que usa el campo de trabajo).
+    -- `IF NOT EXISTS` es lo que hace idempotente la migración: este objeto es
+    -- un ÍNDICE (no una restricción) y el guard por `pg_constraint` no lo veía,
+    -- de modo que la segunda aplicación moría con "relation already exists".
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_series_numeracion_activa_empresa
+        ON series_numeracion (id_empresa) WHERE activa;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'fk_boletos_pesaje_id_serie'
     ) THEN

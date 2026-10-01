@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.datetime_utils import naive_utc
 from app.core.license_client import LicenseInfo
 from app.models import (
     Almacen,
@@ -636,7 +637,7 @@ class WeighingService:
             tipo_tercero=tipo_tercero if data.id_tercero or data.tercero_nombre else None,
             id_tercero=id_tercero,
             multi_despacho_recepcion=data.multi_despacho_recepcion,
-            fecha_hora_entrada=data.fecha_hora_entrada.replace(tzinfo=None),
+            fecha_hora_entrada=naive_utc(data.fecha_hora_entrada),
             peso_entrada_vehiculo=_d(data.peso_entrada_vehiculo) or ZERO,
             peso_entrada_remolque=_d(data.peso_entrada_remolque),
             es_peso_manual=data.es_peso_manual,
@@ -711,7 +712,7 @@ class WeighingService:
             raise HTTPException(status_code=400, detail="El boletilo ya registró la salida.")
 
         fecha_salida = data.fecha_hora_salida or datetime.now(UTC)
-        pesaje.fecha_hora_salida = fecha_salida.replace(tzinfo=None)
+        pesaje.fecha_hora_salida = naive_utc(fecha_salida)
         pesaje.peso_salida_vehiculo = _d(data.peso_salida_vehiculo)
         pesaje.peso_salida_remolque = _d(data.peso_salida_remolque)
         pesaje.es_peso_manual = data.es_peso_manual

@@ -137,6 +137,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
               ),
             ),
           IconButton(
+            key: const Key('nuevo_pesaje_btn'),
             tooltip: 'Nuevo pesaje',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const WeighingFormScreen()),
@@ -206,6 +207,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
                       final w = items[i];
                       return Card(
                         child: ListTile(
+                          key: Key('boleto_fila_${w.idVehiculo ?? w.boleto}'),
                           leading: Icon(
                             w.isOpen
                                 ? Icons.radio_button_checked

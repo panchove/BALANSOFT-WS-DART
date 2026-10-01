@@ -528,6 +528,7 @@ content: Text(
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
+                key: const Key('entorno_continuar_btn'),
                 onPressed: _verificando ||
                         (_erroresObligatorios > 0 && !_dbPreparable)
                     ? null

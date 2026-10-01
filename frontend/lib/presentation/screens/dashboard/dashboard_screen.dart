@@ -139,6 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        key: const Key('dashboard_nuevo_pesaje_fab'),
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const WeighingFormScreen()),
         ),

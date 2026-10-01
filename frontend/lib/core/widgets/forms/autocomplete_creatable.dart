@@ -84,11 +84,17 @@ class _AutocompleteCreatableState<T extends Object>
   @override
   void didUpdateWidget(AutocompleteCreatable<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialValue != oldWidget.initialValue && _controller != null) {
-      if (widget.initialValue != _controller!.text) {
-        _controller!.text = widget.initialValue ?? '';
-      }
-    }
+    if (widget.initialValue == oldWidget.initialValue) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final valor = widget.initialValue ?? '';
+    if (valor == controller.text) return;
+    // Asignar el texto del controller notifica al `Form`, así que no puede
+    // hacerse durante el build: se difiere al siguiente frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || controller.text == valor) return;
+      controller.text = valor;
+    });
   }
 
   Future<void> _crearNuevo() async {

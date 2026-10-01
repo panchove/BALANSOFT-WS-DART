@@ -106,6 +106,7 @@ class ModeSelectionScreen extends StatelessWidget {
 
           // ─── Cards de selección ──────────────────────────────────────
           _ModeCard(
+            key: const Key('modo_servidor_card'),
             title: 'setup_mode_server'.tr(),
             description: 'setup_mode_server_desc'.tr(),
             icon: Icons.dns_outlined,
@@ -113,6 +114,7 @@ class ModeSelectionScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _ModeCard(
+            key: const Key('modo_trabajador_card'),
             title: 'setup_mode_client'.tr(),
             description: 'setup_mode_client_desc'.tr(),
             icon: Icons.computer_outlined,
@@ -129,6 +131,7 @@ class ModeSelectionScreen extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 class _ModeCard extends StatelessWidget {
   const _ModeCard({
+    super.key,
     required this.title,
     required this.description,
     required this.icon,

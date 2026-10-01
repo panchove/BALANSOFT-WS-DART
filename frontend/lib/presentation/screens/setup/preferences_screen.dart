@@ -63,6 +63,7 @@ class SetupPreferencesScreen extends StatelessWidget {
         SizedBox(
           height: 48,
           child: ElevatedButton.icon(
+            key: const Key('setup_continuar_btn'),
             onPressed: () async {
               await AppConfig.setSetupPreferenciasCompletado();
               if (context.mounted) {

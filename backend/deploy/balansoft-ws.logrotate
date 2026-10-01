@@ -1,0 +1,27 @@
+# Rotación de logs de Balansoft-WS (H7 de ACTUAR.md)
+#
+# Instalación en el servidor del proveedor / estación:
+#   sudo cp deploy/balansoft-ws.logrotate /etc/logrotate.d/balansoft-ws
+#   sudo chown root:root /etc/logrotate.d/balansoft-ws
+#   sudo chmod 644 /etc/logrotate.d/balansoft-ws
+#   sudo logrotate -d /etc/logrotate.d/balansoft-ws   # simula (no aplica)
+#   sudo logrotate -f /etc/logrotate.d/balansoft-ws   # fuerza una rotación
+#
+# Requiere LOG_DIR=/var/log/balansoft-ws en backend/.env para que la API
+# escriba ahí (ver LOG_MAX_BYTES / LOG_BACKUP_COUNT, que ya hacen rotación
+# propia por tamaño vía RotatingFileHandler). Con las unidades systemd
+# (deploy/balansoft-ws.service*.prod) la salida va a journal: limítala con
+# SystemMaxUse en /etc/systemd/journald.conf (p. ej. 500M) y
+# sudo systemctl restart systemd-journald.
+/var/log/balansoft-ws/*.log {
+    daily
+    rotate 14
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 0640 balansoft balansoft
+    su balansoft balansoft
+}

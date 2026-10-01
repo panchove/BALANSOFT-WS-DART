@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.datetime_utils import naive_utc
 from app.models import BoletoPesaje, Empresa, SyncLog
 from app.schemas import SyncResultItem, WeighingSyncItem
 from app.services.weighing_service import normalizar_estado
@@ -77,10 +78,10 @@ class SyncService:
                 "tipo_tercero": item.tipo_tercero,
                 "id_tercero": item.id_tercero,
                 "multi_despacho_recepcion": item.multi_despacho_recepcion,
-                "fecha_hora_entrada": item.fecha_hora_entrada,
+                "fecha_hora_entrada": naive_utc(item.fecha_hora_entrada),
                 "peso_entrada_vehiculo": item.peso_entrada_vehiculo,
                 "peso_entrada_remolque": item.peso_entrada_remolque,
-                "fecha_hora_salida": item.fecha_hora_salida,
+                "fecha_hora_salida": naive_utc(item.fecha_hora_salida),
                 "peso_salida_vehiculo": item.peso_salida_vehiculo,
                 "peso_salida_remolque": item.peso_salida_remolque,
                 "peso_bruto": item.peso_bruto,

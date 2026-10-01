@@ -489,7 +489,7 @@ BD local en `empresas.idioma` y el tema es preferencia del dispositivo.
 ### Fase 1: Separación de Backend por Rol (2 semanas)
 
 - [x] Crear `backend/balansoft-ws-server.sql` (10 tablas)
-- [x] Crear `backend/balansoft-ws-local.sql` (22 tablas)
+- [x] Crear `backend/balansoft-ws-local.sql` (24 tablas)
 - [x] Añadir `APP_ROLE` a `config.py` + `.env.example`
 - [x] Implementar routers condicionales en `main.py`
 - [x] Crear endpoint `/auth/login-local`
@@ -599,7 +599,7 @@ CORS_ORIGINS=["http://localhost:8003"]
 | `MANEJO_DB.md` | **Este documento** | Arquitectura de dos BDs, setup de desarrollo, login, modelo de cuenta/dispositivos (§13), estado y plan |
 | `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/trabajador) y preferencias persistidas |
 | `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
-| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (22 tablas) |
+| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (24 tablas) |
 | `ARCH.md` | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE` |
 | `PRD.md` | Requiere actualización | 1 empresa/máquina; licencia fuera de BD local |
 | `IMPLEMENTADO.md` | Requiere actualización | Tablas por rol; endpoints condicionales |

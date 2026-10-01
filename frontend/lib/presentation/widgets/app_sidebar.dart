@@ -498,6 +498,7 @@ class _AppSidebarState extends State<AppSidebar> {
 
         widgets.add(
           _SidebarLeafTile(
+            key: Key('menu_${node.clave ?? labelTraducido}'),
             icon: node.icon!,
             activeIcon: node.activeIcon ?? node.icon!,
             label: labelTraducido,
@@ -520,6 +521,7 @@ class _AppSidebarState extends State<AppSidebar> {
 
         widgets.add(
           _SidebarGroupHeader(
+            key: Key('menu_grupo_${node.label}'),
             label: labelTraducido,
             icon: node.icon,
             isCollapsed: isCollapsed,
@@ -642,6 +644,7 @@ class _SidebarLeafTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SidebarLeafTile({
+    super.key,
     required this.icon,
     required this.activeIcon,
     required this.label,
@@ -737,6 +740,7 @@ class _SidebarGroupHeader extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SidebarGroupHeader({
+    super.key,
     required this.label,
     this.icon,
     required this.isCollapsed,

@@ -18,6 +18,9 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   final Future<bool> Function()? _healthCheck;
   final Duration _autoSyncInterval;
 
+  /// Sincronización automática por timer habilitada (Ajustes → Sincronización).
+  bool _autoSyncEnabled;
+
   /// Estado de conexión preservado entre eventos de sync
   bool _isOnline = true;
 
@@ -34,21 +37,25 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     GetFailedWeighingsCountUseCase? failedCountUseCase,
     Future<bool> Function()? healthCheck,
     Duration? autoSyncInterval,
+    bool autoSyncEnabled = true,
   })  : _syncUseCase = syncUseCase,
         _pendingCountUseCase = pendingCountUseCase,
         _failedCountUseCase = failedCountUseCase,
         _healthCheck = healthCheck,
+        _autoSyncEnabled = autoSyncEnabled,
         _autoSyncInterval =
             autoSyncInterval ?? const Duration(minutes: AppConstants.syncIntervalMinutes),
         super(const SyncInitial(isOnline: true)) {
     on<SyncWeighingsEvent>(_onSync);
     on<SyncStatusEvent>(_onStatus);
     on<HealthCheckEvent>(_onHealth);
-    _startTimer();
+    on<SetAutoSyncEnabledEvent>(_onSetAutoSync);
+    if (_autoSyncEnabled) _startTimer();
     _startHealthTimer();
   }
 
   void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(_autoSyncInterval, (_) => add(SyncWeighingsEvent()));
   }
 
@@ -83,6 +90,17 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
       emit(SyncStatusLoaded(pendingCount: count, isOnline: _isOnline));
     } catch (e) {
       emit(SyncError(e.toString(), isOnline: _isOnline));
+    }
+  }
+
+  void _onSetAutoSync(
+      SetAutoSyncEnabledEvent event, Emitter<SyncState> emit) {
+    _autoSyncEnabled = event.enabled;
+    if (_autoSyncEnabled) {
+      _startTimer();
+    } else {
+      _timer?.cancel();
+      _timer = null;
     }
   }
 

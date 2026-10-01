@@ -9,6 +9,7 @@ import 'presentation/providers/bloc/catalog_crud/catalog_crud_cubit.dart';
 import 'data/datasources/remote/api_client.dart';
 import 'data/datasources/local/local_storage.dart';
 import 'data/datasources/local/database_helper.dart';
+import 'core/config/app_config.dart';
 import 'core/security/secure_storage_service.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/activacion_repository.dart';
@@ -153,6 +154,7 @@ Future<void> init() async {
         pendingCountUseCase: sl(),
         failedCountUseCase: sl(),
         healthCheck: () => sl<ApiClient>().health(),
+        autoSyncEnabled: AppConfig.syncAutoEnabled,
       ));
   sl.registerFactory<CatalogBloc>(() => CatalogBloc(
         syncUseCase: sl(),

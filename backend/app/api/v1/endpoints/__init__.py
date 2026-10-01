@@ -7,6 +7,7 @@ credenciales globales, panel del proveedor y recepción de sync.
 
 from app.api.v1.endpoints import (
     archivos,
+    auditoria,
     auth,
     catalogo,
     config,
@@ -28,6 +29,7 @@ from app.api.v1.endpoints import (
 
 API_ROUTERS = [
     archivos.router,
+    auditoria.router,
     auth.router,
     catalogo.router,
     config.router,

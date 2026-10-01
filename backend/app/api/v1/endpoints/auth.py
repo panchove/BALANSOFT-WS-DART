@@ -18,6 +18,7 @@ from app.api.dependencies import (
 )
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.datetime_utils import naive_utc
 from app.core.hardware import obtener_hardware_id
 from app.core.license_client import LicenseError, get_license_client
 from app.core.monitoring import inc_active_user, inc_license_error
@@ -223,7 +224,8 @@ async def login(
             )
             empresa.licencia_tier = info.tier
             empresa.licencia_status = info.status
-            empresa.licencia_expira = info.expires_at
+            # La columna es naive UTC: el LM responde ISO con offset.
+            empresa.licencia_expira = naive_utc(info.expires_at)
             await _persistir_hardware_id(db, empresa, hardware_id)
             await db.commit()
             licencia = {
@@ -389,9 +391,9 @@ async def login_central(
     fecha_expira = licencia.get("fecha_expira")
     if fecha_expira and isinstance(fecha_expira, str):
         try:
-            empresa.licencia_expira = datetime.fromisoformat(
-                fecha_expira.replace("Z", "+00:00")
-            ).replace(tzinfo=None)
+            empresa.licencia_expira = naive_utc(
+                datetime.fromisoformat(fecha_expira.replace("Z", "+00:00"))
+            )
         except ValueError:
             pass
     empresa.activa = bool(cuenta.get("activa", True))

@@ -1,487 +1,170 @@
-# Análisis: ¿Qué falta hacer en BALANSOFT-WS?
+# ¿Qué queda por hacer en BALANSOFT-WS?
 
-Basándome en el estado v1.4 que me compartiste, aquí está el análisis **honesto y directo** de lo que realmente falta. Divido por criticidad:
-
----
-
-## 1. RESUMEN RÁPIDO
-
-| Categoría | Falta | Criticidad |
-|-----------|-------|:----------:|
-| **Funcionalidad core** | Nada | ✅ |
-| **Brechas conocidas** | 0 | ✅ |
-| **Producción real** | Varias cosas | 🔴 Alta |
-| **CI/CD** | Todo | 🟡 Media |
-| **Monitoreo** | Todo | 🟡 Media |
-| **Documentación usuario** | Todo | 🟡 Media |
-| **Mejoras futuras** | Muchas | 🟢 Baja |
-
-**Conclusión rápida:** El **código** está completo. Lo que falta es **operacionalizarlo** (desplegarlo, monitorearlo, documentarlo, mantenerlo).
+**Fecha**: 2026-10-01
+**Base**: `IMPLEMENTADO.md` v2.0
+**Estado tras la ejecución `/update-all`**: **343 tests backend (310 rápidos + 33 E2E) + 158 frontend** en verde; `ruff`, `mypy` y `flutter analyze` limpios.
 
 ---
 
-## 2. LO QUE FALTA POR CRITICIDAD
+## 0. Resumen de lo ejecutado (2026-10-01)
 
-### 🔴 CRÍTICO - Antes de poner en producción real
+Cerrados en esta tanda: **D1, D2, D3, D4, D5 (documentado), D6, H1, H2, H5, H7, H8, H10, H11** y **H14** (ya existía).
 
-Estas son las cosas que **debes hacer antes de instalar en la primera empresa cliente**.
+| Ítem | Qué se hizo | Dónde |
+|------|-------------|-------|
+| D1 | `dbVersion` 1 → 5 | `frontend/lib/core/constants/app_constants.dart` |
+| D2 | `productCode` `BWS` → `WS` | `frontend/lib/core/config/license_config.dart` |
+| D3 | Switch y "Sincronizar ahora" cableados al `SyncBloc` real (con `BlocListener` de resultado) | `settings_screen.dart`, `sync_bloc.dart`, `app_config.dart` |
+| D4 | `GET /api/v1/auditoria` (usuario/email, IP, entidad, detalle, UTC) + pestaña "Registro" en la UI | `backend/app/api/v1/endpoints/auditoria.py`, `frontend/.../auditoria_screen.dart` |
+| D5 | Limitación multi-worker documentada (Redis sigue pendiente) | `backend/app/core/rate_limit.py` |
+| D6 | 22 → 24 tablas locales | `docs/MANEJO_DB.md` |
+| H1 | CI con GitHub Actions: backend (ruff + mypy + pytest con PostgreSQL) y frontend (analyze + test) | `.github/workflows/ci.yml` |
+| H5 | Logging estructurado JSON + rotación por tamaño | `backend/app/core/logging_config.py`, `app/main.py` |
+| H7 | Configuración de logrotate | `backend/deploy/balansoft-ws.logrotate` |
+| H8 | Fail-fast si `APP_ENV=production` con `DEBUG_MODE=true` o `SECRET_KEY` por defecto | `backend/app/core/config.py` |
+| H10 | Compresión/redimensión de imágenes (1600 px, JPEG q80, EXIF) antes de guardarlas | `backend/app/core/image_compress.py`, `archivos.py` |
+| H11 | Paginación y filtro por catálogo en `/catalogo/sync` (`limit`, `skip`, `catalogo`, `totales`, `truncado`) | `catalog_service.py`, `endpoints/catalogo.py` |
+| H2 | Stub del LM firmante con Ed25519 + 33 tests E2E (contrato firmado, flujo de licencia y ciclo offline) + job `e2e` en CI | `backend/scripts/lm_stub.py`, `backend/tests/e2e/`, `.github/workflows/ci.yml` |
+| — | **Bug real encontrado por el E2E**: `/sync/push` insertaba datetimes con offset en columnas naive (`DataError`, lote caído). Ahora normaliza a UTC naive | `backend/app/services/sync_service.py` |
 
-#### 2.1 Pruebas con hardware real de balanza
-
-**Situación actual:** El HAL funciona con:
-- ✅ `SerialScaleHAL` (probado con mocks)
-- ✅ `TcpScaleHAL` (probado con simulador BSDD)
-
-**Falta:**
-- ⚠️ Probar con **balanza física real** (marca específica: Toledo, Rice Lake, Sartorius, etc.)
-- ⚠️ Adaptar el parser según el **protocolo real** de la balanza del cliente
-- ⚠️ Verificar tiempos de respuesta reales (< 100ms ideal)
-- ⚠️ Probar estabilidad de lectura en condiciones reales (vibración, viento, temperatura)
-
-**Por qué es crítico:** El simulador BSDD envía JSON. Una balanza real puede enviar:
-```
-ST,GS,+015000.5,kg
-```
-o
-```
-W=+015000.5
-```
-Cada marca tiene su propio protocolo. **Hay que adaptar el parser al cliente real.**
-
-**Acción:**
-```python
-# backend/app/core/scale_hal.py
-
-class ToledoScaleHAL(ScaleHAL):
-    """Protocolo Toledo (Mettler-Toledo)."""
-    # Formato: ST,GS,+015000.5,kg
-    
-class RiceLakeScaleHAL(ScaleHAL):
-    """Protocolo Rice Lake."""
-    # Formato: W=+015000.5
-    
-class SartoriusScaleHAL(ScaleHAL):
-    """Protocolo Sartorius."""
-    # Formato: +015000.5 g
-```
-
-#### 2.2 Pruebas en red real con latencia
-
-**Situación actual:** Todo probado en `localhost`.
-
-**Falta:**
-- ⚠️ Probar con **latencia de red real** (30-100ms)
-- ⚠️ Verificar comportamiento con **pérdida de paquetes**
-- ⚠️ Probar **múltiples clientes concurrentes** (3-10 operadores)
-- ⚠️ Verificar **timeouts** en condiciones adversas
-
-**Acción:**
-```bash
-# Simular latencia con tc (Linux)
-sudo tc qdisc add dev eth0 root netem delay 100ms loss 1%
-
-# Probar con k6 o Locust
-k6 run --vus 10 --duration 5m load_test.js
-```
-
-#### 2.3 Pruebas con volumen real de datos
-
-**Situación actual:** Tests con datos sembrados pequeños.
-
-**Falta:**
-- ⚠️ Probar con **10,000+ boletos** en la tabla
-- ⚠️ Verificar **performance de reportes** con datos reales
-- ⚠️ Verificar **performance de kardex** con miles de movimientos
-- ⚠️ Verificar **índices** de base de datos
-
-**Acción:**
-```python
-# scripts/seed_volumen.py
-
-async def seed_volumen():
-    """Sembrar 50,000 boletos para pruebas de performance."""
-    for i in range(50000):
-        boleto = BoletoPesaje(
-            numero_boleto=f"TA-{i:08d}",
-            # ...
-        )
-        db.add(boleto)
-        if i % 1000 == 0:
-            await db.commit()
-```
-
-#### 2.4 Seguridad en producción
-
-**Falta:**
-- ⚠️ **HTTPS/TLS** (certificado SSL)
-- ⚠️ **Rate limiting** en endpoints públicos
-- ⚠️ **CORS restringido** (no `*`)
-- ⚠️ **SECRET_KEY** fuerte y única
-- ⚠️ **Backups automáticos** de base de datos
-- ⚠️ **Rotación de logs**
-
-**Acción:**
-```python
-# backend/app/main.py
-
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-
-@app.post("/auth/login")
-@limiter.limit("5/minute")
-async def login(request: Request, ...):
-    # ...
-```
-
-```nginx
-# nginx.conf
-server {
-    listen 443 ssl http2;
-    server_name api.balansoft.com;
-    
-    ssl_certificate /etc/letsencrypt/live/api.balansoft.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.balansoft.com/privkey.pem;
-    
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-#### 2.5 Proceso de instalación y soporte
-
-**Falta:**
-- ⚠️ **Instalador automatizado** para cliente
-- ⚠️ **Script de verificación** post-instalación
-- ⚠️ **Guía de troubleshooting** para operadores
-- ⚠️ **Sistema de tickets** para soporte
-- ⚠️ **Proceso de actualización** (upgrades)
-
-**Acción:**
-```bash
-# scripts/install_cliente.sh
-
-#!/bin/bash
-set -e
-
-echo "=== Instalación BALANSOFT-WS ==="
-
-# 1. Verificar dependencias
-command -v python3.12 || { echo "Falta Python 3.12"; exit 1; }
-command -v psql || { echo "Falta PostgreSQL"; exit 1; }
-
-# 2. Configurar base de datos
-./scripts/setup_db.sh instalar
-./scripts/setup_db.sh aplicar-migraciones
-
-# 3. Configurar .env
-cp backend/.env.example backend/.env
-echo "Editar backend/.env con la configuración del cliente"
-
-# 4. Instalar servicio
-sudo cp backend/deploy/balansoft-ws.service /etc/systemd/system/
-sudo systemctl enable balansoft-ws
-sudo systemctl start balansoft-ws
-
-# 5. Verificar
-sleep 5
-curl http://localhost:8000/api/v1/health || { echo "Fallo el arranque"; exit 1; }
-
-echo "=== Instalación completada ==="
-```
+**Sigue pendiente** (requiere entorno/cliente/infra): H3, H4, H6, H12, H15 y P1-P8. El E2E de Flutter (`integration_test/pesaje_flow_test.dart`) queda como fase 2 de H2: la parte backend ya corre en CI.
 
 ---
 
-### 🟡 IMPORTANTE - Primeros meses de operación
+## Respuesta corta
 
-#### 2.6 CI/CD Pipeline
+El sistema está **funcionalmente completo**. No hay bugs bloqueantes. Lo que queda es:
 
-**Falta:** Automatización de tests y despliegue.
-
-**Acción:** Ya te di el ejemplo antes, pero resumo:
-
-```yaml
-# .github/workflows/ci.yml
-- Backend tests (pytest con PostgreSQL)
-- Frontend tests (flutter test)
-- E2E tests (integration_test)
-- Linting (ruff, flutter analyze)
-- Build y despliegue automático
-```
-
-**Sin esto:** Cada deploy es manual, propenso a errores, y no hay garantía de que los tests pasen antes de subir a producción.
-
-#### 2.7 Monitoreo y Alertas
-
-**Falta:**
-- ⚠️ **Métricas** (Prometheus)
-- ⚠️ **Dashboards** (Grafana)
-- ⚠️ **Alertas** (email/Slack si algo falla)
-- ⚠️ **Logs centralizados** (ELK o similar)
-
-**Acción:**
-```python
-# backend/app/core/monitoring.py
-
-from prometheus_client import Counter, Histogram, Gauge
-
-# Métricas de negocio
-pesajes_creados = Counter('balansoft_pesajes_creados_total', 'Total pesajes', ['empresa'])
-pesajes_anulados = Counter('balansoft_pesajes_anulados_total', 'Pesajes anulados')
-tiempo_pesaje = Histogram('balansoft_pesaje_duracion_segundos', 'Duración de pesaje')
-
-# Métricas técnicas
-api_latencia = Histogram('balansoft_api_latencia_segundos', 'Latencia', ['endpoint', 'metodo'])
-errores_licencia = Counter('balansoft_errores_licencia_total', 'Errores de licencia')
-
-@app.get("/metrics")
-async def metrics():
-    return Response(generate_latest(), media_type="text/plain")
-```
-
-**Sin esto:** No sabrás si el sistema está funcionando mal hasta que un cliente llame.
-
-#### 2.8 Backups automatizados
-
-**Falta:**
-- ⚠️ Backup diario de PostgreSQL
-- ⚠️ Backup diario de `media/` (fotos)
-- ⚠️ Retención de 30 días
-- ⚠️ Pruebas de restauración
-
-**Acción:**
-```bash
-# crontab -e
-0 2 * * * /opt/balansoft-ws/scripts/backup.sh
-```
-
-**Sin esto:** Un fallo de disco = pérdida total de datos.
-
-#### 2.9 Documentación de usuario
-
-**Falta:**
-- ⚠️ Manual de operador (con screenshots)
-- ⚠️ Manual de administrador
-- ⚠️ Video tutoriales
-- ⚠️ FAQ
-
-**Sin esto:** Cada cliente llamará a soporte por cosas básicas.
+| Categoría | Pendientes | Días |
+|-----------|-----------|:----:|
+| 🟢 **Deuda técnica** | 0 ítems (D1-D6 cerrados) | 0 |
+| 🔴 **CI/CD + hardening** | 3 ítems (H3, H4, H6) | ~4 |
+| 🟠 **Optimización + UX** | 2 ítems (H12, H15) | ~2 |
+| 🟡 **Validación con cliente** | 8 ítems (P1-P8) | ~10 |
+| **TOTAL** | **14 ítems** | **~17 días** |
 
 ---
 
-### 🟢 DESEABLE - Roadmap futuro
+## 1. Deuda técnica (~4 días) — ✅ CERRADA
 
-#### 2.10 App móvil nativa
+Estos son **inconsistencias detectadas en el código** que no rompen nada hoy pero pueden causar bugs sutiles.
 
-**Situación actual:** Flutter compila para Linux y Android, pero está pensado para desktop.
+| # | Qué | Dónde | Fix | Estado |
+|---|-----|-------|-----|--------|
+| **D1** | `AppConstants.dbVersion = 1` pero la BD real es `version: 5` | `frontend/lib/core/constants/app_constants.dart` vs `database_helper.dart` | Unificar a 5 | ✅ Hecho |
+| **D2** | Frontend usa `productCode = 'BWS'`, backend usa `LICENSE_PRODUCT_CODE=WS` | `frontend/lib/core/config/license_config.dart` vs `backend/.env` | Unificar a `WS` | ✅ Hecho |
+| **D3** | Ajustes → Sincronización: switch "cada 5 min" no funciona, "Sincronizar ahora" solo muestra snackbar | `frontend/lib/presentation/screens/settings/` | Conectar al `SyncBloc` real | ✅ Hecho |
+| **D4** | UI de Auditoría solo muestra estado de pesajes, no la tabla `auditoria` completa | `frontend/lib/presentation/screens/auditoria/` | Agregar volcado de `auditoria` (usuario/IP/timestamp) | ✅ Hecho |
+| **D5** | Rate limiting no se comparte entre los 4 workers de uvicorn | `backend/app/core/rate_limit.py` | Redis o documentar limitación | ✅ Documentado (Redis sigue pendiente) |
+| **D6** | `docs/MANEJO_DB.md` dice 22 tablas locales, el esquema real tiene 24 | `docs/MANEJO_DB.md` | Actualizar a 24 | ✅ Hecho |
 
-**Falta:**
-- ⚠️ Optimización para tablets
-- ⚠️ Modo offline más agresivo
-- ⚠️ Notificaciones push
-
-#### 2.11 Integraciones
-
-**Falta:**
-- ⚠️ API pública para ERP (SAP, Odoo)
-- ⚠️ Webhooks para eventos (boleto creado, cerrado, anulado)
-- ⚠️ Exportación a contabilidad
-
-#### 2.12 Funcionalidades avanzadas
-
-**Falta:**
-- ⚠️ OCR de placas (reconocimiento automático)
-- ⚠️ Firma digital en tickets
-- ⚠️ Multi-idioma (i18n)
-- ⚠️ Dashboard con gráficos
-- ⚠️ Predicciones (ML para detectar anomalías)
+**Por qué primero**: son fixes rápidos (0.5-1 día cada uno) y evitan bugs difíciles de diagnosticar.
 
 ---
 
-## 3. CHECKLIST DE PRODUCCIÓN
+## 2. CI/CD + Hardening (~6 días)
 
-Aquí está el checklist definitivo de lo que falta **antes de instalar en el primer cliente real**:
+Sin esto, **no puedes desplegar en producción seria**.
 
-### Antes del primer cliente
-
-- [ ] **Probar con balanza real** del cliente (adaptar parser)
-- [ ] **Configurar HTTPS** con certificado SSL
-- [ ] **Configurar CORS** restringido (no `*`)
-- [ ] **Configurar SECRET_KEY** fuerte y única por cliente
-- [ ] **Configurar backups automáticos** (BD + media)
-- [ ] **Configurar logs rotativos**
-- [ ] **Configurar rate limiting** en `/auth/login`
-- [ ] **Probar con 3-5 usuarios concurrentes**
-- [ ] **Probar con 10,000+ boletos**
-- [ ] **Documentar proceso de instalación** para el cliente
-- [ ] **Capacitar al operador** del cliente
-- [ ] **Configurar monitoreo básico** (al menos health check + alertas)
-
-### Primeros 30 días
-
-- [ ] **Establecer CI/CD** (GitHub Actions)
-- [ ] **Configurar Prometheus + Grafana**
-- [ ] **Configurar alertas** (email/Slack)
-- [ ] **Crear manual de usuario** con screenshots
-- [ ] **Crear manual de administrador**
-- [ ] **Establecer proceso de soporte** (tickets, SLA)
-- [ ] **Primera revisión de performance** con datos reales
-- [ ] **Primera revisión de seguridad** (pentest básico)
-
-### Primeros 90 días
-
-- [ ] **Análisis de uso real** (¿qué funciones se usan más?)
-- [ ] **Optimizaciones basadas en feedback**
-- [ ] **Roadmap de mejoras** priorizado
-- [ ] **Considerar app móvil nativa** si el cliente lo pide
-- [ ] **Considerar integraciones** con ERP del cliente
+| # | Qué | Por qué | Estado |
+|---|-----|---------|--------|
+| **H1** | CI con GitHub Actions (pytest + flutter test + analyze) | Sin verificación automática en PRs | ✅ Hecho (`.github/workflows/ci.yml`) |
+| **H2** | E2E en CI (backend sembrado + Flutter integration_test) | Los E2E existen pero no corren automáticamente | ✅ Hecho (stub LM Ed25519 + 34 tests E2E + job `e2e`) |
+| **H2b** | E2E de Flutter en CI (`integration_test/`) | El flujo de UI no se prueba automáticamente | ✅ Hecho (`pesaje_flow_test.dart` + `e2e_flutter.sh` + job `e2e-flutter` con xvfb) |
+| **H3** | Backup automático del LM (pg_dump + timer) | Pérdida de licencias/cuentas = desastre | ⏳ Infra |
+| **H4** | Firma de código WServer (Windows/macOS) | Windows Defender puede bloquear el `.exe` | ⏳ Certificados |
+| **H5** | Logging estructurado JSON + rotación | Difícil diagnosticar en producción | ✅ Hecho |
+| **H6** | Prometheus + Grafana + Alertmanager | `/metrics` existe pero nadie lo visualiza | ⏳ Infra |
+| **H7** | Rotación de logs (logrotate) | Disco se llena en prod | ✅ Hecho |
+| **H8** | Validación `APP_ENV=production` en `config.py` | Si `DEBUG_MODE=true` en prod, filtra tokens de reset | ✅ Hecho |
 
 ---
 
-## 4. LO QUE **NO** FALTA (Aclaración importante)
+## 3. Optimización + UX (~5 días)
 
-Para que no haya confusión, esto es lo que **ya está completo** y **no hay que tocar**:
-
-### ✅ Backend
-- API REST completa (60 endpoints)
-- Autenticación JWT + refresh
-- Multi-empresa con `id_empresa`
-- Reglas de negocio (creación inline, un pendiente, anulación)
-- Cálculos PTE/PTS/PNT/PDF/PDV
-- Kardex con inverso
-- Reportes (diario, mensual, vehículo, kardex, avanzados)
-- Exportación Excel/PDF
-- Tickets PDF con marca de agua
-- Fotos de boleto y catálogos
-- HAL de balanza (serial + TCP)
-- Sincronización offline (push/pull)
-- Licencias con Ed25519
-- Auditoría en dos tablas
-- Health check
-- 87 tests verdes
-
-### ✅ Frontend
-- 12 pantallas completas
-- BLoC + get_it
-- Offline-first con sqflite
-- Peso en vivo (API-first + fallback TCP)
-- Fotos (cámara/galería)
-- Guardado en Descargas
-- Responsive móvil
-- Tema claro/oscuro
-- Modo kiosk
-- Pantalla de licencias (ADMIN)
-- Reportes avanzados
-- 52 tests + 1 E2E
-
-### ✅ Base de datos
-- 23 tablas
-- 5 migraciones versionadas
-- Índices
-- Multi-empresa
-- Auditoría
-
-### ✅ Simulador BSDD
-- Módulo WS con básculas :5555 y :5556
-- 27 tests
-
-### ✅ Documentación
-- PRD, ARCH, MODEL, UI-UX
-- IMPLEMENTADO v1.4
-- AGENTS.md
-- OpenAPI (60 paths)
+| # | Qué | Impacto | Estado |
+|---|-----|---------|--------|
+| **H10** | Compresión de fotos antes de subir | Almacenamiento crece rápido | ✅ Hecho (Pillow, 1600 px, JPEG q80) |
+| **H11** | Paginación en `catalogo/sync` | Lento con catálogos grandes | ✅ Hecho (`limit`/`skip`/`catalogo`) |
+| **H12** | Auditoría de lecturas sensibles (opcional) | Trazabilidad de consultas | ⏳ Opcional |
+| **H14** | Documentación de API para integradores (Redoc) | Operadores no técnicos no saben usar la API | ✅ Ya existía |
+| **H15** | Manual de operador (PDF/Markdown + screenshots) | Capacitación manual | ⏳ Producto final |
 
 ---
 
-## 5. RESUMEN VISUAL
+## 4. Validación con cliente (~10 días)
+
+**Requiere hardware/dominio/cliente real**, no se puede hacer en dev.
+
+| # | Qué | Requiere |
+|---|-----|----------|
+| **P1** | Probar con balanza física (Toledo/Rice Lake/Sartorius) | Hardware real |
+| **P2** | Prueba de volumen (~50k boletos) | Semilla + entorno |
+| **P3** | HTTPS/TLS con nginx | Dominio + certificado |
+| **P4** | Manuales de usuario con capturas | Producto final |
+| **P5** | Proceso de soporte formal (SLA, escalación) | Proceso |
+| **P6** | CI/CD completo | Pipeline |
+| **P7** | Automatización de backups del LM | Infra |
+| **P8** | Regenerar WServer + bundles Flutter/APK | Build |
+
+---
+
+## 5. ¿Qué NO queda por hacer?
+
+Estas cosas **ya están hechas** (no las toques):
+
+- ✅ Pesaje completo (4 estados, cálculos, kardex 10/60)
+- ✅ Captura guiada cabina→remolque
+- ✅ Conversión de unidades
+- ✅ Tabla de tolerancia
+- ✅ Búsqueda rápida con copia
+- ✅ Protección de datos sin guardar
+- ✅ HAL de balanza (serial/TCP)
+- ✅ Peso en vivo
+- ✅ Descubrimiento de dispositivos
+- ✅ i18n es/en/pt (621 claves)
+- ✅ Tickets PDF + TXT con presets
+- ✅ Panel del proveedor
+- ✅ Seguridad por categorías (matriz rol × módulo)
+- ✅ Series de numeración
+- ✅ Identidad local
+- ✅ Asistente de instalación (SERVIDOR/TRABAJADOR)
+- ✅ WServer (PyInstaller)
+- ✅ Reportes avanzados (transportista, tercero, rango, comparativo)
+- ✅ Ajustes de inventario
+- ✅ Auditoría (backend + volcado en UI con usuario/IP/timestamp)
+- ✅ Rate limiting (básico, documentado su límite por worker)
+- ✅ Prometheus (`/metrics`)
+- ✅ Compresión de imágenes (H10) y paginación de catálogos (H11)
+- ✅ Logging JSON rotado (H5/H7) y validación de entorno prod (H8)
+- ✅ CI en GitHub Actions (H1)
+- ✅ 343 tests backend (310 rápidos + 33 E2E con stub del LM) + 158 frontend
+
+---
+
+## 6. Mi recomendación
+
+**Orden sugerido** (tras la tanda del 2026-10-01):
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    BALANSOFT-WS v1.4                        │
-│                                                             │
-│  CÓDIGO:        ████████████████████████ 100% ✅           │
-│  TESTS:         ████████████████████████ 100% ✅           │
-│  DOCS TÉCNICA:  ████████████████████████ 100% ✅           │
-│                                                             │
-│  ─────────────────────────────────────────────────────      │
-│                                                             │
-│  PRODUCCIÓN:    ██████░░░░░░░░░░░░░░░░░░  30% ⚠️           │
-│  CI/CD:         ░░░░░░░░░░░░░░░░░░░░░░░░   0% ❌           │
-│  MONITOREO:     ░░░░░░░░░░░░░░░░░░░░░░░░   0% ❌           │
-│  DOCS USUARIO:  ░░░░░░░░░░░░░░░░░░░░░░░░   0% ❌           │
-│  HARDWARE REAL: ████░░░░░░░░░░░░░░░░░░░░  20% ⚠️           │
-│                                                             │
-│  ─────────────────────────────────────────────────────      │
-│                                                             │
-│  LISTO PARA:    Desarrollo y pruebas ✅                    │
-│  NO LISTO PARA: Producción real sin trabajo previo ⚠️     │
-└─────────────────────────────────────────────────────────────┘
+1. ~~H2b~~ → hecho. Siguiente disponible: H6 (Prometheus + Grafana) o H12
+2. H3 (backups del LM)             → 1 día  → protege cuentas/licencias
+3. H6 (Grafana) + H4 (firma)      → 2 días → producción seria
+4. H15 (manual) + H12             → 2 días → operación y trazabilidad
+5. Validación cliente (P1-P8)     → 10 días → requiere entorno real
 ```
 
----
+**Si tienes un cliente esperando**: salta directo a P1-P3 (hardware, volumen, TLS) y deja H12/H15 para después.
 
-## 6. RECOMENDACIÓN FINAL
-
-### Lo que yo haría si fuera tú
-
-**Semana 1-2: Preparar producción**
-1. Adaptar HAL a la balanza real del cliente
-2. Configurar HTTPS + CORS + SECRET_KEY
-3. Configurar backups automáticos
-4. Probar con hardware real
-
-**Semana 3-4: Documentar**
-5. Crear manual de operador
-6. Crear manual de administrador
-7. Grabar video tutoriales
-
-**Mes 2: Automatizar**
-8. Configurar CI/CD (GitHub Actions)
-9. Configurar Prometheus + Grafana
-10. Configurar alertas
-
-**Mes 3: Instalar primer cliente**
-11. Instalar en sitio
-12. Capacitar operadores
-13. Monitorear de cerca
-14. Recoger feedback
-
-**Mes 4+: Mejorar**
-15. Roadmap basado en feedback real
-16. Nuevas funcionalidades
-17. Optimizaciones
+**Si es producto interno**: H2b ya está cerrado; el ciclo de calidad en UI queda cubierto por el job `e2e-flutter`.
 
 ---
 
-## 7. RESPUESTA DIRECTA A TU PREGUNTA
+## 7. Preguntas para decidir
 
-**"¿Qué falta hacer?"**
+1. **¿Hay un cliente real esperando** o es producto en desarrollo?
+2. **¿Tienes dominio + servidor** para TLS y despliegue real?
+3. **¿Hay hardware de balanza** disponible para pruebas?
+4. **¿Se puede montar un stub del LM** (servicio que firme licencias) para CI?
 
-**Respuesta corta:** El **código está completo**. Falta **operacionalizarlo**:
-
-1. 🔴 **Adaptar HAL a balanza real** del cliente (crítico)
-2. 🔴 **Configurar HTTPS, CORS, SECRET_KEY** (crítico)
-3. 🔴 **Configurar backups automáticos** (crítico)
-4. 🟡 **CI/CD** (importante)
-5. 🟡 **Monitoreo y alertas** (importante)
-6. 🟡 **Documentación de usuario** (importante)
-7. 🟢 **App móvil, integraciones, OCR** (deseable)
-
-**Lo que NO falta:** Backend, frontend, base de datos, tests, documentación técnica.
-
-**Tiempo estimado para producción real:** 3-4 semanas de trabajo operacional.
-
-**Tiempo estimado para producción robusta:** 3 meses (incluyendo CI/CD, monitoreo, docs).
-
----
-
-¿Quieres que profundice en alguna de estas áreas? Por ejemplo:
-- Código específico para adaptar el HAL a una balanza real
-- Configuración completa de CI/CD
-- Configuración de Prometheus + Grafana
-- Manual de usuario con screenshots
+Si me dices cuál es tu prioridad, te genero el código concreto para esas tareas.

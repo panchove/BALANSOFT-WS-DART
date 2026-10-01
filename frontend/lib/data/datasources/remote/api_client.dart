@@ -646,9 +646,31 @@ Future<Response> getMonthlyReport(int year, int month) async {
     }
   }
 
-  Future<Response> getList(String path) async {
-    final response = await _dio.get('$_baseUrl$path');
+  Future<Response> getList(String path, {Map<String, dynamic>? queryParameters}) async {
+    final response =
+        await _dio.get('$_baseUrl$path', queryParameters: queryParameters);
     return response;
+  }
+
+  /// Registro de auditoría funcional (D4): acción, entidad, usuario, IP, UTC.
+  Future<List<Map<String, dynamic>>> listAuditoria({
+    String? entidad,
+    String? accion,
+    int skip = 0,
+    int limit = 200,
+  }) async {
+    final response = await getList(
+      ApiConstants.auditoria,
+      queryParameters: {
+        if (entidad != null && entidad.isNotEmpty) 'entidad': entidad,
+        if (accion != null && accion.isNotEmpty) 'accion': accion,
+        'skip': skip,
+        'limit': limit,
+      },
+    );
+    return (response.data as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
   }
 
   /// Escanea las básculas conectadas/disponibles (TCP + serial).

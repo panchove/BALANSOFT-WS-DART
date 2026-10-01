@@ -498,6 +498,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
                 ),
               if (ultimo)
                 FilledButton.icon(
+                  key: const Key('empresa_finalizar_btn'),
                   onPressed: _enviando ? null : _finalizar,
                   icon: _enviando
                       ? const SizedBox(
@@ -510,6 +511,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
                 )
               else
                 FilledButton(
+                  key: const Key('empresa_continuar_btn'),
                   onPressed: _enviando ? null : _siguiente,
                   child: Text('setup_continue'.tr()),
                 ),

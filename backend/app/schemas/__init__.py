@@ -384,6 +384,11 @@ class CatalogSyncResponse(BaseModel):
     balanzas: list[BalanzaOut] = Field(default_factory=list)
     terceros: list[TerceroOut] = Field(default_factory=list)
     server_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # H11: paginación de /catalogo/sync. `totales` es el número real de
+    # registros por catálogo y `truncado` indica si la respuesta quedó
+    # recortada por `limit` (el cliente debe pedir la página siguiente).
+    totales: dict[str, int] = Field(default_factory=dict)
+    truncado: bool = False
 
 
 # ---------------------------------------------------------------------------

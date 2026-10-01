@@ -3,13 +3,17 @@
 # BALANSOFT-WS - Preparación de la base de datos en servidor
 #
 # Modos:
-#   instalar (default)  Crea la BD si no existe y aplica schema.sql (esquema final).
+#   instalar (default)  Crea la BD si no existe y aplica el esquema canónico.
 #   aplicar-migraciones  Actualiza una BD existente aplicando migrations/*.sql en orden.
 #   seed                 Inserta empresa demo, admin y catálogos base (opcional).
 #
 # Uso:
 #   DATABASE_URL_SYNC="postgresql+psycopg2://user:pass@host:5432/balansoft_ws" \
 #     ./scripts/setup_db.sh [instalar|aplicar-migraciones|seed]
+#
+# Esquemas canónicos (no existe backend/schema.sql):
+#   rol local  → SCHEMA_FILE=balansoft-ws-local.sql   (por defecto, 24 tablas)
+#   rol server → SCHEMA_FILE=balansoft-ws-server.sql  (10 tablas)
 #
 # Si DATABASE_URL_SYNC no viene en el entorno, se lee de backend/.env.
 # Prerrequisitos: psql instalado y usuario con permisos de creación de BD.
@@ -48,6 +52,9 @@ DBNAME="${REST##*/}"
 
 echo "→ Base de datos: ${DBNAME} en ${HOSTPART}"
 
+# Esquema canónico a aplicar en el modo `instalar` (rol local por defecto).
+SCHEMA_FILE="${SCHEMA_FILE:-balansoft-ws-local.sql}"
+
 # Permitir override para credenciales con caracteres especiales en la password
 SERVER_URI="${PG_SERVER_URI:-${SCHEME}://${HOSTPART}/postgres}"
 
@@ -64,8 +71,14 @@ case "${MODO}" in
       psql "${SERVER_URI}" -c "CREATE DATABASE \"${DBNAME}\""
     fi
 
-    echo "→ Aplicando schema.sql..."
-    psql "${URI}" -v ON_ERROR_STOP=1 -f schema.sql
+    echo "→ Aplicando ${SCHEMA_FILE}..."
+    if [[ ! -f "${SCHEMA_FILE}" ]]; then
+      echo "ERROR: no existe el esquema '${SCHEMA_FILE}' en $(pwd)." >&2
+      echo "       Usa SCHEMA_FILE=balansoft-ws-local.sql (rol local) o" >&2
+      echo "       SCHEMA_FILE=balansoft-ws-server.sql (rol server)." >&2
+      exit 1
+    fi
+    psql "${URI}" -v ON_ERROR_STOP=1 -f "${SCHEMA_FILE}"
     echo "✅ Esquema instalado."
     ;;
 

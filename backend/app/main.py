@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -14,15 +13,18 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.endpoints import API_ROUTERS, SERVER_ROUTERS
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
+from app.core.logging_config import configurar_logging
 from app.core.monitoring import MetricsMiddleware, metrics_text
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.scale_session import get_scale_session_manager
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+log = configurar_logging(
+    nivel=settings.log_level,
+    formato=settings.log_format,
+    directorio=settings.log_dir,
+    max_bytes=settings.log_max_bytes,
+    backup_count=settings.log_backup_count,
 )
-log = logging.getLogger("balansoft_ws")
 API_VERSION = "1.0.0"
 
 # Rol del despliegue: "local" monta la API operativa (estación); "server" monta
@@ -108,6 +110,10 @@ app = FastAPI(
         {
             "name": "Archivos",
             "description": "Subida/descarga de archivos adjuntos (fotos de pesajes).",
+        },
+        {
+            "name": "Auditoria",
+            "description": "Consulta del registro de auditoría funcional (REQ-NF-SEG-001): acción, entidad, usuario, IP y timestamp UTC.",
         },
     ],
     contact={

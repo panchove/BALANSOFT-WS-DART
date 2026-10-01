@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from typing import Any
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+log = logging.getLogger("balansoft_ws.config")
+
+_SECRET_KEY_INSEGURA = {
+    "dev_secret_key_balansoft_ws_2026",
+    "CAMBIAR_ESTA_CLAVE_CON_openssl_rand_hex_32",
+}
 
 
 class Settings(BaseSettings):
@@ -74,6 +83,11 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = "logs/app.log"
+    # H5: formato de salida ("text" legible | "json" estructurado) y rotación.
+    log_format: str = "text"
+    log_dir: str | None = None
+    log_max_bytes: int = 5_000_000
+    log_backup_count: int = 5
 
     # Sincronización
     sync_interval_minutes: int = 2
@@ -123,6 +137,32 @@ class Settings(BaseSettings):
     # Backups
     backup_dir: str = "backups"
     backup_retention_days: int = 30
+
+    @model_validator(mode="after")
+    def _validar_entorno_produccion(self) -> Settings:
+        """Endurece la configuración cuando APP_ENV es producción.
+
+        Evita arrancar en producción con ``DEBUG_MODE=true`` (filtraría enlaces
+        de reset de contraseña) o con la ``SECRET_KEY`` por defecto.
+        """
+        if self.app_env.strip().lower() not in {"production", "prod"}:
+            return self
+        problemas: list[str] = []
+        if self.debug_mode:
+            problemas.append("DEBUG_MODE=true")
+        if self.secret_key in _SECRET_KEY_INSEGURA:
+            problemas.append("SECRET_KEY por defecto")
+        if problemas:
+            raise ValueError(
+                "Configuración insegura para APP_ENV=production: "
+                + "; ".join(problemas)
+                + ". Corrige el .env antes de arrancar."
+            )
+        if "*" in self.cors_origins_list:
+            log.warning(
+                "CORS_ORIGINS contiene '*' en producción; restringe los orígenes."
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Balansoft-WS';
   static const String dbName = 'balansoft_ws.db';
-  static const int dbVersion = 1;
+  static const int dbVersion = 5;
 
   // Sync
   static const int syncBatchSize = 50;

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.datetime_utils import naive_utc
 from app.core.hardware import obtener_hardware_id
 from app.core.license_client import LicenseClient, LicenseError, LicenseInfo, get_license_client
 from app.core.monitoring import inc_license_error
@@ -62,16 +63,12 @@ async def sincronizar_licencia_e_identidad(
             # Actualizar Empresa
             empresa.licencia_tier = info.tier
             empresa.licencia_status = info.status
-            empresa.licencia_expira = (
-                info.expires_at.replace(tzinfo=None) if info.expires_at else None
-            )
+            empresa.licencia_expira = naive_utc(info.expires_at)
 
             # Actualizar IdentidadLocal
             identidad.licencia_tier = info.tier
             identidad.licencia_status = info.status
-            identidad.licencia_expira = (
-                info.expires_at.replace(tzinfo=None) if info.expires_at else None
-            )
+            identidad.licencia_expira = naive_utc(info.expires_at)
             identidad.licencia_key = key
             identidad.hardware_id = hw_id
             identidad.ultima_validacion = datetime.now(UTC).replace(tzinfo=None)

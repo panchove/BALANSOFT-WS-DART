@@ -802,6 +802,20 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     if (_alertaAbierta || _guardandoPesaje) return;
     final modoSalida = _boletoSalida != null;
 
+    // Estación sin báscula: la lectura es el peso tecleado por el operador.
+    // Sin este caso la captura quedaba bloqueada (`_pesoCabinaActual` siempre 0)
+    // y una estación sin balanza no podía registrar ningún pesaje.
+    if (!_hayBascula && _esPesoManual) {
+      final valor = double.tryParse(_pesoActivoTexto(modoSalida: modoSalida)) ?? 0;
+      if (valor <= 0) {
+        _avisoSimple('weighing_capture_cabina_first'.tr(), SwsColors.warning);
+        return;
+      }
+      setState(() => _objetivoPeso = _ObjetivoPeso.fijado);
+      _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+      return;
+    }
+
     // Sin remolque la captura es un solo paso: fija y libera la lectura.
     if (!_remolque) {
       if (_pesoCabinaActual <= 0) {
@@ -934,6 +948,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
+            key: const Key('dialogo_confirmar_guardado_btn'),
             style: FilledButton.styleFrom(backgroundColor: SwsColors.success),
             onPressed: () => Navigator.of(ctx).pop(true),
             icon: const Icon(Icons.check, size: 18),
@@ -965,12 +980,14 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           OutlinedButton.icon(
+            key: const Key('dialogo_nuevo_peso_btn'),
             onPressed: () => Navigator.of(ctx).pop(false),
             icon: const Icon(Icons.add, size: 18),
             label: Text('weighing_new_weight'.tr()),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
+            key: const Key('dialogo_imprimir_btn'),
             style: FilledButton.styleFrom(backgroundColor: SwsColors.accent),
             onPressed: () => Navigator.of(ctx).pop(true),
             icon: const Icon(Icons.print, size: 18),
@@ -1029,8 +1046,23 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   /// Exige que el peso activo se haya fijado con el botón *Capturar peso*.
   bool _validarCapturaRealizada() {
     if (_objetivoPeso == _ObjetivoPeso.fijado) return true;
+    // Sin báscula no hay lectura que "capturar": el peso tecleado con el modo
+    // manual habilitado cumple el mismo papel.
+    if (!_hayBascula && _esPesoManual) {
+      final valor =
+          double.tryParse(_pesoActivoTexto(modoSalida: _boletoSalida != null)) ?? 0;
+      if (valor > 0) return true;
+    }
     _avisoSimple('weighing_capture_required'.tr(), SwsColors.warning);
     return false;
+  }
+
+  /// Texto del campo de peso del paso activo (lectura o tecleo manual).
+  String _pesoActivoTexto({required bool modoSalida}) {
+    if (!_remolque) {
+      return modoSalida ? _pesoSalidaVehiculoCtrl.text : _pesoEntradaCtrl.text;
+    }
+    return modoSalida ? _pesoSalidaRemolqueCtrl.text : _pesoRemolqueCtrl.text;
   }
 
   // --- Cálculos MODEL.md ---
@@ -2541,6 +2573,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       ],
       const SizedBox(height: 10),
       _CapturarPesoButton(
+        key: const Key('capturar_peso_button'),
         onTap: _capturarPeso,
         etiqueta: _etiquetaCapturarPeso,
         pendiente: _objetivoPeso != _ObjetivoPeso.fijado,
@@ -2765,6 +2798,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               focusNode: _medidaFocus,
               initialValue: _medida,
               isDense: true,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Medida',
                 prefixIcon: Icon(Icons.straighten_outlined),
@@ -3079,6 +3113,7 @@ class _QuickActionBar extends StatelessWidget {
               color: SwsColors.accentLight),
           const SizedBox(width: 6),
           _ToolbarButton(
+              buttonKey: const Key('entrada_toolbar_button'),
               icon: Icons.input,
               label: context.tr('Entrada'),
               shortcut: 'F2',
@@ -3086,6 +3121,7 @@ class _QuickActionBar extends StatelessWidget {
               color: modoSalida ? Colors.white70 : SwsColors.accent),
           const SizedBox(width: 6),
           _ToolbarButton(
+              buttonKey: const Key('salida_toolbar_button'),
               icon: Icons.output,
               label: context.tr('Salida'),
               shortcut: 'F6',
@@ -3093,6 +3129,7 @@ class _QuickActionBar extends StatelessWidget {
               color: modoSalida ? SwsColors.success : SwsColors.accentLight),
           const SizedBox(width: 6),
           _ToolbarButton(
+            buttonKey: const Key('guardar_toolbar_button'),
             icon: guardando ? Icons.hourglass_top : Icons.save,
             label: guardando ? context.tr('loading') : context.tr('Guardar'),
             shortcut: guardando ? null : 'F4',
@@ -3113,6 +3150,7 @@ class _QuickActionBar extends StatelessWidget {
               onTap: onImprimir),
           const SizedBox(width: 6),
           _ToolbarButton(
+            buttonKey: const Key('salir_toolbar_button'),
             icon: Icons.exit_to_app,
             label: context.tr('Salir'),
             shortcut: 'Esc',
@@ -3131,6 +3169,7 @@ class _CapturarPesoButton extends StatelessWidget {
   final bool pendiente;
 
   const _CapturarPesoButton({
+    super.key,
     required this.onTap,
     required this.etiqueta,
     this.pendiente = false,
@@ -3192,6 +3231,7 @@ class _ToolbarButton extends StatelessWidget {
   final String? shortcut;
   final VoidCallback onTap;
   final Color? color;
+  final Key? buttonKey;
 
   const _ToolbarButton({
     required this.icon,
@@ -3199,6 +3239,7 @@ class _ToolbarButton extends StatelessWidget {
     this.shortcut,
     required this.onTap,
     this.color,
+    this.buttonKey,
   });
 
   @override
@@ -3207,6 +3248,7 @@ class _ToolbarButton extends StatelessWidget {
     return Tooltip(
       message: shortcut != null ? '$label ($shortcut)' : label,
       child: InkWell(
+        key: buttonKey,
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Container(
@@ -3807,6 +3849,8 @@ class _BoletoPendienteDialogState extends State<_BoletoPendienteDialog> {
                               itemBuilder: (context, index) {
                                 final b = filtrados[index];
                                 return ListTile(
+                                  key: Key(
+                                      'boleto_pendiente_${b.idVehiculo ?? b.boleto}'),
                                   leading: CircleAvatar(
                                     backgroundColor: SwsColors.accent
                                         .withValues(alpha: 0.15),
