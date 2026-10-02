@@ -165,7 +165,6 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     final status = _statusActual(conectado: conectado, estable: estable);
     final esVerde = status == ScaleStatus.estable;
     final esAmarillo = status == ScaleStatus.inestable || conectando;
-    final esRojo = status == ScaleStatus.desconectado;
 
     // Estado textual mostrado bajo el nombre de la balanza.
     final estadoColor = esVerde
