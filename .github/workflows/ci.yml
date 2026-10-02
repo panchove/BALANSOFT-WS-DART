@@ -174,12 +174,16 @@ jobs:
       - uses: actions/checkout@v4
 
       # El E2E corre la app Flutter de escritorio (Linux + GTK) contra la API.
+      # libsecret-1-dev es obligatorio: lo exige el plugin flutter_secure_storage_linux
+      # en su CMakeLists.txt (pkg_check_modules libsecret-1>=0.18.4). Sin él, la
+      # compilación de Linux falla antes de arrancar cualquier test.
       - name: Dependencias de escritorio Linux
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang cmake ninja-build pkg-config libgtk-3-dev \
-            liblzma-dev libstdc++-12-dev xvfb
+            liblzma-dev libstdc++-12-dev xvfb \
+            libsecret-1-dev
 
       - uses: astral-sh/setup-uv@v5
         with:
