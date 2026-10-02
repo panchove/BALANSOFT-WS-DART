@@ -1,7 +1,7 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.3
-**Fecha:** 2026-09-28
+**Versión:** 2.4
+**Fecha:** 2026-10-02
 **Estado:** Vigente
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
@@ -169,7 +169,7 @@ Los archivos **autoridad** del esquema son:
 | Archivo | Base | Tablas |
 |---------|------|--------|
 | `backend/balansoft-ws-server.sql` | `balansoft_ws` (producción) / `balansoft_ws_server` (dev) | 10 |
-| `backend/balansoft-ws-local.sql` | `balansoft_ws_local` | 22 |
+| `backend/balansoft-ws-local.sql` | `balansoft_ws_local` | 24 |
 
 Ambos son **idempotentes** (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`), en una transacción, y usan `gen_random_uuid()` (pgcrypto). No usan Alembic: los cambios futuros van como migraciones `backend/migrations/*.sql` hacia adelante.
 
@@ -207,6 +207,33 @@ No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 | `sync_queue` / `sync_logs` | Cola local de sincronización hacia el servidor |
 | `auditoria` / `logs_sistema` | Auditoría operativa y logs |
 | `configuraciones` / `parametros_sistema` | Configuración local |
+
+> **Tablas del esquema local (24, verificadas contra el DDL):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `almacenes`, `balanzas`, `boletos_pesaje`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `seguridad_permisos`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`.
+
+### 6.3 Columnas reservadas (sin semántica definida — no usar)
+
+#### `boletos_pesaje.multi_despacho_recepcion`
+
+| Atributo | Valor |
+|----------|-------|
+| DDL | `backend/balansoft-ws-local.sql:300` — `BOOLEAN NOT NULL DEFAULT FALSE` |
+| Estado | **RESERVADA / INERTE** |
+
+Esta columna **no implementa ninguna funcionalidad**. Está en el esquema desde el commit inicial y hoy es un número muerto:
+
+- **Se persiste**: en los modelos del backend, en el `create` de boletos y en el round-trip de sincronización (`SyncService` la copia); Flutter también la mapea en su modelo y su BD local.
+- **Pero nunca se lee**: tiene **0 apariciones en cualquier `SELECT` / `WHERE` / `GROUP BY` / `ORDER BY`** de todo el backend.
+- **No la expone ninguna UI** y **ningún documento vigente define su semántica**: solo aparece en el DDL de `ARCH.md` (documentación legacy), que no describe qué debe hacer.
+- **Comprobado empíricamente** (2026-10-02, 50 000 boletos): marcar 10 000 boletos con el flag no movió los tiempos — `reports/daily` 4,0 → 4,6 ms y `reports/monthly` 3,9 → 3,9 ms. La degradación que se sospechaba **no puede ocurrir porque la condición que la causaría no está implementada**. Evidencia: `docs/evidencia/volumen-analisis.md` §7.
+
+**Reglas para quien toque esta columna:**
+
+1. **No usarla** en consultas, reportes, filtros ni UI. No hace nada.
+2. **No borrarla** del esquema: rompería clientes existentes y el round-trip de sincronización.
+3. **No quitarla del round-trip de sync.** El beneficio sería de ~35 bytes por boleto (~17,5 MB acumulados en una década de 50 000 boletos/año), a cambio de un riesgo real: si alguna estación tuviera el flag en `true`, al dejar de enviarlo el backend escribiría `FALSE` encima y **se perdería el dato**. Y si algún día se implementa la funcionalidad, ese round-trip es justamente lo que preserva el valor ya cargado en las bases locales.
+4. **Para implementarla** hace falta antes una **decisión de negocio** que defina la semántica (¿una entrada con N despachos? ¿el mismo documento? ¿cómo se prorratea el Kardex?). Implementarla por inferencia sería peor que dejarla inerte.
+
+**Consecuencia para el análisis de rendimiento:** ningún reporte, endpoint o métrica puede degradarse por esta columna. No la incluyas en hipótesis de performance futuras.
 
 > **Diferencia con la versión anterior del doc:** se añadieron índices nuevos (`idx_dispositivos_cuenta`, `idx_sesiones_credencial`, `uq_modelos_empresa_nombre`, `idx_camiones_*`, `idx_auditoria_*`, etc.) y se eliminó la tabla `conceptos_kardex` del schema local (queda pendiente como catálogo editable futuro). Síguen los campos legacy de `boletos_pesaje` (`peso_bruto`, `peso_tara`, `litros`, `unidades`, etc.) para compatibilidad.
 
@@ -591,6 +618,22 @@ CORS_ORIGINS=["http://localhost:8003"]
 ```
 
 ---
+
+### 11.4 Documentación de API (`/docs`, `/redoc`, `/openapi.json`)
+
+Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa** desde la v2.4: `.env.plantilla` va con `API_DOCS_ENABLED=true`, de modo que toda instalación nueva expone:
+
+| Ruta | Qué es | Recomendado |
+|------|--------|-------------|
+| `/docs` | Swagger UI (interactivo) | Sí, para integradores |
+| `/redoc` | Redoc (referencia legible, **objetivo de H14**) | Sí, para integradores |
+| `/openapi.json` | Esquema OpenAPI completo (82 rutas) | Sí, es la fuente de ambos |
+
+**Decisión de seguridad (2026-10-02):** antes de esta versión la plantilla traía `API_DOCS_ENABLED=false` con intención de no exponer la superficie, pero **esa configuración no protegía nada**: `openapi_url` es independiente de la bandera, así que `/openapi.json` seguía publicando el esquema completo de las 82 rutas. Se pagaba la ausencia de documentación sin obtener seguridad. Por eso se optó por **habilitar la documentación y tratar la exposición de forma explícita** en lugar de ocultarla.
+
+> ⚠️ **Superficie expuesta por diseño:** la estación escucha en `0.0.0.0:8000`, accesible desde la LAN, y `/openapi.json` describe las 82 rutas. Los endpoints operativos exigen JWT y están aislados por `id_empresa` (§multi-tenancy), así que el esquema por sí solo no da acceso a datos. **Si una instalación requiere ocultarlo, el camino correcto es autenticar `/docs`, `/redoc` y `/openapi.json`, no volver a poner la bandera en `false`**, porque eso dejaría el esquema publicado igual.
+
+> **Nota:** `.env.example` (referencia del servidor central, expuesto a internet) conserva `API_DOCS_ENABLED=false`. Esa decisión es **independiente** de la estación: el VPS tiene un perfil de riesgo distinto (red pública) y merece su propia decisión antes de exponerlo.
 
 ## 12. Documentos Relacionados
 
