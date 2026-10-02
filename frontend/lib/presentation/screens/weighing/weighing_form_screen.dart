@@ -2194,6 +2194,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
             child: DropdownButtonFormField<String>(
               focusNode: _tipoTerceroFocus,
               initialValue: _tipoTercero,
+              // Sin isExpanded, el Row interno (prefixIcon + texto + flecha)
+              // desborda cuando el campo comparte fila con el de Razón Social.
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Tipo de Tercero',
                 prefixIcon: Icon(Icons.people_outline),
