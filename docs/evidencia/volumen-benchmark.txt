@@ -1,0 +1,17 @@
+Benchmark de volumen P2 — balansoft_ws_volumen
+============================================================================================================
+escenario                                         p50      p95      p99      max   umbral  estado
+------------------------------------------------------------------------------------------------------------
+weighing/list sin filtro (página 1)              20.2     23.0     23.0     23.0      200  ok
+weighing/list placa + rango de fechas            14.2     19.8     19.8     19.8      300  ok
+weighing/list página profunda (skip 20000)       34.9     35.3     35.3     35.3      300  ok
+weighing/list filtrado por estado                16.4     18.8     18.8     18.8      200  ok
+weighing/pendientes                              12.7     13.9     13.9     13.9      100  ok
+reports/daily                                     4.0      4.1      4.1      4.1      500  ok
+reports/monthly                                   3.9      3.9      3.9      3.9     1000  ok
+reports/vehicle (1 placa, 12 meses)               2.8      5.9      5.9      5.9      500  ok
+reports/kardex/saldo                              6.4      7.0      7.0      7.0      300  ok
+reports/kardex/detalle                           17.9     19.3     19.3     19.3      500  ok
+catalogo/sync (todo)                             26.3     27.9     27.9     27.9     1000  ok
+------------------------------------------------------------------------------------------------------------
+11/11 escenarios dentro de umbral · 0 con error HTTP

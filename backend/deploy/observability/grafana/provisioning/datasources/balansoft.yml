@@ -1,0 +1,18 @@
+# Grafana — datasource provisionado para BALANSOFT-WS (H6 de ACTUAR.md)
+#
+# Grafana lee este archivo al arrancar (ver grafana/dashboards/dashboards.yml),
+# así que no hay que crear la conexión a mano.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: balansoft-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Intervalo de consulta por defecto del dashboard.
+      timeInterval: 15s
+      httpMethod: POST

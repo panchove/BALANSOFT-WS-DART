@@ -1,0 +1,57 @@
+# Alertmanager — configuración de ejemplo para BALANSOFT-WS (H6 de ACTUAR.md)
+#
+# Por defecto el receptor es `null`: las alertas se descartan y solo se ven en
+# la UI de Alertmanager. Eso es lo correcto para desarrollo: noWant :=
+#   no hay a quién notificar todavía.
+#
+# Para producción hay que añadir un receptor real (ver la sección
+# "Pendiente de infra" de deploy/observability/README.md). NUNCA escribas aquí
+# credenciales: este archivo se versiona en Git.
+#
+# Validación:  amtool check-config deploy/observability/alertmanager.yml
+
+global:
+  # Espera antes de dar por resuelta una alerta silenciada.
+  resolve_timeout: 5m
+
+# Plantilla legible en español.
+route:
+  # Destino de las alertas menos graves.
+  receiver: "null"
+  group_by: ['alertname', 'rol_app']
+  # Agrupa durante 30 s para no enviar una ráfaga de lo mismo.
+  group_wait: 30s
+  group_interval: 5m
+  # Repite la alerta mientras siga disparando.
+  repeat_interval: 4h
+  routes:
+    # Lo crítico rota antes que el resto.
+    - matchers:
+        - severity="critical"
+      receiver: "null"
+      repeat_interval: 1h
+    # Lo informativo se agrupa por día.
+    - matchers:
+        - severity="info"
+      receiver: "null"
+      repeat_interval: 24h
+
+# Silencia alertas conocidas mientras se trabaja en ellas.
+inhibit_rules:
+  # Si la API está caída, no tiene sentido alertar por latencia o 5xx.
+  - source_matchers:
+      - alertname="BalansoftApiCaida"
+    target_matchers:
+      - severity=~"warning|critical"
+    equal: ['job']
+
+receivers:
+  # Receptor vacío: las alertas se descartan (útil en dev).
+  - name: "null"
+
+  # Ejemplo de webhook (correo/Slack/DingTalk vía un puente). Descomentar y
+  # apuntar a la URL real cuando exista la infraestructura.
+  # - name: webhook
+  #   webhook_configs:
+  #     - url: http://alertas-internas:8080/balansoft
+  #       send_resolved: true

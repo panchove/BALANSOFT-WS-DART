@@ -1,0 +1,19 @@
+# Grafana — proveedor de dashboards de BALANSOFT-WS (H6 de ACTUAR.md)
+#
+# Carga automática de todo dashboard JSON en el directorio del contenedor.
+# El compose monta ./grafana/dashboards en esa ruta.
+apiVersion: 1
+
+providers:
+  - name: balansoft
+    orgId: 1
+    folder: BALANSOFT-WS
+    folderUid: balansoft-ws
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # Debe coincidir con el montaje del compose.
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

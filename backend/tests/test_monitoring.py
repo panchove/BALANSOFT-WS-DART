@@ -5,10 +5,17 @@ Verifica:
 2. El middleware incrementa contadores por request.
 3. Los contadores de negocio funcionan correctamente.
 4. El endpoint /metrics retorna texto Prometheus válido.
+5. El andamiaje de observabilidad (deploy/observability) está completo,
+   es válido y solo usa métricas que el backend expone de verdad.
 """
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
+import pytest
 from fastapi import FastAPI, Request
 from starlette.testclient import TestClient
 
@@ -18,6 +25,7 @@ from app.core.monitoring import (
     REQUEST_COUNT,
     MetricsMiddleware,
     _normalize_path,
+    inc_active_user,
     inc_license_error,
     inc_pesaje_anulado,
     inc_pesaje_cerrado,
@@ -162,3 +170,129 @@ def test_metrics_serializa_texto_prometheus():
     assert "balansoft_pesajes_total" in text
     assert 'estatus="PENDIENTE"' in text
     assert 'tier="CENTRAL"' in text
+
+
+def test_metrics_expone_las_cinco_metricas_documentadas():
+    """El andamiaje de observabilidad (H6) documenta cinco métricas: si el
+    backend deja de exponer alguna, el dashboard y las alertas quedan rotos."""
+    _reset_business()
+    inc_pesaje_creado("CENTRAL")
+    inc_license_error("CENTRAL", "login")
+    inc_active_user("CENTRAL")
+    text = metrics_text().decode()
+
+    for nombre in (
+        "balansoft_http_requests_total",
+        "balansoft_api_latency_seconds",
+        "balansoft_pesajes_total",
+        "balansoft_license_errors_total",
+        "balansoft_active_users",
+    ):
+        assert nombre in text, f"falta la métrica documentada {nombre}"
+
+
+# ---------------------------------------------------------------------------
+# Andamiaje de observabilidad (H6)
+# ---------------------------------------------------------------------------
+
+DEPLOY_OBS = Path(__file__).resolve().parents[1] / "deploy" / "observability"
+RUTAS_OBSERVABILIDAD = {
+    "prometheus.yml",
+    "alertmanager.yml",
+    "alerts/balansoft-alerts.yml",
+    "docker-compose.observability.yml",
+    "grafana/provisioning/datasources/balansoft.yml",
+    "grafana/provisioning/dashboards/dashboards.yml",
+    "grafana/dashboards/balansoft-overview.json",
+    "README.md",
+}
+
+
+def _metricas_de_backend() -> set[str]:
+    """Nombres de métrica definidos en app/core/monitoring.py."""
+    fuente = (Path(__file__).resolve().parents[1] / "app" / "core" / "monitoring.py").read_text(
+        encoding="utf-8"
+    )
+    return set(re.findall(r'"\s*(balansoft_[a-z_]+?)(?:_bucket|_sum|_count)?\s*"', fuente))
+
+
+def test_andamiaje_observabilidad_esta_completo():
+    for relativa in RUTAS_OBSERVABILIDAD:
+        assert (DEPLOY_OBS / relativa).is_file(), f"falta {relativa}"
+
+
+def test_yaml_de_observabilidad_es_valido():
+    yaml = pytest.importorskip("yaml")
+    for relativa in RUTAS_OBSERVABILIDAD - {"grafana/dashboards/balansoft-overview.json"}:
+        if not relativa.endswith((".yml", ".yaml")):
+            continue
+        datos = yaml.safe_load((DEPLOY_OBS / relativa).read_text(encoding="utf-8"))
+        assert datos, f"{relativa} está vacío"
+
+
+def test_dashboard_es_json_valido():
+    datos = json.loads(
+        (DEPLOY_OBS / "grafana" / "dashboards" / "balansoft-overview.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert datos["panels"], "el dashboard no tiene paneles"
+    assert datos["title"]
+
+
+def test_alertas_y_dashboard_solo_usan_metricas_existentes():
+    """Nada deReferences a métricas inexistentes: una alerta que nunca dispara
+    es peor que no tenerla."""
+    disponibles = _metricas_de_backend()
+    assert disponibles, "no se pudo leer el catálogo de métricas del backend"
+
+    exprs: list[str] = []
+    yaml = pytest.importorskip("yaml")
+    reglas = yaml.safe_load(
+        (DEPLOY_OBS / "alerts" / "balansoft-alerts.yml").read_text(encoding="utf-8")
+    )
+    assert reglas["groups"], "no hay grupos de reglas"
+    for grupo in reglas["groups"]:
+        for regla in grupo["rules"]:
+            assert {"alert", "expr"} <= regla.keys(), f"regla incompleta: {regla}"
+            assert regla.get("labels", {}).get("severity"), f"sin severity: {regla['alert']}"
+            assert regla.get("annotations", {}).get("runbook"), f"sin runbook: {regla['alert']}"
+            exprs.append(str(regla["expr"]))
+
+    dashboard = json.loads(
+        (DEPLOY_OBS / "grafana" / "dashboards" / "balansoft-overview.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for panel in dashboard["panels"]:
+        for target in panel.get("targets", []):
+            exprs.append(target.get("expr", ""))
+
+    # `up` es de Prometheus y `_bucket` es el sufijo del histograma.
+    conocidas = disponibles | {"up"}
+    patron = re.compile(r"\b(balansoft_[a-z_]+?)(?:_bucket|_sum|_count)?\b")
+    for expr in exprs:
+        for nombre in set(patron.findall(expr)):
+            assert nombre in conocidas, f"la expresión usa una métrica inexistente: {nombre}"
+
+
+def test_alertmanager_usa_nombres_de_receptor_como_texto():
+    """En YAML `null` sin comillas es el VALOR nulo, no el nombre "null":
+    Alertmanager rechaza el arranque con "missing name in receiver"."""
+    datos = json.loads(
+        json.dumps(__import__("yaml").safe_load(
+            (DEPLOY_OBS / "alertmanager.yml").read_text(encoding="utf-8")))
+    )
+    assert datos["route"]["receiver"] == "null"
+    nombres = [r["name"] for r in datos["receivers"]]
+    assert "null" in nombres, f"falta el receptor nulo declarado: {nombres}"
+    assert all(isinstance(n, str) for n in nombres), "algún receptor quedó como nulo"
+
+
+def test_alertas_no_usan_id_empresa_como_label():
+    """Multi-tenancy: /metrics es agregado. Filtrar por empresa convertiría el
+    endpoint en una fuga de datos entre tenant."""
+    texto = (DEPLOY_OBS / "alerts" / "balansoft-alerts.yml").read_text(encoding="utf-8")
+    assert "id_empresa" not in texto
+    prometheus = (DEPLOY_OBS / "prometheus.yml").read_text(encoding="utf-8")
+    assert "id_empresa" not in prometheus

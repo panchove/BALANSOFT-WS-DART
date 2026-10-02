@@ -99,6 +99,97 @@ def _resolve_to_weighing_out(p: BoletoPesaje) -> WeighingOut:
     return WeighingOut.model_validate(p)
 
 
+async def _enriquecer_pesajes_lista(
+    db: AsyncSession, pesajes: list[BoletoPesaje]
+) -> list[BoletoPesaje]:
+    """Resuelve los nombres legibles de una página de boletos con 7 consultas.
+
+    `_enriquecer_pesaje_ticket` está pensado para **un** boleto (impresión,
+    PDF, cierre) y lanza hasta 10 consultas por registro. Reutilizarlo en
+    `/list` y `/pendientes` convertía una página de 100 boletos en ~1000
+    idas y vueltas a PostgreSQL: medido con 50k boletos, el endpoint se iba a
+    ~450 ms p50 solo por eso, y con fila por fila el costo escala con el
+    `limit` en vez de con la página.
+
+    Aquí se resuelven **una vez por página** y solo los 7 campos que
+    `WeighingOut` serializa (el resto —kardex, color, categoría, tara— es
+    exclusivo del ticket AVANZADO y no se pierde: `_enriquecer_pesaje_ticket`
+    sigue siendo el camino de los endpoints de un solo boleto).
+
+    Todos los catálogos se filtran por `id_empresa`: el tenant lo decide el
+    contexto autenticado, nunca el cliente.
+    """
+    if not pesajes:
+        return pesajes
+
+    id_empresa = pesajes[0].id_empresa
+
+    async def _por_id(model, columna, valores):
+        """Mapea `valor -> entidad` con una sola consulta (`IN (...)`)."""
+        if not valores:
+            return {}
+        filas = (
+            (
+                await db.execute(
+                    select(model).where(
+                        columna.in_(valores), model.id_empresa == id_empresa
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return {getattr(f, columna.key): f for f in filas}  # type: ignore[attr-defined]
+
+    productos = await _por_id(
+        Producto, Producto.id_producto, {p.id_producto for p in pesajes if p.id_producto}
+    )
+    conductores = await _por_id(
+        Conductor, Conductor.cedula_dni, {p.id_conductor for p in pesajes if p.id_conductor}
+    )
+    transportes = await _por_id(
+        Transporte, Transporte.id_transporte,
+        {p.id_transporte for p in pesajes if p.id_transporte},
+    )
+    almacenes = await _por_id(
+        Almacen, Almacen.id_almacen, {p.id_almacen for p in pesajes if p.id_almacen}
+    )
+    balanzas = await _por_id(
+        Balanza, Balanza.id_balanza, {p.id_balanza for p in pesajes if p.id_balanza}
+    )
+    terceros = await _por_id(
+        Tercero, Tercero.id_tercero, {p.id_tercero for p in pesajes if p.id_tercero}
+    )
+    remolques = await _por_id(
+        Remolque, Remolque.id_remolque, {p.id_remolque for p in pesajes if p.id_remolque}
+    )
+
+    for p in pesajes:
+        prod = productos.get(p.id_producto)
+        if prod is not None:
+            p.producto_nombre = prod.nombre  # type: ignore[attr-defined]
+        cond = conductores.get(p.id_conductor)
+        if cond is not None:
+            nom = (cond.nombre_completo or "").strip()
+            p.conductor_nombre = f"{nom} ({cond.cedula_dni})" if nom else cond.cedula_dni  # type: ignore[attr-defined]
+        trans = transportes.get(p.id_transporte)
+        if trans is not None:
+            p.transporte_nombre = trans.razon_social  # type: ignore[attr-defined]
+        alm = almacenes.get(p.id_almacen)
+        if alm is not None:
+            p.almacen_nombre = alm.nombre  # type: ignore[attr-defined]
+        bal = balanzas.get(p.id_balanza)
+        if bal is not None:
+            p.balanza_nombre = bal.descripcion  # type: ignore[attr-defined]
+        terc = terceros.get(p.id_tercero)
+        if terc is not None:
+            p.tercero_nombre = terc.razon_social  # type: ignore[attr-defined]
+        rem = remolques.get(p.id_remolque)
+        if rem is not None:
+            p.remolque_placa = rem.placa  # type: ignore[attr-defined]
+    return pesajes
+
+
 @router.post("/create", response_model=WeighingOut)
 async def create_weighing(
     payload: WeighingCreate,
@@ -263,11 +354,8 @@ async def list_pendientes(
     db: AsyncSession = Depends(get_db),
 ) -> list[WeighingOut]:
     rows = await _SERVICE.pendientes(db, empresa, skip=skip, limit=limit)
-    result = []
-    for r in rows:
-        r = await _enriquecer_pesaje_ticket(db, r)
-        result.append(_resolve_to_weighing_out(r))
-    return result
+    rows = await _enriquecer_pesajes_lista(db, rows)
+    return [_resolve_to_weighing_out(r) for r in rows]
 
 
 @router.get("/list", response_model=list[WeighingOut])
@@ -291,11 +379,8 @@ async def list_weighings(
         vehicle_id=vehicle_id,
         estado=estado,
     )
-    result = []
-    for r in rows:
-        r = await _enriquecer_pesaje_ticket(db, r)
-        result.append(_resolve_to_weighing_out(r))
-    return result
+    rows = await _enriquecer_pesajes_lista(db, rows)
+    return [_resolve_to_weighing_out(r) for r in rows]
 
 
 @router.get("/boleto/{boleto}", response_model=WeighingOut)

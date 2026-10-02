@@ -641,3 +641,94 @@ class TestAuditoriaEndpoint:
         filas = r.json()
         assert len(filas) == 1
         assert filas[0]["entidad"] == "marcas"
+
+
+class TestListadoNoEsNMasUno:
+    """El listado de boletos no debe enriquecer fila por fila (regresión P2).
+
+    Con 50k boletos, `/weighing/list` y `/weighing/pendientes` tardaban ~450 ms
+    p50 porque llamaban a `_enriquecer_pesaje_ticket` **por registro**, que lanza
+    hasta 10 consultas: una página de 100 boletos se convertía en ~1000 idas y
+    vueltas a PostgreSQL. Con `_enriquecer_pesajes_lista` son 7 consultas por
+    página, constantes, y el p50 bajó a ~20 ms.
+
+    Estos tests fijan esa propiedad: el número de sentencias SQL debe ser
+    **constante** al crecer la página, no lineal. Sin ellos, reintroducir el
+    enriquecimiento por fila pasaría inadvertido y volvería el costo por
+    `limit` en producción.
+    """
+
+    @staticmethod
+    async def _contar(ruta: str, client, params: dict) -> tuple[int, list[dict]]:
+        """Ejecuta un listado contando las sentencias SQL que emite."""
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        counted: list[str] = []
+
+        def _cuenta(conn, cursor, statement, parameters, context, executemany):
+            counted.append(statement)
+
+        event.listen(Engine, "after_cursor_execute", _cuenta)
+        try:
+            r = await client.get(ruta, params=params)
+        finally:
+            event.remove(Engine, "after_cursor_execute", _cuenta)
+        assert r.status_code == 200, r.text
+        return len(counted), r.json()
+
+    async def _sembrar(self, client, n: int, prefijo: str) -> None:
+        for i in range(n):
+            r = await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": f"{prefijo}-{i:03d}",
+                    "transporte_nombre": f"Transporte {i % 7}",
+                    "conductor_nombre": f"Conductor {i % 11}",
+                    "producto_nombre": f"Producto {i % 13}",
+                    "almacen_nombre": f"Almacen {i % 5}",
+                    "balanza_nombre": f"Bal {i % 3}",
+                    "tercero_nombre": f"Tercero {i % 9}",
+                    "peso_entrada_vehiculo": str(20000 + i),
+                },
+            )
+            assert r.status_code in (200, 201), r.text
+
+    async def test_consultas_no_crecen_con_el_tamano_de_la_pagina(self, client):
+        await self._sembrar(client, 12, "N1")
+        consultas_4, filas_4 = await self._contar(
+            "/api/v1/weighing/list", client, {"skip": 0, "limit": 4})
+        consultas_12, filas_12 = await self._contar(
+            "/api/v1/weighing/list", client, {"skip": 0, "limit": 12})
+        assert len(filas_4) == 4
+        assert len(filas_12) == 12
+        # Con N+1 serían 3x más sentencias al triplicar el limit. Se admite un
+        # margen por los COUNT de paginación, nunca un crecimiento lineal.
+        assert consultas_12 <= consultas_4 + 4, (
+            f"el listado volvió a consultar por fila: {consultas_4} → "
+            f"{consultas_12} sentencias al pasar de 4 a 12 boletos"
+        )
+
+    async def test_nombres_legibles_por_pagina(self, client):
+        """La resolución por lotes debe poblar los mismos nombres que antes."""
+        await self._sembrar(client, 3, "N2")
+        _, filas = await self._contar("/api/v1/weighing/list", client,
+                                      {"skip": 0, "limit": 3})
+        assert len(filas) == 3
+        for f in filas:
+            assert f["producto_nombre"] is not None
+            assert f["conductor_nombre"] is not None
+            assert f["transporte_nombre"] is not None
+            assert f["almacen_nombre"] is not None
+            assert f["balanza_nombre"] is not None
+            assert f["tercero_nombre"] is not None
+
+    async def test_pendientes_tambien_usa_resolucion_por_lotes(self, client):
+        await self._sembrar(client, 5, "N3")
+        consultas, filas = await self._contar(
+            "/api/v1/weighing/pendientes", client, {"limit": 5})
+        assert len(filas) == 5
+        assert consultas <= 12, (
+            f"/pendientes lanza {consultas} sentencias para 5 boletos; "
+            f"debería resolverse por lotes (≤ 12)"
+        )

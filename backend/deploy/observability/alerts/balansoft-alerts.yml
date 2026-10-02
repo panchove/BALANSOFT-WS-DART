@@ -1,0 +1,148 @@
+# Reglas de alerta para BALANSOFT-WS (H6 de ACTUAR.md)
+#
+# Todas las expresiones usan ÚNICAMENTE métricas que el backend ya expone en
+# /metrics (ver app/core/monitoring.py). Si añades una métrica nueva al
+# backend, actualiza este archivo y docs/OBSERVABILIDAD.md a la par.
+#
+# Validación local:
+#   promtool check rules deploy/observability/alerts/balansoft-alerts.yml
+groups:
+  # ---------------------------------------------------------------------------
+  # Disponibilidad
+  # ---------------------------------------------------------------------------
+  - name: balansoft-disponibilidad
+    rules:
+      - alert: BalansoftApiCaida
+        expr: up{job="balansoft-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API de BALANSOFT-WS no responde en /metrics"
+          description: >-
+            Prometheus no logra scrapear el objetivo balansoft-api desde hace
+            2 minutos. La estación o el servidor central no están atendiendo
+            métricas: revisar que el proceso (WServer / uvicorn) siga vivo y
+            que METRICS_ENABLED=true.
+          runbook: "docs/OBSERVABILIDAD.md#diagnóstico"
+
+  # ---------------------------------------------------------------------------
+  # Latencia
+  # ---------------------------------------------------------------------------
+  - name: balansoft-latencia
+    rules:
+      - alert: BalansoftLatenciaAlta
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le, endpoint) (rate(balansoft_api_latency_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia p95 por encima de 1 s en {{ $labels.endpoint }}"
+          description: >-
+            El percentil 95 de latencia del endpoint {{ $labels.endpoint }}
+            lleva 10 minutos por encima de 1 segundo. Suele indicar consultas
+            lentas a PostgreSQL o saturación de la estación.
+          runbook: "docs/OBSERVABILIDAD.md#latencia"
+
+      - alert: BalansoftLatenciaCritica
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le, endpoint) (rate(balansoft_api_latency_seconds_bucket[5m]))
+          ) > 2.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Latencia p95 superior a 2,5 s en {{ $labels.endpoint }}"
+          description: >-
+            El percentil 95 del endpoint {{ $labels.endpoint }} supera los
+            2,5 segundos. Un operador perceives la estación como colgada.
+          runbook: "docs/OBSERVABILIDAD.md#latencia"
+
+  # ---------------------------------------------------------------------------
+  # Errores HTTP
+  # ---------------------------------------------------------------------------
+  - name: balansoft-errores
+    rules:
+      - alert: BalansoftErrores5xx
+        expr: >-
+          sum(rate(balansoft_http_requests_total{status=~"5.."}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Más de 0,5 errores 5xx por segundo durante 10 minutos"
+          description: >-
+            El backend está respondiendo con errores de servidor de forma
+            sostenida. Revisar el log estructurado (LOG_FORMAT=json) para ver
+            la traza exacta.
+          runbook: "docs/OBSERVABILIDAD.md#errores"
+
+      - alert: BalansoftErrores4xx
+        expr: >-
+          sum(rate(balansoft_http_requests_total{status=~"4.."}[15m])) > 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errores de cliente sostenidos (4xx) por encima de 1/s"
+          description: >-
+            Puede indicar credenciales incorrectas, un cliente desactualizado
+            o intentos de acceso indebido. Cruzar con la tabla de auditoría.
+          runbook: "docs/OBSERVABILIDAD.md#errores"
+
+  # ---------------------------------------------------------------------------
+  # Licencias
+  # ---------------------------------------------------------------------------
+  - name: balansoft-licencia
+    rules:
+      - alert: BalansoftErroresLicencia
+        expr: sum(increase(balansoft_license_errors_total[15m])) > 5
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La validación de licencia está fallando"
+          description: >-
+            El License Manager devolvió error o fue inalcanzable más de 5
+            veces en 15 minutos (labels disponibles: tier, reason). Sin
+            licencia válida la estación opera en modo degradado.
+          runbook: "docs/OBSERVABILIDAD.md#licencia"
+
+      - alert: BalansoftLicenciaSinUso
+        # Tres horas sin ningún login: puede ser una estación abandonada o
+        # un problema de conectividad que nadie reporta todavía.
+        expr: sum(increase(balansoft_active_users[3h])) == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Sin sesiones activas en las últimas 3 horas"
+          description: >-
+            Nadie ha iniciado sesión en la estación en 3 horas. Informativo:
+            confirma si la instalación está realmente en uso.
+          runbook: "docs/OBSERVABILIDAD.md#diagnóstico"
+
+  # ---------------------------------------------------------------------------
+  # Operación de pesaje
+  # ---------------------------------------------------------------------------
+  - name: balansoft-pesajes
+    rules:
+      - alert: BalansoftPesajesDetenidos
+        expr: >-
+          sum(increase(balansoft_pesajes_total{estatus="PENDIENTE"}[2h])) == 0
+          and
+          sum(increase(balansoft_pesajes_total{estatus="CERRADO"}[2h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Se cierran pesajes pero ninguno queda pendiente"
+          description: >-
+            Se cerraron pesajes en las últimas 2 horas y ninguno quedó en
+            estado PENDIENTE: puede indicar que el flujo de entrada no está
+            registrando boletos o que un proceso se quedó atascado.
+          runbook: "docs/OBSERVABILIDAD.md#pesajes"

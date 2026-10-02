@@ -1,0 +1,61 @@
+# Prometheus — configuración de scrape para BALANSOFT-WS (H6 de ACTUAR.md)
+#
+# Uso en dev (ver docker-compose.observability.yml):
+#   docker compose -f deploy/observability/docker-compose.observability.yml up -d
+#
+# Uso en la estación o el servidor con Prometheus ya instalado:
+#   sudo cp deploy/observability/prometheus.yml /etc/prometheus/prometheus.yml
+#   sudo promtool check config /etc/prometheus/prometheus.yml   # valida
+#   sudo systemctl reload prometheus
+#
+# Requisito: el backend debe exponer /metrics, es decir METRICS_ENABLED=true
+# en backend/.env (por defecto ya lo está). Ver app/core/monitoring.py.
+#
+# Las métricas del backend ya normalizan su cardinalidad: los UUID y los IDs
+# numéricos de las rutas se sustituyen por {id} (_normalize_path), así que un
+# endpoint como /api/v1/weighing/boleto/<uuid> genera UNA sola serie y no una
+# por boleto.
+global:
+  # Intervalo de evaluación de las reglas de alerta.
+  evaluation_interval: 15s
+  # Cuánto se conserva la muestra cruda en memoria antes de agregar.
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    sistema: balansoft-ws
+    # Etiqueta el entorno para no mezclar datos de dev y producción.
+    entorno: dev
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # Objetivo caído: el backend deja de exponer /metrics.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # API de la estación (rol local) o del central (rol server).
+  - job_name: balansoft-api
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      # Dentro del compose de dev el backend corre en el host: se usa el
+      # alias especial de Docker. En un Prometheus nativo, cambia a la IP o
+      # al nombre del host (por ejemplo la IP de la estación en la LAN).
+      - targets:
+          - host.docker.internal:8000
+        labels:
+          rol_app: local
+      # Ejemplo para el servidor central (APP_ROLE=server), descomentar y
+      # ajustar host/puerto (por defecto el central escucha en 8002):
+      # - targets:
+      #     - central.balansoft.com.ve:8002
+      #   labels:
+      #     rol_app: server
