@@ -106,7 +106,7 @@ endpoints rondaban los 450 ms p50. No era un problema de índices: el SQL era de
 0,6 ms y el `COUNT` de 4,7 ms. Resuelto con `_enriquecer_pesajes_lista` (7
 consultas por página, constante): **450 ms → 20 ms** y **462 ms → 13 ms**.
 
-11/11 escenarios dentro de umbral. Backend 354 en verde (320 + 34 E2E), con 3
+11/11 escenarios dentro de umbral. Backend 362 en verde (328 + 34 E2E), con 3
 tests de regresión que fallan si alguien reintroduce el N+1. Análisis y evidencia:
 `docs/evidencia/volumen-analisis.md`.
 
