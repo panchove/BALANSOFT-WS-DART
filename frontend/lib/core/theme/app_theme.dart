@@ -55,9 +55,36 @@ abstract final class SwsColors {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
+// TIPOGRAFÍA DEL SISTEMA — familia y tamaño de icono (spec 001, T9)
+// ═════════════════════════════════════════════════════════════════════════
+
+/// Tamaño base del icono del tema, en píxeles lógicos. Es el valor que el tema
+/// fija hoy (`IconThemeData(size: 20)`), de modo que con factor **1.0** el
+/// resultado es **exactamente** el estado actual (no-regresión, `plan.md §4.3`).
+const double tamanoIconoBase = 20.0;
+
+/// Escala proporcional de iconos (REQ-FN-003).
+///
+/// El factor es el mismo que el del texto, de modo que el icono acompaña a la
+/// letra. Cubre de una vez los iconos que heredan de `ThemeData.iconTheme`
+/// (`AppBar`, botones, `ListTile`, sidebar, barra de navegación) sin tocar un
+/// solo `Icon` a mano.
+double escalaTamanoIcono(double factor) => tamanoIconoBase * factor;
+
+// ═════════════════════════════════════════════════════════════════════════
 // TEMA CLARO — Dashboard, pantallas de app
 // ═════════════════════════════════════════════════════════════════════════
-ThemeData buildLightTheme() {
+
+/// Tema claro.
+///
+/// - [familia]: `fontFamily` a aplicar al `textTheme` (REQ-FN-001). `null`
+///   deja la fuente del sistema, que es el estado actual sin ajustes.
+///   **Una familia que no exista en la plataforma no falla ni avisa**: Flutter
+///   cae a la siguiente de su lista de fuentes (REQ-FN-006).
+/// - [factorIconos]: factor de escala de iconos (REQ-FN-003). `1.0` = tamaño
+///   base.
+ThemeData buildLightTheme({String? familia, double factorIconos = 1.0}) {
+  final tamanoIcono = escalaTamanoIcono(factorIconos);
   final base = ThemeData(
     colorScheme: ColorScheme.fromSeed(
       seedColor: SwsColors.accent,
@@ -67,7 +94,10 @@ ThemeData buildLightTheme() {
       error: SwsColors.danger,
     ),
     scaffoldBackgroundColor: SwsColors.light,
-    appBarTheme: const AppBarTheme(
+    iconTheme: IconThemeData(size: tamanoIcono),
+    primaryIconTheme: IconThemeData(size: tamanoIcono),
+    appBarTheme: AppBarTheme(
+      iconTheme: IconThemeData(size: tamanoIcono),
       backgroundColor: SwsColors.light,
       foregroundColor: SwsColors.dark,
       surfaceTintColor: Colors.transparent,
@@ -129,6 +159,7 @@ ThemeData buildLightTheme() {
     textTheme: base.textTheme.apply(
       bodyColor: SwsColors.dark,
       displayColor: SwsColors.dark,
+      fontFamily: familia,
     ),
   );
 }
@@ -143,7 +174,11 @@ ThemeData buildLightTheme() {
 // Esto evita que el dashboard u otras pantallas que usen el tema oscuro
 // hereden el azul sin querer.
 // ═════════════════════════════════════════════════════════════════════════
-ThemeData buildDarkTheme() {
+
+/// Tema oscuro. Mismos parámetros que [buildLightTheme] (familia y factor de
+/// iconos), con la misma semántica.
+ThemeData buildDarkTheme({String? familia, double factorIconos = 1.0}) {
+  final tamanoIcono = escalaTamanoIcono(factorIconos);
   final base = ThemeData(
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(
@@ -157,8 +192,11 @@ ThemeData buildDarkTheme() {
 
     // Fondo oscuro neutro. El azul va en cada pantalla de setup.
     scaffoldBackgroundColor: SwsColors.darkBg,
+    iconTheme: IconThemeData(size: tamanoIcono),
+    primaryIconTheme: IconThemeData(size: tamanoIcono),
 
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
+      iconTheme: IconThemeData(size: tamanoIcono),
       backgroundColor: SwsColors.darkBg,
       foregroundColor: SwsColors.darkText,
       surfaceTintColor: Colors.transparent,
@@ -223,6 +261,7 @@ ThemeData buildDarkTheme() {
     textTheme: base.textTheme.apply(
       bodyColor: SwsColors.darkText,
       displayColor: SwsColors.darkText,
+      fontFamily: familia,
     ),
   );
 }

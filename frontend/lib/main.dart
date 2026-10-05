@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/config/app_config.dart';
 import 'core/config/env_config.dart';
+import 'core/controllers/typography_controller.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/i18n/translations.dart';
 import 'core/services/wserver_manager.dart';
@@ -31,6 +33,7 @@ import 'presentation/screens/weighing/weighing_list_screen.dart'
     show weighingListRouteObserver;
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/settings/connections_screen.dart';
+import 'presentation/widgets/tipografia_scope.dart';
 
 import 'presentation/screens/setup/mode_selection_screen.dart';
 import 'presentation/screens/setup/database_config_screen.dart';
@@ -126,9 +129,21 @@ class BalansoftApp extends StatefulWidget {
 }
 
 class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
+  /// Ajuste de tipografía del operador (familia + factor), REQ-FN-001..005.
+  ///
+  /// Se resuelve del contenedor de dependencias y **no** de `main()` porque el
+  /// E2E de UI monta `BalansoftApp` directamente, sin pasar por `main()`. Es la
+  /// misma instancia que usa Ajustes → Tipografía, que es lo que permite que el
+  /// cambio se aplique a toda la app sin reiniciar (REQ-FN-004).
+  late final TypographyController _typography = di.sl<TypographyController>();
+
   @override
   void initState() {
     super.initState();
+    // Restituye el ajuste persistido en este dispositivo (REQ-FN-005). El
+    // controlador arranca en los valores por defecto y notifica al terminar, así
+    // que el primer frame se ve sin ajuste y se corrige en cuanto hay lectura.
+    unawaited(_typography.load());
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
       windowManager.addListener(this);
     }
@@ -208,14 +223,23 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
         ),
       ],
       child: AnimatedBuilder(
-        animation: Listenable.merge([themeController, localeController]),
+        // `typographyController` va en la lista para que el factor y la familia
+        // se apliquen **sin reiniciar** (REQ-FN-004).
+        animation: Listenable.merge(
+            [themeController, localeController, _typography]),
         builder: (context, _) => MaterialApp(
           key: ValueKey(localeController.activeLanguageCode),
           navigatorKey: navigatorKey,
           title: 'Balansoft-WS',
           debugShowCheckedModeBanner: false,
-          theme: buildLightTheme(),
-          darkTheme: buildDarkTheme(),
+          theme: buildLightTheme(
+            familia: _typography.familiaUiFontFamily,
+            factorIconos: _typography.textScale,
+          ),
+          darkTheme: buildDarkTheme(
+            familia: _typography.familiaUiFontFamily,
+            factorIconos: _typography.textScale,
+          ),
           themeMode: themeController.themeMode,
           locale: localeController.locale,
           supportedLocales: const [
@@ -223,6 +247,17 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
             Locale('en'),
             Locale('pt'),
           ],
+          // Punto único de aplicación del ajuste de tamaño (REQ-FN-002).
+          //
+          // Va en el `builder` del `MaterialApp` porque es el único sitio que
+          // queda por encima de TODAS las rutas, diálogos y `showDialog`, y por
+          // debajo del `Navigator`: así los 322 `fontSize:` fijos en código
+          // escalan sin tocar ninguno, porque todos leen el `textScaler` de este
+          // `MediaQuery`.
+          builder: (context, hijo) => TipografiaScope(
+            controlador: _typography,
+            child: hijo ?? const SizedBox.shrink(),
+          ),
           navigatorObservers: [weighingListRouteObserver],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,

@@ -106,6 +106,12 @@ class Empresa(Base):
     ruta_exportacion_reportes: Mapped[str | None] = mapped_column(
         String(500), nullable=True
     )
+    tamano_ticket_pdf: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="AUTOMATICO", server_default="AUTOMATICO"
+    )
+    fuente_ticket_pdf: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="DejaVu", server_default="DejaVu"
+    )
     licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)

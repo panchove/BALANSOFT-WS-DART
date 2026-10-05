@@ -10,6 +10,37 @@ import 'locale_controller.dart';
 class AppTranslations {
   static const Map<String, Map<String, String>> _values = {
     'es': {
+      'tipografia_actual': 'Actual: {}',
+      'tipografia_restaurados': 'Valores restaurados',
+      'tipografia_restablecer': 'Restablecer valores',
+      'tipografia_fuente_fija': 'DejaVu (fija, no configurable)',
+      'tipografia_ticket_titulo': 'Tamaño y fuente del ticket PDF',
+      'tipografia_ticket_tamano': 'Tamaño del ticket PDF',
+      'tipografia_ticket_fuente': 'Fuente del ticket PDF',
+      'tipografia_ticket_automatico': 'Automático (auto-fit)',
+      'tipografia_ticket_grande': 'Grande',
+      'tipografia_ticket_mediano': 'Mediano',
+      'tipografia_ticket_pequeno': 'Pequeño',
+      'tipografia_ticket_dejavu': 'DejaVu',
+      'tipografia_ticket_scale': 'Escala de texto',
+      'tipografia_titulo': 'Tipografía',
+      'tipografia_subtitulo': 'Familia, tamaño y ticket PDF',
+      'tipografia_ui_familia': 'Familia de letra de la interfaz',
+      'tipografia_ui_familia_scope':
+          'Es una preferencia de este equipo: los demás equipos de la empresa no cambian.',
+      'tipografia_ui_escala': 'Tamaño del texto de la interfaz',
+      'tipografia_familia_sistema': 'Sistema (por defecto)',
+      'tipografia_familia_sans_serif': 'Sans Serif',
+      'tipografia_familia_serif': 'Serif',
+      'tipografia_familia_monospace': 'Monospace',
+      'tipografia_familia_roboto': 'Roboto',
+      'tipografia_vista_previa': 'Vista previa',
+      'tipografia_ticket_guardado':
+          'Tamaño del ticket actualizado para toda la empresa',
+      'tipografia_ticket_error':
+          'No se pudo guardar el tamaño del ticket en la estación. El valor queda en este equipo, pero los boletos seguirán con el tamaño anterior hasta que se vuelva a guardar.',
+      'tipografia_ticket_error_lectura':
+          'No se pudo leer el tamaño del ticket de la empresa. Se muestra el valor guardado en este equipo.',
       // Idioma y configuración
       'language_name': 'Español',
       'language_system': 'Detectar idioma del dispositivo (automático)',
@@ -751,6 +782,37 @@ class AppTranslations {
       'weighing_station': 'Estación de Pesaje',
     },
     'en': {
+      'tipografia_actual': 'Current: {}',
+      'tipografia_restaurados': 'Values restored',
+      'tipografia_restablecer': 'Restore defaults',
+      'tipografia_fuente_fija': 'DejaVu (fixed, not configurable)',
+      'tipografia_ticket_titulo': 'Ticket PDF size and font',
+      'tipografia_ticket_tamano': 'Ticket PDF size',
+      'tipografia_ticket_fuente': 'Ticket PDF font',
+      'tipografia_ticket_automatico': 'Automatic (auto-fit)',
+      'tipografia_ticket_grande': 'Large',
+      'tipografia_ticket_mediano': 'Medium',
+      'tipografia_ticket_pequeno': 'Small',
+      'tipografia_ticket_dejavu': 'DejaVu',
+      'tipografia_ticket_scale': 'Text scale',
+      'tipografia_titulo': 'Typography',
+      'tipografia_subtitulo': 'Family, size and PDF ticket',
+      'tipografia_ui_familia': 'Interface font family',
+      'tipografia_ui_familia_scope':
+          'It is a preference of this device: the other devices of the company are not changed.',
+      'tipografia_ui_escala': 'Interface text size',
+      'tipografia_familia_sistema': 'System (default)',
+      'tipografia_familia_sans_serif': 'Sans Serif',
+      'tipografia_familia_serif': 'Serif',
+      'tipografia_familia_monospace': 'Monospace',
+      'tipografia_familia_roboto': 'Roboto',
+      'tipografia_vista_previa': 'Preview',
+      'tipografia_ticket_guardado':
+          'Ticket size updated for the whole company',
+      'tipografia_ticket_error':
+          'The ticket size could not be saved on the station. The value stays on this device, but tickets will keep the previous size until it is saved again.',
+      'tipografia_ticket_error_lectura':
+          "The company's ticket size could not be read. The value saved on this device is shown.",
       // Language & settings
       'language_name': 'English',
       'language_system': 'Detect device language (automatic)',
@@ -1472,6 +1534,37 @@ class AppTranslations {
       'weighing_station': 'Weighing Station',
     },
     'pt': {
+      'tipografia_actual': 'Atual: {}',
+      'tipografia_restaurados': 'Valores restaurados',
+      'tipografia_restablecer': 'Restaurar padrões',
+      'tipografia_fuente_fija': 'DejaVu (fixa, não configurável)',
+      'tipografia_ticket_titulo': 'Tamanho e fonte do ticket PDF',
+      'tipografia_ticket_tamano': 'Tamanho do ticket PDF',
+      'tipografia_ticket_fuente': 'Fonte do ticket PDF',
+      'tipografia_ticket_automatico': 'Automático (auto-fit)',
+      'tipografia_ticket_grande': 'Grande',
+      'tipografia_ticket_mediano': 'Médio',
+      'tipografia_ticket_pequeno': 'Pequeno',
+      'tipografia_ticket_dejavu': 'DejaVu',
+      'tipografia_ticket_scale': 'Escala de texto',
+      'tipografia_titulo': 'Tipografia',
+      'tipografia_subtitulo': 'Família, tamanho e ticket PDF',
+      'tipografia_ui_familia': 'Família de letra da interface',
+      'tipografia_ui_familia_scope':
+          'É uma preferência deste equipamento: os demais equipamentos da empresa não mudam.',
+      'tipografia_ui_escala': 'Tamanho do texto da interface',
+      'tipografia_familia_sistema': 'Sistema (padrão)',
+      'tipografia_familia_sans_serif': 'Sans Serif',
+      'tipografia_familia_serif': 'Serif',
+      'tipografia_familia_monospace': 'Monoespaçada',
+      'tipografia_familia_roboto': 'Roboto',
+      'tipografia_vista_previa': 'Pré-visualização',
+      'tipografia_ticket_guardado':
+          'Tamanho do ticket atualizado para toda a empresa',
+      'tipografia_ticket_error':
+          'Não foi possível salvar o tamanho do ticket na estação. O valor fica neste equipamento, mas os tickets continuarão com o tamanho anterior até salvar de novo.',
+      'tipografia_ticket_error_lectura':
+          'Não foi possível ler o tamanho do ticket da empresa. É mostrado o valor salvo neste equipamento.',
       // Idioma e configurações
       'language_name': 'Português',
       'language_system': 'Detectar idioma do dispositivo (automático)',

@@ -67,6 +67,8 @@ def _company_out(e: Empresa) -> CompanyOut:
         direccion=getattr(e, "direccion", None),
         telefono=getattr(e, "telefono", None),
         email=getattr(e, "email", None),
+        tamano_ticket_pdf=getattr(e, "tamano_ticket_pdf", "AUTOMATICO") or "AUTOMATICO",
+        fuente_ticket_pdf=getattr(e, "fuente_ticket_pdf", "DejaVu") or "DejaVu",
     )
 
 

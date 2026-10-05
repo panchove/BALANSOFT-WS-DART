@@ -28,6 +28,7 @@ import 'data/services/scale_api_client.dart';
 import 'data/services/scale_tcp_client.dart';
 import 'data/datasources/remote/scale_api_datasource.dart';
 import 'core/i18n/locale_controller.dart';
+import 'core/controllers/typography_controller.dart';
 
 final sl = GetIt.instance;
 
@@ -168,6 +169,13 @@ Future<void> init() async {
   sl.registerLazySingleton<ScaleApiClient>(
       () => ScaleApiClient(datasource: ScaleApiDatasource(sl<ApiClient>())));
   sl.registerLazySingleton<LocaleController>(() => LocaleController());
+  // Singleton de la tipografía del operador (REQ-FN-001..005). Tiene que ser
+  // **una sola instancia**: es la que `main.dart` escucha para aplicar el factor
+  // y la familia a toda la app, así que si Ajustes creara su propia copia, el
+  // cambio se vería dentro de la pantalla y en ningún otro sitio (REQ-FN-004).
+  sl.registerLazySingleton<TypographyController>(
+    () => TypographyController(prefs: AppConfig.prefs),
+  );
   sl<ApiClient>().setLanguageProvider(() => sl<LocaleController>().activeLanguageCode);
   // Respaldo TCP: config de báscula/dispositivo guardada en Ajustes.
   final scaleCfg = await sl<LocalStorage>().getScaleConfig();

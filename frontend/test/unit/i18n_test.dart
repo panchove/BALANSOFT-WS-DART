@@ -78,6 +78,53 @@ void main() {
       }
     });
 
+    test('las claves del ajuste de tipografía están traducidas en es/en/pt',
+        () {
+      // REQ-FN-007 (5 familias) y REQ-FN-019 (paridad). Ninguna puede quedar
+      // como la propia clave en pantalla: se vería "tipografia_familia_serif".
+      const claves = [
+        'tipografia_titulo',
+        'tipografia_subtitulo',
+        'tipografia_ui_familia',
+        'tipografia_ui_familia_scope',
+        'tipografia_ui_escala',
+        'tipografia_familia_sistema',
+        'tipografia_familia_sans_serif',
+        'tipografia_familia_serif',
+        'tipografia_familia_monospace',
+        'tipografia_familia_roboto',
+        'tipografia_vista_previa',
+        'tipografia_ticket_guardado',
+        'tipografia_ticket_error',
+        'tipografia_ticket_error_lectura',
+      ];
+      for (final lang in ['es', 'en', 'pt']) {
+        for (final clave in claves) {
+          final valor = AppTranslations.tr(clave, langCode: lang);
+          expect(valor, isNot(clave), reason: 'falta la clave "$clave" en $lang');
+          expect(valor.trim(), isNotEmpty, reason: '"$clave" vacía en $lang');
+        }
+      }
+
+      // La familia por defecto debe decirlo en los tres idiomas: es la que
+      // distingue "Sistema" de las otras cuatro.
+      expect(AppTranslations.tr('tipografia_familia_sistema'), contains('Sistema'));
+      expect(
+        AppTranslations.tr('tipografia_familia_sistema', langCode: 'en'),
+        contains('System'),
+      );
+      expect(
+        AppTranslations.tr('tipografia_familia_sistema', langCode: 'pt'),
+        contains('Sistema'),
+      );
+      // "Monoespaçada" no es "Monospace": una traducción ausente disfrazada de
+      // copia en español no se distinguiría de una traducción real.
+      expect(
+        AppTranslations.tr('tipografia_familia_monospace', langCode: 'pt'),
+        isNot(equals(AppTranslations.tr('tipografia_familia_monospace'))),
+      );
+    });
+
     test('las claves del flujo de instalación y empresa están traducidas', () {
       const claves = [
         'setup_company_title',

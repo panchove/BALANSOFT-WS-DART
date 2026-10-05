@@ -77,6 +77,59 @@ ANCHO_TXT = 100
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Escalera tipográfica del boleto (REQ-FN-010, REQ-FN-011, REQ-FN-015)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Escalas candidatas por cantidad de boletos en la hoja, de mayor a menor.
+#:
+#: Se mueve aqui, a nivel de modulo, y no dentro de ``_build_pdf`` para que la
+#: escalera sea una constante nombrada y se pueda comprobar sin arrancar
+#: ReportLab. Los valores son los que tenia el literal local antes de este
+#: cambio; moverlos aqui no altera el comportamiento (REQ-FN-012).
+_ESCALAS_ACTUALES: dict[int, list[float]] = {
+    1: [10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5],
+    2: [9.5,  9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0],
+    3: [8.5,  8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
+    4: [8.0,  7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
+}
+
+#: Techo por peldaño configurado (REQ-FN-015).
+#:
+#: ``AUTOMATICO`` y ``GRANDE`` no aparecen a proposito: no filtran. ``AUTOMATICO``
+#: porque es el comportamiento vigente y debe quedar intacto (REQ-FN-012), y
+#: ``GRANDE`` porque la escalera ya arranca en su maximo, asi que "mas grande"
+#: solo puede significar "igual que hoy" (CE-05).
+TECHOS_PELDANO: dict[str, float] = {
+    "PEQUENO": 7.5,
+    "MEDIANO": 9.0,
+}
+
+
+def escalera_efectiva(
+    hoy: dict[int, list[float]],
+    paso_configurado: str | None,
+) -> dict[int, list[float]]:
+    """Escalera de escalas con el peldaño configurado como techo.
+
+    Con ``AUTOMATICO``, ``GRANDE`` o cualquier valor desconocido devuelve ``hoy``
+    **sin copiar**: son los casos en los que no hay nada que filtrar, y evitar la copia
+    trabajo por boleto en el camino caliente de la impresion.
+
+    Con un peldaño configurado, descarta de cada escalera las escalas que lo
+    superan. El ultimo elemento (el piso, que garantiza que el auto-fit siempre
+    termine en una escala existente) nunca se descarta, porque todos los pisos
+    estan por debajo de cualquier techo.
+
+    Puro a proposito: no toca ReportLab ni la base de datos, asi que se puede
+    comprobar con aritmetica y sin montar una pagina.
+    """
+    techo = TECHOS_PELDANO.get((paso_configurado or "").upper())
+    if techo is None:
+        return hoy
+    return {n: [e for e in peldanos if e <= techo] for n, peldanos in hoy.items()}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Formateo de números y fechas
 # ─────────────────────────────────────────────────────────────────────────────
 def _fmt(v: Decimal | float | int | str | None, decimales: int = 2, lang: str = "es") -> str:
@@ -1139,12 +1192,17 @@ def _build_pdf(
     # El boleto AVANZADO trae mucho contenido: si con el boletosPorHoja
     # solicitado no cabe ni a la escala mínima, se reduce la cantidad por página
     # y las copias restantes fluyen a páginas siguientes. Nada se descarta.
-    escala_candidatas = {
-        1: [10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5],
-        2: [9.5,  9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0],
-        3: [8.5,  8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
-        4: [8.0,  7.5, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0],
-    }
+    #
+    # La escalera se filtra por el peldaño que tenga configurado la empresa: es un
+    # **techo** sobre el punto de partida, no un reemplazo. Filtrar y no reemplazar
+    # es lo que mantiene las dos garantias a la vez: con 4 por hoja la escalera
+    # vigente ya baja sola hasta 5.5, y si el filtro la reemplazara, GRANDE
+    # dejaria de ser "igual que hoy" (CE-05); si no filtrara, PEQUENO no tendria
+    # ningun efecto visible (CE-04).
+    escala_candidatas = escalera_efectiva(
+        _ESCALAS_ACTUALES,
+        getattr(empresa, "tamano_ticket_pdf", "AUTOMATICO"),
+    )
 
     st: dict[str, ParagraphStyle] = _estilos_simples(10.5)
     n_fit = 0

@@ -18,6 +18,7 @@ import 'license_admin_screen.dart';
 import 'connections_screen.dart';
 import 'usuarios_screen.dart';
 import 'system_diagnostics_screen.dart';
+import 'typography_settings_screen.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
@@ -211,6 +212,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _LanguageSelector(localeController: _localeController),
         ],
       ),
+      _SectionCard(
+        icon: Icons.format_size_outlined,
+        title: 'tipografia_titulo'.tr(),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.format_size_outlined),
+            title: Text('tipografia_titulo'.tr()),
+            subtitle: Text('tipografia_subtitulo'.tr()),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TypographySettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
     ];
     final derecha = <Widget>[
       _SectionCard(
@@ -323,6 +342,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _ThemeSelector(themeController: widget.themeController),
           const Divider(),
           _LanguageSelector(localeController: _localeController),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.format_size_outlined),
+            title: Text('tipografia_titulo'.tr()),
+            subtitle: Text('tipografia_subtitulo'.tr()),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TypographySettingsScreen(),
+              ),
+            ),
+          ),
         ],
       ),
       const SizedBox(height: 8),

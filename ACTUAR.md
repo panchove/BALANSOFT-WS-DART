@@ -189,7 +189,33 @@ Estas cosas **ya están hechas** (no las toques):
 
 ---
 
-## 7. Preguntas para decidir
+## 7. Hallazgos de la auditoría de spec 001 (tipografía) — 2026-10-02
+
+Detectados al auditar el aislamiento multi-tenant de `PUT /api/v1/empresa`, paso
+obligatorio de la revisión QA de `specs/001-tipografia-config/spec.md` v0.2.
+**Ninguno pertenece a esa spec** (quedan fuera de alcance); se registran aquí
+como deuda abierta.
+
+| # | Qué | Dónde | Por qué importa | Fix | Estado |
+|---|-----|-------|-----------------|-----|--------|
+| **F1** | La tabla `series_numeracion` (migración 015) **no está** en `balansoft-ws-local.sql`. El archivo declara 24 tablas; la BD real tiene 25 | `backend/balansoft-ws-local.sql` | Ese fichero se usa como esquema canónico. **En particular, invalida la corrección de D6** ("el esquema tiene 24 tablas"), que se apoyó en un archivo incompleto | Regenerar `balansoft-ws-local.sql` desde el esquema real | ⏳ Pendiente |
+| **F2** | La tabla `configuraciones` **no tiene ningún endpoint**, y su PK es `clave` **sola, sin `id_empresa`** | `backend/balansoft-ws-local.sql` + `backend/app/api/v1/endpoints/` | Doble problema: código muerto, y si alguien construye un endpoint de configuración sobre ella, **dos empresas con la misma clave colisionarían** (viola constitución, regla 1) | Decidir: eliminar la tabla, o redefinir su PK para incluir `id_empresa` | ⏳ Pendiente |
+
+**Nota sobre F1**: el convenio *sí* es mantener `balansoft-ws-local.sql`
+sincronizado con las migraciones `ALTER` — verificado: las 4 columnas de la
+migración 017 están presentes en la definición de `empresas`. La omisión de
+`series_numeracion` es específica de la migración 015.
+
+**Resultado de la auditoría de aislamiento (sin hallazgos de seguridad)**: los
+endpoints `GET`/`PUT /api/v1/empresa` derivan el tenant del usuario re-consultado
+desde la base de datos (`dependencies.py:43-57`), el cliente no puede elegir su
+`id_empresa`, y el `setattr` en bucle de `empresa.py:50` no es mass assignment
+(campos no declarados se descartan; verificado empíricamente). `series.py` también
+filtra correctamente. **No se requiere requisito de seguridad adicional.**
+
+---
+
+## 8. Preguntas para decidir
 
 1. **¿Hay un cliente real esperando** o es producto en desarrollo?
 2. **¿Tienes dominio + servidor** para TLS y despliegue real?

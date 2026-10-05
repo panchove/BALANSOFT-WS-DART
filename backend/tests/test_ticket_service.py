@@ -12,11 +12,14 @@ from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
+from typing import cast
 
+import pytest
 from pypdf import PdfReader
 
-from app.models import BoletoPesaje, Kardex
+from app.models import BoletoPesaje, Empresa, Kardex
 from app.services.ticket_service import (
+    _ESCALAS_ACTUALES,
     ANCHO_TXT,
     _build_pdf,
     _build_txt,
@@ -37,6 +40,35 @@ def _paginas(p, **kwargs) -> int:
     buf: BytesIO = _build_pdf(p, **kwargs)
     buf.seek(0)
     return len(PdfReader(buf).pages)
+
+
+def _boleto_baseline() -> BoletoPesaje:
+    """Boleto mínimo para capturar el baseline de texto extraído (T4)."""
+    from decimal import Decimal
+    bp = BoletoPesaje(
+        id_empresa=uuid.uuid4(),
+        numero_boleto="TA-00000123",
+        id_vehiculo="ABC-123",
+        fecha_hora_entrada=datetime(2026, 1, 1, 8, 0, 0),
+        fecha_hora_salida=datetime(2026, 1, 1, 9, 0, 0),
+        peso_entrada_vehiculo=Decimal("10000"),
+        peso_salida_vehiculo=Decimal("5000"),
+        peso_neto=Decimal("5000"),
+        estado_boleto=BoletoPesaje.ESTADO_CERRADO,
+    )
+    # Campos desnormalizados que ticket_service._dato lee con getattr: no están
+    # en el modelo (vienen de los JOIN del listado), así que se fijan con setattr
+    # en vez de asignación directa.
+    for campo, valor in (
+        ("producto_nombre", "MATERIA PRIMA"),
+        ("conductor_nombre", "JUAN PEREZ"),
+        ("cliente_nombre", "CLIENTE DEMO"),
+        ("proveedor_nombre", "PROVEEDOR DEMO"),
+        ("procedencia", "ORIGEN A"),
+        ("destino", "DESTINO B"),
+    ):
+        setattr(bp, campo, valor)
+    return bp
 
 
 def _max_text_x(p, **kwargs) -> float:
@@ -641,3 +673,396 @@ class TestTicketCatalogoControl:
         assert "DATOS DEL CATÁLOGO Y CONTROL" not in txt
         assert "CLI-01" not in txt
 
+
+
+class TestTipografiaBaseline:
+    """T4 — Baseline de PDF y no-regresión con AUTOMATICO."""
+
+    @staticmethod
+    def _extraido(p: BoletoPesaje, **kwargs) -> str:
+        buf = BytesIO()
+        from app.services.ticket_service import _build_pdf
+
+        buf = _build_pdf(p, **kwargs)
+        buf.seek(0)
+        from pypdf import PdfReader
+
+        texto = "\n".join(page.extract_text() or "" for page in PdfReader(buf).pages)
+        # Normalizar espacios y saltos
+        import re
+
+        return re.sub(r"[ \t]+", " ", re.sub(r"\n+", "\n", texto)).strip()
+
+    def test_baseline_automatico_es_estable(self):
+        """REQ-FN-012: con AUTOMATICO el texto extraído es idéntico al baseline."""
+        b = _boleto_baseline()
+        texto = self._extraido(b, empresa=None, boletos_por_hoja=1)
+        assert texto != "", "PDF vacío"
+        # Firma estable del baseline (fragmentos que no cambian entre ejecuciones)
+        assert "TA-00000123" in texto
+        assert "ABC-123" in texto
+        assert "MATERIA PRIMA" in texto
+
+    def test_automatico_no_regression(self):
+        """No-regresión: dos generaciones con AUTOMATICO producen texto idéntico."""
+        b = _boleto_baseline()
+        t1 = self._extraido(b)
+        t2 = self._extraido(b)
+        assert t1 == t2
+
+    def test_pdf_valido(self):
+        from app.services.ticket_service import _build_pdf
+
+        buf = _build_pdf(_boleto_baseline())
+        buf.seek(0)
+        assert buf.read(4) == b"%PDF"
+
+
+class TestTipografiaPeldaños:
+    """T5 — El peldaño configurado es el punto de partida de la escalera.
+
+    Por que se reescribieron estos tests. Los anteriores afirmaban dos cosas:
+    que el boleto no se truncaba y que el numero aparecia en el texto. Las dos
+    cosas ya las cumplia la escalera vigente, porque ``tamano_ticket_pdf`` no se
+    leia en ningun sitio de ``ticket_service``. Esos tests pasaban sin comprobar
+    el peldaño: eran nombre sin contenido, y dejaban sin cubrir la cobertura de
+    REQ-FN-010, REQ-FN-011 y REQ-FN-015.
+
+    Ahora se afirma el peldaño, y se hace de dos formas complementarias:
+
+    - sobre ``escalera_efectiva``, que es pura aritmetica y se comprueba exacto;
+    - sobre el PDF, midiendo el tamano de fuente que ReportLab dibujo.
+
+    Para lo segundo el valor esperado **se deriva de ``_estilos_simples``** y no
+    se escribe a mano. El desplazamiento entre el peldaño y cada estilo (la
+    etiqueta va en ``ts - 0.5``) es un detalle del modulo: si cambia, el test
+    sigue diciendo la verdad en vez de romperse por 0.5 puntos que nadie toco.
+    """
+
+    # Los nombres de fuente llevan sufijo de subconjunto ("F2+0", "F3+0"), asi
+    # que el patron tiene que aceptar el "+0". Con "/F\d+" solo se leian las
+    # lineas de F1, y la extraccion devolvia 10.0 para todos los casos: es decir,
+    # no media nada.
+    _RE_TF = re.compile(r"/F[^\s/]+\s+([\d.]+)\s+Tf")
+
+    #: Tamano de la cabecera de pagina y del pie, fijos y ajenos al peldaño.
+    #: 12.0 es el nombre de la empresa y 7.0 el de los datos de cabecera. OJO:
+    #: 7.0 es *tambien* el cuerpo del boleto con PEQUENO, asi que no se puede
+    #: usar como "ajeno" en general (ver `_cuerpo`, que no lista ninguno).
+    _AJENOS = (12.0,)
+
+    @staticmethod
+    def _empresa(tamano: str) -> Empresa:
+        """Empresa mínima con el peldaño configurado.
+
+        ``SimpleNamespace`` a propósito: es lo que usan los tests existentes del
+        fichero, y es lo que obliga a que la implementación lea el valor con
+        ``getattr`` en vez de acceso directo (ver T6, punto 3). El ``cast`` deja
+        explícito que es un doble de pruebas, no una entidad de la base de datos.
+        """
+        return cast("Empresa", SimpleNamespace(
+            tamano_ticket_pdf=tamano,
+            fuente_ticket_pdf="DejaVu",
+            nombre_comercial=None,
+            nombre_fiscal="",
+            rif_nit="",
+        ))
+
+    @classmethod
+    def _cuerpo(cls, p, **kwargs) -> float:
+        """Tamano de fuente del cuerpo del boleto: el mas repetido.
+
+        El cuerpo del boleto son las etiquetas y los valores, que comparten el
+        tamano ``ts - 0.5`` (``label_l``/``valor_r``/``tab_val``). El PDF tambien
+        trae encabezado, titulo y sellos con tamaños propios, y con 3 o 4 boletos
+        por hoja la moda *global* la gana el encabezado (10.0), no el cuerpo. Por
+        eso se mide la moda **de los candidatos a cuerpo**: los ``ts - 0.5`` que
+        la escalera de este ajuste puede elegir. Asi el observables es el del
+        peldaño y no el de la pagina entera.
+        """
+        from collections import Counter
+
+        from app.services.ticket_service import escalera_efectiva
+
+        escalera = escalera_efectiva(
+            _ESCALAS_ACTUALES, getattr(kwargs.get("empresa"), "tamano_ticket_pdf", "AUTOMATICO")
+        )
+        candidatos = {round(ts - 0.5, 2) for ts in escalera[kwargs.get("boletos_por_hoja", 1)]}
+        # `peso_manual_c` usa `ts` (no `ts - 0.5`) y no aplica a este boleto, pero
+        # se incluye por si el fixture cambia.
+        candidatos |= {round(ts, 2) for ts in escalera[kwargs.get("boletos_por_hoja", 1)]}
+
+        buf = _build_pdf(p, **kwargs)
+        buf.seek(0)
+        contents = PdfReader(buf).pages[0].get_contents()
+        assert contents is not None, "la página del PDF no tiene stream de contenido"
+        tamanos = Counter(
+            float(m)
+            for m in cls._RE_TF.findall(contents.get_data().decode("latin-1"))
+            if float(m) in candidatos
+        )
+        assert tamanos, (
+            "ningun tamano del PDF corresponde a la escalera de "
+            f"{sorted(candidatos)}: la extraccion de Tf no encontro el cuerpo"
+        )
+        return tamanos.most_common(1)[0][0]
+
+    @staticmethod
+    def _esperado(peldaño: float) -> float:
+        """Tamano que deberia verse en pantalla si se eligio ``peldaño``."""
+        from app.services.ticket_service import _estilos_simples
+
+        return _estilos_simples(peldaño)["label_l"].fontSize  # type: ignore[attr-defined]
+
+    # ── Escalera de referencia: control antes que nada ──────────────────────
+    @pytest.mark.parametrize(
+        ("por_hoja", "piso_de_la_escalera"),
+        [(1, 10.5), (2, 9.5), (3, 8.5), (4, 8.0)],
+    )
+    def test_la_escalera_vigente_arranca_en_su_primer_peldaño(
+        self, por_hoja: int, piso_de_la_escalera: float
+    ) -> None:
+        """Control: el primer peldaño de cada escalera es el vigente.
+
+        Si este falla, el problema no es el peldaño configurado: se movio la
+        escalera base, y hay que leerlo antes que cualquier otro fallo de aqui.
+        """
+        from app.services.ticket_service import _ESCALAS_ACTUALES
+
+        assert _ESCALAS_ACTUALES[por_hoja][0] == piso_de_la_escalera
+
+    def test_automatico_no_altera_la_escalera(self) -> None:
+        """AUTOMATICO deja la escalera exactamente como esta (REQ-FN-012).
+
+        El control es el PDF sin ``empresa``: ahi ``getattr`` cae al default, que
+        es justamente lo que tiene que hacer AUTOMATICO.
+        """
+        p = _boleto_baseline()
+        for por_hoja in (1, 2, 3, 4):
+            con_auto = self._cuerpo(
+                p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja
+            )
+            sin_configurar = self._cuerpo(p, boletos_por_hoja=por_hoja)
+            assert con_auto == sin_configurar, (
+                f"con {por_hoja} boleto(s) por hoja, AUTOMATICO imprimio a "
+                f"{con_auto} y sin configurar se imprimia a {sin_configurar}"
+            )
+
+    def test_automatico_no_cambia_el_pdf_ni_el_texto(self) -> None:
+        """Con AUTOMATICO el PDF debe ser identico al de antes de este trabajo.
+
+        Es la garantia de REQ-FN-012 y la que protege a toda estacion ya
+        instalada: si esto cambia, todos los boletos-printados cambian de aspecto
+        sin que nadie lo haya pedido.
+        """
+        p = _boleto_baseline()
+        for por_hoja in (1, 2, 3, 4):
+            sin_configurar = self._sin_marca_de_impresion(
+                _extract(p, boletos_por_hoja=por_hoja)
+            )
+            con_automatico = self._sin_marca_de_impresion(
+                _extract(p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja)
+            )
+            assert sin_configurar == con_automatico, (
+                f"AUTOMATICO cambio el texto con {por_hoja} por hoja"
+            )
+            assert _paginas(p, boletos_por_hoja=por_hoja) == _paginas(
+                p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja
+            ), f"AUTOMATICO cambio el numero de paginas con {por_hoja} por hoja"
+
+    @staticmethod
+    def _sin_marca_de_impresion(texto: str) -> str:
+        """Quita la marca de tiempo de "Impreso:".
+
+        ``_build_pdf`` estampa ``datetime.now()`` en el encabezado, asi que dos
+        boletajes generados en segundos distintos producen textos distintos por
+        una razon que no tiene nada que ver con la tipografia. Comparar el texto
+        crudo daria un fallo aleatoriodepending del segundo en que cae el test.
+        """
+        return re.sub(r"Impreso: .*?Estado", "Impreso: <hora> Estado", texto)
+
+    # ── Los tres peldaños configurados ──────────────────────────────────────
+    # 7.5 es el techo, asi que es el mayor peldaño posible *de las escaleras que lo
+    # tienen*. Las de 3 y 4 por hoja sí lo tienen; la de 4, sin embargo, exige
+    # bajar a 5.5 para que el boleto quepa, asi que el cuerpo sale a 5.0 con
+    # PEQUENO y tambien sin nada configurado (medido contra el PDF: 7.0 / 7.0 /
+    # 7.0 / 5.0). No es que el filtro falle: es que el contenido manda
+    # (REQ-FN-011).
+    @pytest.mark.parametrize(
+        ("por_hoja", "peldano_esperado"),
+        [(1, 7.5), (2, 7.5), (3, 7.5), (4, 5.5)],
+    )
+    def test_pequeno_arranca_en_7_5_si_la_escalera_lo_tiene(
+        self, por_hoja: int, peldano_esperado: float
+    ) -> None:
+        """PEQUENO arranca en 7.5 donde cabe; si no, baja lo necesario (CE-04)."""
+        p = _boleto_baseline()
+        observado = self._cuerpo(
+            p, empresa=self._empresa("PEQUENO"), boletos_por_hoja=por_hoja
+        )
+        assert observado == self._esperado(peldano_esperado), (
+            f"con {por_hoja} boleto(s) por hoja, PEQUENO deberia imprimir a "
+            f"{self._esperado(peldano_esperado)} (peldaño {peldano_esperado}) "
+            f"y imprimio a {observado}"
+        )
+
+    # El techo no se puede exigir por igual en las cuatro variantes: recorta lo
+    # que lo supere, pero no alarga una escalera que ya arranca mas pequena. La de
+    # 3 queda en 8.5 y la de 4 en 8.0, ambas por debajo de 9.0 (medido contra el
+    # PDF: cuerpo a 8.5 / 8.5 / 7.5 / 5.0 para 1..4 por hoja).
+    @pytest.mark.parametrize(
+        ("por_hoja", "peldano_esperado"),
+        [(1, 9.0), (2, 9.0), (3, 8.0), (4, 5.5)],
+    )
+    def test_mediano_arranca_en_9_0_si_la_escalera_lo_tiene(
+        self, por_hoja: int, peldano_esperado: float
+    ) -> None:
+        """MEDIANO arranca en 9.0 donde cabe; si no, baja lo necesario."""
+        p = _boleto_baseline()
+        observado = self._cuerpo(
+            p, empresa=self._empresa("MEDIANO"), boletos_por_hoja=por_hoja
+        )
+        assert observado == self._esperado(peldano_esperado), (
+            f"con {por_hoja} boleto(s) por hoja, MEDIANO deberia imprimir a "
+            f"{self._esperado(peldano_esperado)} (peldaño {peldano_esperado}) "
+            f"y imprimio a {observado}"
+        )
+
+    @pytest.mark.parametrize("por_hoja", [1, 2, 3, 4])
+    def test_grande_no_reduce_la_escalera(self, por_hoja: int) -> None:
+        """GRANDE se comporta como hoy, peldaño a peldaño (CE-05).
+
+        No es solo "que no se rompa": con 4 por hoja la escalera vigente ya baja
+        sola hasta 5.5, y GRANDE tiene que llegar exactamente al mismo sitio.
+        """
+        p = _boleto_baseline()
+        con_grande = self._cuerpo(
+            p, empresa=self._empresa("GRANDE"), boletos_por_hoja=por_hoja
+        )
+        sin_configurar = self._cuerpo(p, boletos_por_hoja=por_hoja)
+        assert con_grande == sin_configurar, (
+            f"con {por_hoja} por hoja, GRANDE imprimio a {con_grande} y sin "
+            f"configurar se imprimia a {sin_configurar}"
+        )
+
+    # ── escalera_efectiva: aritmetica pura, comprobacion exacta ─────────────
+    @pytest.mark.parametrize(
+        ("tamano", "techo"),
+        [("PEQUENO", 7.5), ("MEDIANO", 9.0)],
+    )
+    def test_el_peldaño_configurado_es_el_techo(self, tamano: str, techo: float) -> None:
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        escalera = escalera_efectiva(_ESCALAS_ACTUALES, tamano)
+        for n in (1, 2, 3, 4):
+            # El techo recorta lo que lo supere, pero no alarga una escalera que
+            # ya arranca mas pequeña: con MEDIANO la de 3 queda en 8.5 y la de 4
+            # en 8.0. La garantia real es que ninguna supere el techo.
+            assert escalera[n][0] <= techo, (
+                f"la escalera de {n} con {tamano} arranca en {escalera[n][0]}, "
+                f"por encima del techo {techo}"
+            )
+        # Y en las escaleras que sí lo tienen, el techo se aplica de verdad.
+        for n in (1, 2):
+            assert escalera[n][0] == techo, (
+                f"la escalera de {n} con {tamano} arranca en {escalera[n][0]}, "
+                f"se esperaba el techo {techo}"
+            )
+
+    def test_automatico_es_identidad(self) -> None:
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        escalera = escalera_efectiva(_ESCALAS_ACTUALES, "AUTOMATICO")
+        for n in (1, 2, 3, 4):
+            assert escalera[n] == _ESCALAS_ACTUALES[n], (
+                f"AUTOMATICO no devolvio la escalera original en {n}: "
+                f"{escalera[n]} != {_ESCALAS_ACTUALES[n]}"
+            )
+
+    def test_grande_no_filtra(self) -> None:
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        escalera = escalera_efectiva(_ESCALAS_ACTUALES, "GRANDE")
+        for n in (1, 2, 3, 4):
+            assert escalera[n] == _ESCALAS_ACTUALES[n]
+
+    def test_un_valor_desconocido_cae_a_la_escalera_vigente(self) -> None:
+        """Un valor fuera del Literal no debe reventar la impresion.
+
+        El CHECK de la migracion 021 lo impide en base de datos, pero una fila
+        editada a mano o un default antiguo pueden colarse. El peor caso tolerable
+        es caer a la escalera vigente, no un 500 a la hora de imprimir.
+        """
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        escalera = escalera_efectiva(_ESCALAS_ACTUALES, "VALOR_INVENTADO")
+        for n in (1, 2, 3, 4):
+            assert escalera[n] == _ESCALAS_ACTUALES[n]
+
+    # ── REQ-FN-011: orden, piso y no truncado ───────────────────────────────
+    @pytest.mark.parametrize("tamano", ["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"])
+    def test_el_piso_de_cada_escalera_se_preserva(self, tamano: str) -> None:
+        """Filtrar por techo no puede eliminar el ultimo peldaño.
+
+        Ese ultimo elemento es el piso que garantiza que el auto-fit termine
+        siempre en una escala existente. Si un filtro lo eliminara, el bucle se
+        quedaria sin candidatas y el boleto saldria con la escala del fallback.
+        """
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        escalera = escalera_efectiva(_ESCALAS_ACTUALES, tamano)
+        for n in (1, 2, 3, 4):
+            assert escalera[n], f"la escalera de {n} quedo vacia filtrando por {tamano}"
+            assert escalera[n][-1] == _ESCALAS_ACTUALES[n][-1], (
+                f"el piso de la escalera de {n} cambio con {tamano}: "
+                f"{_ESCALAS_ACTUALES[n][-1]} -> {escalera[n][-1]}"
+            )
+
+    @pytest.mark.parametrize("tamano", ["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"])
+    def test_la_escalera_va_en_orden_descendente(self, tamano: str) -> None:
+        from app.services.ticket_service import _ESCALAS_ACTUALES, escalera_efectiva
+
+        for n, peldanos in escalera_efectiva(_ESCALAS_ACTUALES, tamano).items():
+            assert peldanos == sorted(peldanos, reverse=True), (
+                f"la escalera de {n} con {tamano} no esta en orden descendente: {peldanos}"
+            )
+
+    @pytest.mark.parametrize("tamano", ["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"])
+    @pytest.mark.parametrize("por_hoja", [1, 2, 3, 4])
+    def test_ningun_peldaño_trunca_el_boleto(self, tamano: str, por_hoja: int) -> None:
+        """Ningún peldaño puede recortar contenido (REQ-FN-011).
+
+        T6 solo cambia peldaños; no puede cambiar el formato del boleto.
+        """
+        p = _boleto_baseline()
+        texto = _extract(p, empresa=self._empresa(tamano), boletos_por_hoja=por_hoja)
+        assert "..." not in texto, f"{tamano} a {por_hoja} por hoja trunco el boleto"
+        assert "TA-00000123" in texto, f"{tamano} a {por_hoja} por hoja perdio el numero"
+
+    # ── REQ-FN-013: el TXT ignora la tipografia ─────────────────────────────
+    def test_el_txt_ignora_los_peldanos(self) -> None:
+        """El TXT es texto plano: ningun ajuste de PDF debe alterarlo."""
+        p = _boleto_baseline()
+        base = _build_txt(p, empresa=self._empresa("AUTOMATICO"), idioma="es").getvalue()
+        for tamano in ("GRANDE", "MEDIANO", "PEQUENO"):
+            otro = _build_txt(p, empresa=self._empresa(tamano), idioma="es").getvalue()
+            assert otro == base, f"el TXT cambio con {tamano}"
+
+    # ── REQ-FN-017: sin red ────────────────────────────────────────────────
+    def test_el_pdf_no_abre_ninguna_conexion(self) -> None:
+        """Generar el ticket no puede hacer llamadas salientes (REQ-FN-017)."""
+        import socket
+
+        original = socket.socket
+
+        class Prohibido(socket.socket):  # type: ignore[misc]
+            def __init__(self, *a, **k):
+                raise AssertionError("la generacion del PDF intento abrir un socket")
+
+        socket.socket = Prohibido  # type: ignore[misc]
+        try:
+            p = _boleto_baseline()
+            for tamano in ("AUTOMATICO", "PEQUENO"):
+                _build_pdf(p, empresa=self._empresa(tamano), boletos_por_hoja=2)
+        finally:
+            socket.socket = original  # type: ignore[misc]

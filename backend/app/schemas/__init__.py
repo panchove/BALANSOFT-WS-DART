@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
 # ---------------------------------------------------------------------------
 # Autenticación
@@ -107,6 +107,10 @@ class CompanyOut(BaseModel):
     direccion: str | None = None
     telefono: str | None = None
     email: str | None = None
+    # Tipografía del ticket (REQ-FN-009): la estación la necesita al arrancar,
+    # antes de que exista la pantalla de ajustes (T7/T10a).
+    tamano_ticket_pdf: Literal["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"] = "AUTOMATICO"
+    fuente_ticket_pdf: Literal["DejaVu"] = "DejaVu"
 
 
 class LoginResponse(BaseModel):
@@ -704,7 +708,21 @@ class EmpresaPerfilOut(BaseModel):
     formato_reporte: str | None = "EXCEL"
     idioma: Literal["es", "en", "pt"] = "es"
     ruta_exportacion_reportes: str | None = None
+    tamano_ticket_pdf: Literal["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"] = "AUTOMATICO"
+    fuente_ticket_pdf: Literal["DejaVu"] = "DejaVu"
     updated_at: datetime
+
+    @field_validator("tamano_ticket_pdf", "fuente_ticket_pdf", mode="before")
+    @classmethod
+    def _nulo_a_default(cls, valor: object, info: ValidationInfo) -> object:
+        """Las columnas son `nullable=True` por compatibilidad (REQ-FN-012).
+
+        Una fila heredada con NULL no puede tumbar `GET /empresa` con un 500: se
+        devuelve el default de negocio, que es lo que la estación ya usaba.
+        """
+        if valor is not None:
+            return valor
+        return "DejaVu" if info.field_name == "fuente_ticket_pdf" else "AUTOMATICO"
 
 
 class EmpresaPerfilUpdate(BaseModel):
@@ -719,6 +737,8 @@ class EmpresaPerfilUpdate(BaseModel):
     formato_reporte: Literal["EXCEL", "PDF"] | None = Field(None)
     idioma: Literal["es", "en", "pt"] | None = Field(None)
     ruta_exportacion_reportes: str | None = Field(None, max_length=500)
+    tamano_ticket_pdf: Literal["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"] | None = Field(None)
+    fuente_ticket_pdf: Literal["DejaVu"] | None = Field(None)
 
 
 # ---------------------------------------------------------------------------

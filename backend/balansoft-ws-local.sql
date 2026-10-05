@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     formato_reporte  VARCHAR(10) DEFAULT 'EXCEL',
     idioma           VARCHAR(5) DEFAULT 'es',
     ruta_exportacion_reportes VARCHAR(500),
+    tamano_ticket_pdf VARCHAR(20) DEFAULT 'AUTOMATICO',
+    fuente_ticket_pdf VARCHAR(20) DEFAULT 'DejaVu',
     -- Snapshot de la licencia (validada contra el servidor central en login)
     licencia_key     VARCHAR(255),
     licencia_tier    VARCHAR(20),
@@ -69,8 +71,34 @@ ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_ticket VARCHAR(10);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ruta_exportacion_reportes VARCHAR(500);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS idioma VARCHAR(5) DEFAULT 'es';
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_reporte VARCHAR(10) DEFAULT 'EXCEL';
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS tamano_ticket_pdf VARCHAR(20);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS fuente_ticket_pdf VARCHAR(20);
 UPDATE empresas SET idioma = 'es' WHERE idioma IS NULL;
 UPDATE empresas SET formato_reporte = 'EXCEL' WHERE formato_reporte IS NULL;
+UPDATE empresas SET tamano_ticket_pdf = 'AUTOMATICO' WHERE tamano_ticket_pdf IS NULL;
+UPDATE empresas SET fuente_ticket_pdf = 'DejaVu' WHERE fuente_ticket_pdf IS NULL;
+ALTER TABLE empresas ALTER COLUMN tamano_ticket_pdf SET DEFAULT 'AUTOMATICO';
+ALTER TABLE empresas ALTER COLUMN fuente_ticket_pdf SET DEFAULT 'DejaVu';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_empresas_tamano_ticket_pdf'
+    ) THEN
+        ALTER TABLE empresas
+            ADD CONSTRAINT ck_empresas_tamano_ticket_pdf
+            CHECK (tamano_ticket_pdf IN ('AUTOMATICO', 'GRANDE', 'MEDIANO', 'PEQUENO'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_empresas_fuente_ticket_pdf'
+    ) THEN
+        ALTER TABLE empresas
+            ADD CONSTRAINT ck_empresas_fuente_ticket_pdf
+            CHECK (fuente_ticket_pdf IN ('DejaVu'));
+    END IF;
+END
+$$;
+
 ALTER TABLE empresas ALTER COLUMN id_cuenta DROP NOT NULL;
 
 -- ============================================================

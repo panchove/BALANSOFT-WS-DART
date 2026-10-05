@@ -4,7 +4,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 
 | Atributo      | Valor                                            |
 |---------------|--------------------------------------------------|
-| Versión       | 3.12                                             |
+| Versión       | 3.13                                             |
 | Fecha         | 2026-10-02                                       |
 | Estado        | Vigente                                          |
 | Fuente        | `docs/MANEJO_DB.md` (arquitectura vigente) y código real |
@@ -16,11 +16,11 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 | Comando                          | Lugar | Notas |
 |----------------------------------|-------|-------|
 | `uv sync`                        | `backend/` | Stack uv (`pyproject.toml` + `uv.lock`) |
-| `uv run pytest -q`               | `backend/` | **328 tests rápidos** (~90 s), `-m "not e2e"`; requiere PostgreSQL real (ver Tests) |
+| `uv run pytest -q`               | `backend/` | **423 tests rápidos** (~90 s), `-m "not e2e"`; requiere PostgreSQL real (ver Tests) |
 | `uv run pytest tests/e2e`         | `backend/` | **34 tests E2E** (~15 s) contra el stub firmante del LM |
 | `uv run ruff check app tests`    | `backend/` | line-length 100 |
 | `uv run mypy tests/`             | `backend/` | |
-| `flutter test` / `flutter analyze` | `frontend/` | **158 tests** unit/widget |
+| `flutter test` / `flutter analyze` | `frontend/` | **235 tests** unit/widget |
 | `bash scripts/e2e_flutter.sh up`  | `backend/` | Entorno E2E Flutter: BD aislada + seed + stub LM + API en `127.0.0.1:8000` (`down` / `status` también) |
 | `flutter test integration_test/pesaje_flow_test.dart -d linux` | `frontend/` | **1 E2E de UI** (login → entrada → salida → `CERRADO`); en local con `DISPLAY=:0`, en CI con `xvfb-run -a` |
 | `uvicorn app.main:app --port 8000` | `backend/` | Levanta API local dev |
@@ -79,7 +79,8 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 - Cada test recibe sesión limpia y al finalizar se **truncan todas las tablas** (`TRUNCATE ... RESTART IDENTITY CASCADE`).
 - `tests/test_api_server.py` prueba el rol `server` sobre `balansoft_ws_server_test`; `tests/test_scale_hal.py` usa sessions TCP reales (se cierran tras cada test via `scale_session`).
 - Hay worker de sesiones de balanza global (`app/core/scale_session.py`), no dejarlo abierto entre tests.
-- **Estado actual**: backend **362/362** en verde (328 rápidos ~89 s + 34 E2E ~15 s); frontend **158/158** unit/widget + **1/1** E2E de UI en verde; `flutter analyze` limpio. Ruff y mypy sin hallazgos.
+- **Estado actual**: backend **457/457** en verde (423 rápidos + 34 E2E); frontend **235/235** unit/widget + **1/1** E2E de UI en verde; `flutter analyze` limpio. Ruff y mypy sin hallazgos.
+- **Spec 001 (tipografía por dispositivo) implementada pero NO cerrada**: familia de UI (5 familias), factor de texto 0.85–1.40 aplicado globalmente sin reinicio, iconos escalados y `tamano_ticket_pdf` por empresa. Vive en `specs/001-tipografia-config/` y **T10b queda bloqueada**: la pantalla Ajustes desborda 60 px con la familia `Serif` a 1.40. El comportamiento de Ajustes→Tipografía además tenía un `setState() during build` corregido. Ver `specs/001-tipografia-config/tasks.md §11`.
 - Comandos: `uv run pytest -q`, `uv run pytest tests/e2e`, `uv run ruff check app tests`, `uv run mypy tests/` (backend); `flutter test`, `flutter analyze`, `flutter test integration_test/pesaje_flow_test.dart -d linux`, `flutter build linux --release` (frontend).
 
 ---
@@ -133,6 +134,7 @@ Sistema de estación de pesaje industrial multi-empresa: **backend FastAPI + fro
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
+| 3.13 | 2026-10-02 | Spec 001 (tipografía) implementada: **T10b NO cierra**. 5 de sus 6 casos verdes (los dos extremos a 0.85 y 1.40 dan `overflow_count: 0` en las 4 pantallas, contraste AA 15.43:1 claro y 14.00:1 oscuro, es/en/pt sin desbordes, iconos lineales en 41 muestras); el caso 5 encuentra un **desborde real de 60 px** en Ajustes con familia `Serif` a 1.40, reproducible en tres corridas. Por `spec.md §4.2` punto 4 se paró sin parchear layouts: los `Row` de `settings_screen.dart` y `app_sidebar.dart` usan todos `Expanded`/`Flexible`/`Spacer`, y el volcado del árbol tomado en el momento del desborde no identifica al culpable, así que el `Row` concreto queda pendiente de un widget test con datos reales. Dos bugs reales corregidos por T10b: (1) `TypographyController.load()` notificaba siempre y lanzaba `setState() called during build` en cada apertura de Ajustes→Tipografía (ahora solo notifica si un valor cambió, con regresión verificada en rojo por mutación); (2) el `overflow_count: 0` del caso 2 era inicialmente falso porque el controlador *lazy* captura `AppConfig.prefs` al construirse y el contenedor de dependencias no se rehacía entre casos — el harness ahora **mide** el factor efectivo en el árbol montado y falla si no es el del caso, que es la misma clase de defecto que dejó el `0` falso de T1. Ruff detectó además un `I001` (orden de imports) en `test_ticket_service.py`, corregido. Tests backend 362 → **457** (423 + 34 E2E); frontend 158 → **235**. |
 | 3.12 | 2026-10-02 | **CI en verde por primera vez: los cuatro jobs pasaban a la vez.** El job `Frontend` llevaba rojo desde `30eff14` (v3.11) y el `E2E Flutter` **nunca se había ejecutado con éxito**: estaba enmascarado porque `Frontend` fallaba antes y lo dejaba en `skipped`. Al arreglar el warning aparecieron dos fallos reales que nadie había visto: (1) **faltaba `libsecret-1-dev`** en las dependencias de escritorio del workflow, y el plugin `flutter_secure_storage_linux` lo exige (`pkg_check_modules libsecret-1>=0.18.4`), así que la compilación de Linux abortaba con "Unable to generate build files" antes de ejecutar un test; (2) un **overflow de 4,3 px** en el `DropdownButtonFormField` de "Tipo de Tercero" (`weighing_form_screen.dart:2194`), que comparte fila con "Razón Social" — el campo hermano "Medida" del mismo archivo ya usaba `isExpanded: true` y este se había quedado sin él. Con `isExpanded: true` el texto se elipsiza. Las 2 excepciones restantes del log eran en cascada del inspector sobre el árbol que el overflow dejaba inestable. Nota: el push de los commits de P2/H6 **subió también 2dbce89 (H2b) y 8db9a3f**, que seguían sin publicar; la rama quedó 4 commits por detrás de lo que se creía. |
 | 3.11 | 2026-10-02 | **El job `Frontend` de CI estaba en rojo, y `AGENTS.md` lo describía falsamente como "warning preexistente inocuo".** `flutter analyze` trata los warnings como **error** (salida 1), así que la variable muerta `esRojo` en `scale_monitor_widget.dart` tumbaba el job entero desde el commit `30eff14`. No era cosmético: `CI main` salía rojo mientras la documentación afirmaba que el análisis estaba limpio. La variable era código muerto (el ternario de color usa `esVerde`/`esAmarillo` y cae a `danger` por abandono, igual que `estadoTexto` con su `else`), así que se eliminó: **cero cambio de comportamiento**. `flutter analyze` → `No issues found!`; 158/158 tests unit/widget en verde. Lección: un warning "conocido" en un job que falla es un job rojo, no una nota al pie. |
 | 3.10 | 2026-10-02 | Corrección del conteo de tests en este documento (era una mentira en tres sitios, no uno: la tabla de comandos decía **310 tests rápidos**, que con los 34 E2E daba 344, y el estado actual decía 354; las filas históricas 3.7/3.8 se conservan tal cual porque eran exactas en su momento). Estado real verificado por separado: **328** rápidos (`pytest -m "not e2e"`, 89 s) + **34** E2E = **362**. La fila 3.9 decía «Tests 354 sin cambios de lógica», pero ese hito sí añadió 8 tests (`test_api_docs.py`), así que se corrige a 354 → 362. Sin cambios de código. |
