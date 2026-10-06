@@ -1,5 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'station_config.dart';
+
+/// Estado global de configuración de la app (cliente Flutter).
+///
+/// Lo que decide el INSTALADOR (rol + URL de la API) vive en `config.json` y
+/// se lee vía [StationConfig]; aquí queda proyectado en [rol] y [apiBaseUrl]
+/// para el resto de la app. Nada de esto autoriza: tenant, licencia y
+/// permisos los decide el backend (multi-tenancy, docs/MANEJO_DB.md §13).
 class AppConfig {
   static const String appName = 'Balansoft-WS';
   static const String appVersion = '1.0.0';
@@ -7,7 +15,10 @@ class AppConfig {
   static const String defaultServerApiUrl = 'https://ws.balansoft.com.ve';
   static const String defaultApiBaseUrl = 'http://localhost:8000';
 
+  /// URL de la API a la que apunta la estación (override o sistema del
+  /// instalador, o migración del legado). Proyección en memoria.
   static String? apiBaseUrl;
+
   static String? serverApiUrl;
   static String? licenseApiUrl;
   static String? publicKey;
@@ -17,95 +28,71 @@ class AppConfig {
   /// Sincronización automática por timer (Ajustes → Sincronización).
   static bool syncAutoEnabled = true;
 
-  // ── Onboarding de primera instalación (docs/I18N_Y_ONBOARDING.md) ──────────
-  /// El usuario ya eligió idioma y tema (paso 1 del modo instalación).
-  static bool setupPreferenciasCompletado = false;
+  // ── Configuración de estación (config.json del instalador) ───────────────
+  /// Rol funcional decidido por el instalador (`SERVIDOR` o `TRABAJADOR`).
+  /// `null` = sin config válida (la app no debe operar).
+  static StationRole? rol;
 
-  /// Rol que la estación va a tomar en la instalación (docs/MANEJO_DB.md §13).
-  ///
-  /// - `SERVIDOR`: la máquina es la titular de la licencia; levanta su WServer
-  ///   y su PostgreSQL, y guarda aquí los datos operativos.
-  /// - `TRABAJADOR`: cliente delgado; solo apunta a la API del servidor de la
-  ///   cuenta (IP/puerto) y no crea base de datos local.
-  static String? modoEstacion;
+  /// Error de provisión si `config.json` faltaba o era inválido: la app no
+  /// debe arrancar con rol nulo (contrato BALANSOFT-INSTALLER).
+  static StationConfigError? configError;
 
-  /// El proveedor validó la cuenta en el servidor central y la licencia está
-  /// activa en ESTA máquina (paso 3 del modo servidor).
-  static bool licenciaVerificada = false;
-
-  /// Este equipo es el titular de la licencia (`SERVIDOR_LOCAL` en el central).
-  static bool esTitularLicencia = false;
-
-  /// Los datos de empresa se capturaron y quedaron guardados en la BD local
-  /// (paso 4 del modo servidor).
-  static bool empresaSetupCapturado = false;
-
-  /// El wizard post-login ya no tiene nada pendiente que aplicar.
+  /// El wizard post-login ya no tiene nada pendiente que aplicar
+  /// (primer ADMIN captura los datos de empresa con InitialSetupScreen).
   static bool onboardingCompletado = false;
 
   static late SharedPreferences _prefs;
 
-  /// La URL de la API LOCAL (estación) aún no se ha configurado.
+  /// Hay config de instalador cargada (rol + URL válida): sin esto la app
+  /// no opera (error duro en `main()`).
+  static bool get instalacionValida =>
+      rol != null &&
+      apiBaseUrl != null &&
+      apiBaseUrl!.trim().isNotEmpty;
+
+  /// La URL de la API LOCAL ya está configurada.
   static bool get localApiConfigured =>
       apiBaseUrl != null && apiBaseUrl!.trim().isNotEmpty;
 
   /// Cliente delgado: no levanta WServer ni base de datos propia.
-  static bool get esTrabajador => modoEstacion == 'TRABAJADOR';
+  static bool get esTrabajador => rol == StationRole.trabajador;
 
   /// Servidor local: la estación aloja la API y los datos de la empresa.
-  static bool get esServidor => modoEstacion == 'SERVIDOR';
+  static bool get esServidor => rol == StationRole.servidor;
 
-  /// La instalación se considera cerrada cuando se configuraron las
-  /// preferencias, se eligió el modo y cada modo completó sus pasos:
-  /// el trabajador tiene apuntada la API del servidor; el servidor validó la
-  /// licencia y guardó los datos de empresa (REQ-NF-ONB-006).
-  static bool get instalacionCompletada {
-    if (!setupPreferenciasCompletado) return false;
-    if (esTrabajador) return localApiConfigured;
-    if (esServidor) return licenciaVerificada && empresaSetupCapturado;
-    return false;
-  }
-
-  /// El borrador de empresa está guardado pero aún no llegó a la BD local.
-  static bool get empresaConfigPendiente =>
-      empresaSetupCapturado && !onboardingCompletado;
-
-  static Future<void> init() async {
+  static Future<void> init({bool migrarLegado = false}) async {
     _prefs = await SharedPreferences.getInstance();
-    // El servidor central SIEMPRE está presente (default); la API local queda
-    // sin valor hasta que se configure en la primera ejecución.
-    apiBaseUrl = _prefs.getString('api_base_url');
-    // El servidor central (nube: cuenta y licencia) está definido de fábrica
-    // y NO es configurable por el usuario ni se lee de preferencias locales.
+    // El servidor central SIEMPRE está presente (nube: cuenta y licencia).
     serverApiUrl = defaultServerApiUrl;
     licenseApiUrl = _prefs.getString('license_api_url') ?? 'http://localhost:8080';
     publicKey = _prefs.getString('public_key');
     offline = _prefs.getBool('offline') ?? false;
     wserverAutostart = _prefs.getBool('wserver_autostart') ?? false;
     syncAutoEnabled = _prefs.getBool('sync_auto_enabled') ?? true;
-    setupPreferenciasCompletado =
-        _prefs.getBool('setup_preferencias_completado') ?? false;
-    modoEstacion = _prefs.getString('modo_estacion');
-    licenciaVerificada = _prefs.getBool('licencia_verificada') ?? false;
-    esTitularLicencia = _prefs.getBool('es_titular_licencia') ?? false;
-    empresaSetupCapturado =
-        _prefs.getBool('empresa_setup_capturado') ?? false;
     onboardingCompletado = _prefs.getBool('onboarding_completado') ?? false;
+
+    // Config de estación: archivo del instalador (override → sistema) o, en
+    // el arranque real, migración única del legado. Sin archivo ni legado,
+    // se deja `rol` nulo y se expone el error (no se debe operar).
+    rol = null;
+    configError = null;
+    apiBaseUrl = null;
+    try {
+      final cfg = await StationConfigLoader.cargar(migrarLegado: migrarLegado);
+      apiBaseUrl = cfg.apiBaseUrl;
+      rol = cfg.rol;
+    } on StationConfigError catch (e) {
+      configError = e;
+    }
   }
 
   static SharedPreferences get prefs => _prefs;
 
-  /// URL de la API local (estación): se configura en "Conexiones" si no existe.
+  /// URL de la API local: se edita en "Conexiones". Persiste en el override
+  /// de usuario del `config.json` conservando el rol de la estación.
   static Future<void> setApiBaseUrl(String url) async {
+    await StationConfigWriter.actualizarApiBaseUrl(url);
     apiBaseUrl = url;
-    await _prefs.setString('api_base_url', url);
-  }
-
-  /// Borra la URL local configurada: devuelve la app al modo instalación
-  /// (verificación de entorno + pantalla de conexiones).
-  static Future<void> quitarApiBaseUrl() async {
-    apiBaseUrl = null;
-    await _prefs.remove('api_base_url');
   }
 
   /// URL del servidor central (cuenta y licencia). Siempre disponible.
@@ -132,38 +119,8 @@ class AppConfig {
     await _prefs.setBool('sync_auto_enabled', value);
   }
 
-  /// Marca que el paso 1 de instalación (idioma y tema) ya se completó.
-  static Future<void> setSetupPreferenciasCompletado() async {
-    setupPreferenciasCompletado = true;
-    await _prefs.setBool('setup_preferencias_completado', true);
-  }
-
-  /// Guarda el rol que toma la estación: `SERVIDOR` o `TRABAJADOR`.
-  static Future<void> setModoEstacion(String modo) async {
-    modoEstacion = modo;
-    await _prefs.setString('modo_estacion', modo);
-  }
-
-  /// Marca (o desmarca) que la cuenta quedó validada en el servidor central y
-  /// si esta máquina es la titular de la licencia.
-  static Future<void> setLicenciaVerificada({
-    required bool verificada,
-    required bool titular,
-  }) async {
-    licenciaVerificada = verificada;
-    esTitularLicencia = titular;
-    await _prefs.setBool('licencia_verificada', verificada);
-    await _prefs.setBool('es_titular_licencia', titular);
-  }
-
-  /// Marca que los datos de empresa ya quedaron guardados en la BD local
-  /// (paso 4 del modo servidor).
-  static Future<void> setEmpresaSetupCapturado() async {
-    empresaSetupCapturado = true;
-    await _prefs.setBool('empresa_setup_capturado', true);
-  }
-
-  /// Marca el onboarding como cerrado: no se vuelve a mostrar el wizard.
+  /// Marca el onboarding como cerrado: no se vuelve a mostrar el wizard
+  /// post-login del primer ADMIN.
   static Future<void> setOnboardingCompletado([bool value = true]) async {
     onboardingCompletado = value;
     await _prefs.setBool('onboarding_completado', value);

@@ -93,16 +93,15 @@ migrations/017_*        # + empresas.idioma, empresas.formato_reporte (idempoten
 ```
 lib/core/i18n/locale_controller.dart   # idioma del dispositivo (SharedPreferences)
 lib/core/i18n/translations.dart        # 3 tablas de traducción + tr() por clave o texto
-lib/core/config/app_config.dart        # api_base_url + banderas de instalación por modo
-lib/core/config/cuenta_activada.dart  # snapshot del central para precargar la empresa
-lib/data/repositories/activacion_repository.dart  # login central + sesión + licencia
-lib/presentation/screens/setup/        # preferencias → modo → entorno/activación/trabajador
-lib/presentation/screens/settings/     # configuración persistente + wizard inicial
+lib/core/config/app_config.dart        # preferencias operativas (offline, sync, onboarding)
+lib/core/config/station_config.dart    # config.json del instalador (api_base_url + rol)
+lib/presentation/screens/settings/     # configuración persistente + wizard inicial post-login
+lib/presentation/screens/auth/         # login/registro/recuperación (entrada única de la app)
 ```
 
-- El arranque depende del estado y **del modo** (ver §4.3): `_rutaInicial()` en
-  `main.dart` usa `setup_preferencias_completado`, `modo_estacion`,
-  `licencia_verificada`, `empresaSetupCapturado` y `localApiConfigured`.
+- La app arranca **siempre en `/login`** (ver §4.3): `_rutaInicial()` ya no
+  depende de banderas de instalación; el rol de la estación llega de
+  `config.json` (`station_config.dart` → `AppConfig.rol`).
 - `SaveFileUtils.esRutaEscribible()` valida la carpeta de reportes creando y
   borrando un archivo de prueba; si falla, se avisa y se usa la predeterminada.
 - `tr()` acepta argumentos posicionales extra: `'ticket_cut_i'.tr(null, ['2'])`
@@ -124,67 +123,53 @@ lib/presentation/screens/settings/     # configuración persistente + wizard ini
 
 ---
 
-## 4. Flujo de primera instalación
+## 4. Modos de estación (decisión del instalador)
 
-El paso 1 (idioma y tema) es común; del paso 2 en adelante el flujo **depende
-del modo elegido** (REQ-NF-ONB-010). El detalle de reglas, endpoints y
-preferencias está en `MANEJO_DB.md §13`.
+El **instalador** (`BALANSOFT-INSTALLER`, repo aparte) pregunta el rol
+(`SERVIDOR` | `TRABAJADOR`) en un paso previo y escribe `config.json`
+(`api_base_url` + `rol`). La app Flutter **no tiene asistente de instalación**:
+arranca en `/login`, y el rol solo condiciona el comportamiento operativo
+(REQ-NF-ONB-010). El detalle del modelo de cuenta y dispositivos está en
+`MANEJO_DB.md §13`.
 
 ### 4.1 Modo Servidor Local (titular de la licencia)
 
 | # | Paso | Pantalla | Persistencia |
 |---|------|----------|--------------|
-| 1 | Idioma y tema | `setup/preferences_screen.dart` | `setup_preferencias_completado`, `balansoft.idioma`, `balansoft.tema` |
-| 2 | **Elegir modo** | `setup/mode_selection_screen.dart` | `modo_estacion = SERVIDOR` |
-| 3 | Verificar entorno | `setup/environment_check_screen.dart` | — (WServer, PostgreSQL, red) |
-| 4 | Base de datos local | `setup/database_config_screen.dart` | `api_base_url` (solo si `/health` responde) |
-| 5 | **Validar cuenta y licencia** | `setup/activation_screen.dart` | `licencia_verificada`, `es_titular_licencia`, `cuenta.activada`, tokens |
-| 6 | **Datos de empresa (precargados)** | `setup/company_setup_screen.dart` | `empresa_setup_capturado`, `PUT /api/v1/empresa`, logo |
-| 7 | Entrar al sistema | `dashboard` | `onboarding_completado` |
+| 1 | Asegurar el WServer local y entrar | `auth/login_screen.dart` | `config.json` (`rol=SERVIDOR`, `api_base_url` local); `WServerManager.ensureRunning()` en el login |
+| 2 | **Datos de empresa (post-login)** | `settings/initial_setup_screen.dart` | `onboarding_completado`, `PUT /api/v1/empresa`, logo, formatos, carpeta de reportes |
+| 3 | Entrar al sistema | `dashboard` | — |
 
 ### 4.2 Modo Trabajador Local (cliente delgado)
 
 | # | Paso | Pantalla | Persistencia |
 |---|------|----------|--------------|
-| 1 | Idioma y tema | `setup/preferences_screen.dart` | `setup_preferencias_completado` |
-| 2 | **Elegir modo** | `setup/mode_selection_screen.dart` | `modo_estacion = TRABAJADOR` |
-| 3 | **Conexión al Servidor** | `setup/worker_connection_screen.dart` | `api_base_url` (IP/URL + puerto, tras verificar `/health`) |
-| 4 | Login con credencial local | `auth/login_screen.dart` | Token del Servidor de la cuenta |
+| 1 | Entrar contra la API del titular | `auth/login_screen.dart` | `config.json` (`rol=TRABAJADOR`, `api_base_url` del Servidor) |
+| 2 | Login con credencial local | `auth/login_screen.dart` | Token del Servidor de la cuenta |
 
 ### 4.3 Reglas de navegación
 
-- El paso 4/5 no deja avanzar si la API guardada no responde
-  `/api/v1/health`.
-- La cuenta se valida **antes** de capturar la empresa (al revés del flujo
-  pre-login anterior): por eso la empresa ya se guarda directo en la BD local
-  con la sesión abierta y **no** hace falta `CompanyDraft` en este camino. El
-  borrador se conserva como respaldo cuando no hay sesión.
-- El central devuelve `license.puede_ser_servidor`: el primer dispositivo
-  activo de la cuenta es `SERVIDOR_LOCAL` y el resto `LOCAL`. La app lo pide
-  explícitamente con `modo_solicitado: SERVIDOR` y el backend responde `403`
-  si la máquina no es titular (REQ-NF-ONB-011).
-- Razón social y RIF llegan del central y se muestran de solo lectura
-  (`CompanySetupForm.initialLock`): son la identidad de la cuenta y se
-  cambian desde el panel del proveedor.
-- Al validar la cuenta la sesión **queda abierta**: se guardan
-  `access_token`/`refresh_token`, se dispara `CheckAuthStatusEvent` y tras
-  guardar la empresa se entra directo al dashboard (REQ-NF-ONB-014).
+- `_rutaInicial()` (`frontend/lib/main.dart`) devuelve **siempre `/login`**.
+  Si `config.json` falta o es inválido, `main()` muestra `PantallaErrorConfig`
+  (texto es/en hardcodeado, sin claves i18n) y la app no opera: no inventa rol
+  ni URL.
+- Los datos de empresa del primer `ADMIN` se capturan **tras el login** con la
+  sesión abierta (a diferencia del flujo pre-login anterior). `CompanyDraft`
+  sigue como respaldo: lo aplica `AuthRepository.login()` cuando el login
+  devuelve la cuenta y aún no hay empresa configurada.
+- El backend decide la autoridad en cada login: el primer dispositivo activo de
+  la cuenta es `SERVIDOR_LOCAL` y el resto `LOCAL` (REQ-NF-ONB-011). La app ya
+  no envía `modo_solicitado`; el endpoint central lo acepta como campo opcional
+  y responde `403` si un no titular lo pide.
+- Razón social y RIF llegan del central y se muestran de solo lectura en el
+  formulario de empresa: son la identidad de la cuenta y se cambian desde el
+  panel del proveedor.
 - El Trabajador **no** es un cliente que "ve" la central: entra contra la API
   de la estación titular con las credenciales de `usuarios`, y por eso
   `LoginScreen` no llama `WServerManager.ensureRunning()` en ese modo.
-- `_rutaInicial()` reanuda según el estado: sin preferencias →
-  `/setup_preferences`; sin modo → `/mode_selection`; trabajador sin conexión →
-  `/worker_connection`; servidor sin licencia verificada → `/setup`; servidor
-  verificado sin empresa → `/company_setup`; en cualquier otro caso →
-  `/login`.
-- `AppConfig.instalacionCompletada` es **por modo**: el trabajador cierra con
-  su conexión, el servidor con licencia + empresa.
-- Los pasos de empresa se pueden **omitir** solo cuando no hay sesión (respaldo
-  legacy); con la cuenta validada la empresa es obligatoria para entrar.
-- La carpeta de reportes avisa si la ruta no es escribible y ofrece el valor
-  por defecto.
-- Todo el flujo se puede repetir desde **Ajustes → Configuración general** y
-  desde **Documentos de empresa → Perfil de la empresa**.
+- **Conexiones** (Ajustes / menú): ver y corregir la URL de la API; guarda en
+  el override de usuario del `config.json` **conservando el rol** y solo acepta
+  si `/api/v1/health` responde.
 
 ---
 
@@ -212,16 +197,17 @@ preferencias está en `MANEJO_DB.md §13`.
 | Números/fechas por idioma | ✅ | `app/core/formato.py`: es/pt `1.234,56`, en `1,234.56`; fechas `dd/mm/aaaa` |
 | Preferencias de empresa (`idioma`, `formato_reporte`) | ✅ | `migrations/017` + `PUT /api/v1/empresa` + respuesta de login |
 | Formato de reportes aplicado | ✅ | `GET /reports/export/pdf` y `GET /weighing/{boleto}/export` respetan la empresa |
-| Onboarding por modo (servidor / trabajador) | ✅ | `mode_selection_screen.dart` persiste el modo; cada modo tiene su ruta de instalación (`main.dart` → `_rutaInicial()`) |
-| Activación de cuenta y verificación de licencia | ✅ | `activation_screen.dart` + `ActivacionRepository` (central con `modo_solicitado`); el backend responde 403 si la máquina no es titular |
-| Empresa precargada desde el central | ✅ | `CuentaActivada` guarda el snapshot; `CompanySetupForm.initialLock` deja razón social y RIF de solo lectura |
+| Onboarding por modo (servidor / trabajador) | ✅ | El rol lo escribe el instalador en `config.json`; la app arranca en `/login` y `StationRole` condiciona `WServerManager` y el cierre de ventana |
+| Activación de cuenta y verificación de licencia | ✅ | Se valida en el propio login (`AuthRepository.login()` central-first o local); el backend responde 403 si un no titular pide rol de servidor |
+| Empresa precargada desde el central | ✅ | El formulario post-login usa razón social/RIF del login; `CompanySetupForm.initialLock` mantiene solo lectura |
 | Sesión conservada tras la activación | ✅ | Tokens en `SecureStorageService` + `CheckAuthStatusEvent`; la empresa se guarda con la sesión abierta y se entra al dashboard |
-| Trabajador cliente delgado | ✅ | `worker_connection_screen.dart` verifica `/health`; `LoginScreen` no levanta WServer en ese modo |
-| Respaldo pre-login (sin sesión) | ✅ | `CompanyDraft` se conserva como camino legacy y lo aplica `AuthRepository.login()` |
+| Trabajador cliente delgado | ✅ | `config.json` trae la URL del titular; `LoginScreen` no levanta WServer en ese modo |
+| Respaldo pre-login (sin sesión) | ✅ | `CompanyDraft` se conserva como respaldo y lo aplica `AuthRepository.login()` |
 | Idioma de empresa aplicado en la estación | ✅ | Ajustes hace `PUT /api/v1/empresa`; también al cambiar idioma |
 | Paridad de claves Flutter | ✅ | 541 claves × 3 idiomas (`test/unit/i18n_test.dart`) |
 | Textos fijos en pantallas | ✅ | Lotes cerrados: pesajes, ajustes, dispositivos, ticket design/preview, kardex, catálogos, empresa/documentos, usuarios, seguridad, auditoría, ayuda, auth y setup |
-| Verificación de integridad sin reinicio | ✅ | Diagnóstico propio `SystemDiagnosticsScreen` (Ajustes): 5 tarjetas de solo lectura (API, BD, licencia, sync, versión) con 4 llamadas GET en paralelo. El wizard `EnvironmentCheckScreen` queda solo para instalación |
+| Verificación de integridad sin reinicio | ✅ | Diagnóstico propio `SystemDiagnosticsScreen` (Ajustes): 5 tarjetas de solo lectura (API, BD, licencia, sync, versión) con 4 llamadas GET en paralelo |
+| Provisión de la estación (`config.json`) | ✅ | `test/unit/station_config_test.dart`: URL, rol, prioridad override/sistema, error duro sin degradación, migración única, modo 0600 |
 | Pruebas del borrador de empresa | ✅ | `test/unit/company_draft_test.dart` (round-trip, logo base64, limpieza, normalización de idioma) |
 | Vista previa del boleto vs. boleto impreso | ✅ | `ticket_preview_dialog.dart` usa las mismas claves del ticket |
 | Panel web del proveedor (`BALASOFT-UI`) | ⏳ | Fuera de la app de estación: se traduce después |
@@ -231,12 +217,13 @@ preferencias está en `MANEJO_DB.md §13`.
 código **y** test. Los identificadores `REQ-*` de la sección 2 son la fuente
 de verdad del alcance.
 
-**Pruebas del flujo de instalación** (`test/widget/setup_screens_test.dart`,
-`test/widget/activation_screen_test.dart`): sin errores de layout en 1366×768 y
-1024×600 (incluidas `/activation` y `/worker_connection`), validación de correo
-y contraseña, mensaje 403 de licencia ya activa en otro equipo, navegación a
-`/company_setup` con la cuenta validada, y persistencia de `modo_estacion`,
-`licenciaVerificada` y `empresaSetupCapturado`.
+**Pruebas de provisión y onboarding**: `test/unit/station_config_test.dart`
+(carga de `config.json`, validación de URL, rol estricto, prioridad
+override/sistema, error duro, migración única, permisos 0600) y
+`test/unit/company_draft_test.dart` (round-trip, logo base64, limpieza,
+normalización de idioma). El flujo de login y el wizard post-login se cubren
+con el E2E de UI (`integration_test/pesaje_flow_test.dart`), que usa
+`AppConfig.rol = StationRole.servidor` en modo seed.
 
 ---
 

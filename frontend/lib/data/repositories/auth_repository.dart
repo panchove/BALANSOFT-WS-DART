@@ -155,7 +155,6 @@ class AuthRepository implements IAuthRepository {
       await _apiClient.updateEmpresaPerfil(body);
       await CompanyDraft.limpiar();
       await AppConfig.setOnboardingCompletado();
-      await AppConfig.setEmpresaSetupCapturado();
     } catch (_) {
       // Se conserva el borrador: el wizard post-login seguirá disponible para
       // reintentar y el operador no se queda sin datos de empresa.

@@ -248,10 +248,6 @@ class _LoginScreenState extends State<LoginScreen> {
               _buildLanguageSelector(context),
             ],
           ),
-          if (AppConfig.empresaConfigPendiente) ...[
-            _buildPendingCompanyNotice(),
-            const SizedBox(height: 10),
-          ],
           Text(
             context.tr('Iniciar Sesión'),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -426,32 +422,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               );
             },
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Aviso de la instalación: los datos de empresa se capturaron antes del
-  /// login y se aplican en cuanto la sesión se valida (REQ-NF-ONB-006).
-  Widget _buildPendingCompanyNotice() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: SwsColors.accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: SwsColors.accent.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.storefront_outlined,
-              size: 18, color: SwsColors.accentLight),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'setup_company_pending_hint'.tr(),
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
           ),
         ],
       ),

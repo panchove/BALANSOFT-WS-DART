@@ -1,4 +1,5 @@
 import 'package:balansoft_ws/core/config/app_config.dart';
+import 'package:balansoft_ws/core/config/station_config.dart';
 import 'package:balansoft_ws/core/i18n/locale_controller.dart';
 import 'package:balansoft_ws/core/i18n/translations.dart';
 import 'package:balansoft_ws/domain/usecases/auth_usecases.dart';
@@ -26,8 +27,8 @@ import 'package:window_manager/window_manager.dart';
 ///   se pisa ninguna preferencia; las credenciales llegan por
 ///   `--dart-define` para no versionar secretos.
 ///
-/// No cubre instalación (ver `instalacion_estacion_test.dart`), multiidioma,
-/// kiosk ni báscula física.
+/// No cubre instalación (el rol lo decide el instalador y la app arranca en el
+/// login), multiidioma, kiosk ni báscula física.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -107,18 +108,16 @@ void main() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
 
-    // Siempre: `logout` y los setters usan las preferencias reales.
-    await AppConfig.init();
+    // Siempre: `logout` y los setters usan las preferencias reales. En modo
+    // instalada se activa la migración única del legado, igual que `main()`.
+    await AppConfig.init(migrarLegado: instalada);
 
     if (!instalada) {
       // Se asignan los campos estáticos DIRECTAMENTE (no los setters) para no
       // escribir en las preferencias reales: correr el E2E seed en una máquina
       // con la estación instalada no debe falsear su estado de instalación.
-      AppConfig.setupPreferenciasCompletado = true;
-      AppConfig.modoEstacion = 'SERVIDOR';
-      AppConfig.licenciaVerificada = true;
-      AppConfig.esTitularLicencia = true;
-      AppConfig.empresaSetupCapturado = true;
+      // El rol del instalador se fija en memoria: la app arranca en el login.
+      AppConfig.rol = StationRole.servidor;
       AppConfig.onboardingCompletado = true;
       AppConfig.apiBaseUrl = baseUrl;
       AppConfig.offline = false;

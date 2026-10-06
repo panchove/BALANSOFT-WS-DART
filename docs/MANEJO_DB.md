@@ -473,13 +473,15 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
    instalaciones previas con `API_HOST=127.0.0.1`). Intenta abrir el puerto
    en el firewall (`ufw allow 8000/tcp` vía `pkexec`) y muestra la URL
    alcanzable de la LAN (`http://<IP-local>:8000`).
-2. La app Flutter arranca sin `api_base_url` → entra en **modo instalación**:
-   `WServerManager` localiza el binario (junto a la app instalada o vía
-   `WSERVER_PATH`), lo lanza en detached y espera a que `/api/v1/health`
-   responda. Solo entonces muestra `Conexiones` (`setupMode: true`) con la
-   URL local prefijada (`http://localhost:8000`), **editable** y comprobada
-   automáticamente (badge "WServer local activo").
-3. El usuario guarda la URL local + servidor central y continúa al login.
+2. El **instalador** (`BALANSOFT-INSTALLER`, repo aparte) decide el rol de la
+   estación (`SERVIDOR` | `TRABAJADOR`) y escribe `config.json` (ver §13.3).
+   La app Flutter **ya no tiene asistente de instalación**: arranca siempre en
+   `/login`. Si `config.json` falta o es inválido, `main()` muestra una pantalla
+   de error de provisión (no inventa rol ni URL).
+3. En una estación `SERVIDOR`, `LoginScreen` asegura el WServer
+   (`WServerManager.ensureRunning()`); la pantalla **Conexiones** permite ver y
+   corregir la URL de la API (la guarda en el override de usuario del
+   `config.json` conservando el rol).
 
 **Piezas:**
 
@@ -491,8 +493,9 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
 | Script de build (salida `dist/WServer/WServer`) | `backend/scripts/build_wserver.sh` | ✅ |
 | Vaciado total de BDs (local + server) | `backend/scripts/reset_db.sh` | ✅ |
 | Orquestador WServer (lanzar/esperar health) | `frontend/lib/core/services/wserver_manager.dart` | ✅ |
-| Asegurado de WServer en primer arranque | `frontend/lib/main.dart` | ✅ |
-| Modo instalación en Conexiones (URL por defecto + badge WServer) | `frontend/.../connections_screen.dart` | ✅ |
+| Asegurado de WServer en el login (solo SERVIDOR) | `frontend/lib/main.dart` + `login_screen.dart` | ✅ |
+| Conexiones (URL de la API, editable y comprobada) | `frontend/.../connections_screen.dart` | ✅ |
+| Config de estación (`config.json`) | `frontend/lib/core/config/station_config.dart` | ✅ |
 
 **Construir el binario:** `cd backend && uv run pyinstaller WServer.spec --noconfirm`
 (o `./scripts/build_wserver.sh`). Probarlo: `WSERVER_HOME=/tmp/demo dist/WServer/WServer`.
@@ -501,10 +504,11 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
 > elevado al iniciar el sistema por primera vez para que la conexión sea
 > editable en la primera instalación (app lo arranca y espera `/health`).
 
-**Idiomas y configuración inicial (ver `I18N_Y_ONBOARDING.md`):** el modo
-instalación empieza pidiendo **idioma y tema** antes de tocar la API
-(**REQ-NF-ONB-001**), la URL local solo se acepta si `/api/v1/health` responde
-(**REQ-NF-ONB-002**) y tras el primer login del `ADMIN` se muestra la
+**Idiomas y configuración inicial (ver `I18N_Y_ONBOARDING.md`):** el idioma se
+elige desde el selector del login y el tema desde Ajustes (el asistente de
+idioma/tema de la primera ejecución se eliminó con el wizard de instalación,
+**REQ-NF-ONB-001/002** adaptados). La URL local solo se acepta en Conexiones si
+`/api/v1/health` responde, y tras el primer login del `ADMIN` se muestra la
 configuración inicial: datos de empresa, logo, formato de ticket, carpeta de
 reportes y formato de reportes (**REQ-NF-ONB-003/004**). El idioma viaja a la
 BD local en `empresas.idioma` y el tema es preferencia del dispositivo.
@@ -657,9 +661,8 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 ## 13. Modelo de Cuenta y Dispositivos (Servidor Local / Trabajador Local)
 
-> Referenciado por el código de instalación (`AppConfig.modoEstacion`,
-> `rol_dispositivo`, `puede_ser_servidor`) y por los comentarios de
-> `app/api/v1/endpoints/servidor.py` y `auth.py`.
+> Referenciado por el código de estación (`frontend/lib/core/config/station_config.dart`
+> y `main.dart`) y por los comentarios de `app/api/v1/endpoints/servidor.py` y `auth.py`.
 
 ### 13.1 Regla del titular
 
@@ -720,57 +723,66 @@ del cliente cambió) lo hace el proveedor desde el panel, sin tocar la BD:
 
 ### 13.2 Regla de instalación en la app
 
-`POST /api/v1/auth/login-central` recibe `modo_solicitado: SERVIDOR | TRABAJADOR`:
-
-- Si se pide `SERVIDOR` y el rol del dispositivo **no** es `SERVIDOR_LOCAL` →
-  `403` con la instrucción de instalarse como Trabajador.
-- Si el central no responde o la licencia no está activa → la instalación del
-  modo Servidor no continúa.
+La app **ya no tiene asistente de instalación**: el rol lo decide el instalador
+(`BALANSOFT-INSTALLER`) y queda fijo en `config.json`. El backend sigue siendo
+la autoridad en cada login: `POST /api/v1/auth/login-central` puede recibir
+`modo_solicitado: SERVIDOR | TRABAJADOR` como campo opcional, y si se pide
+`SERVIDOR` en un dispositivo que **no** es `SERVIDOR_LOCAL` responde `403` con
+la instrucción de instalarse como Trabajador. La app ya no envía ese campo: la
+validación de rol ocurre sola en el login (ver 13.1).
 
 ### 13.3 Flujo por modo
 
+**Config de estación (`config.json`):** el instalador escribe exactamente dos
+claves — `api_base_url` (http/https, sin credenciales ni path) y `rol`
+(`SERVIDOR` | `TRABAJADOR`) — en el **override de usuario**
+`~/.config/balansoftws/config.json` (prioritario, 0600) o en el **de sistema**
+(`/etc/balansoftws/config.json` en Linux, `%ProgramData%\BalansoftWS\config.json`
+en Windows). Si ambos faltan, la app intenta **una sola vez** migrar el legado
+del wizard viejo (`api_base_url` + `modo_estacion` de SharedPreferences) al
+override; sin archivo ni legado muestra el error de provisión y no opera. Un
+archivo presente pero inválido es error duro (no se degrada a otro archivo ni a
+`localhost`).
+
+`_rutaInicial()` (`frontend/lib/main.dart`) devuelve **siempre `/login`**: el
+rol ya está decidido. El rol decide solo el comportamiento operativo de la app,
+no autoriza nada:
+
 **Servidor Local** (titular, levanta WServer + PostgreSQL propios):
 
-1. `/setup_preferences` — idioma y tema.
-2. `/mode_selection` — elige `SERVIDOR` (persiste `AppConfig.modoEstacion`).
-3. `/setup` — verificación de entorno (WServer, PostgreSQL, red).
-4. `/db_config` — alta de la base local; valida la API en `localhost`.
-5. `/activation` — correo y contraseña entregados por el proveedor contra el
-   central (`modo_solicitado: SERVIDOR`). Deja la sesión abierta
-   (`access_token`/`refresh_token` en `SecureStorageService`) y guarda
-   `CuentaActivada` con los datos de la cuenta.
-6. `/company_setup` — formulario **precargado** con razón social, RIF, nombre
-   comercial, dirección, teléfono y correo del central. Razón social y RIF
-   quedan de solo lectura (identidad de la cuenta); el operador completa logo,
-   formatos y carpeta de reportes. Se guarda con `PUT /api/v1/empresa` usando la
-   sesión ya abierta.
-7. `/dashboard` — sin volver a escribir la contraseña.
+1. `/login` — `LoginScreen` llama `WServerManager.ensureRunning()` para dejar la
+   API local arriba antes del login y la aplicación del borrador de empresa
+   (si el primer `ADMIN` tiene uno guardado).
+2. `/dashboard` — tras el login, si el onboarding no está cerrado, el primer
+   `ADMIN` ve `InitialSetupScreen` (datos de empresa, logo, formatos, carpeta de
+   reportes) con el formulario reutilizado del wizard antiguo
+   (`CompanySetupForm`), guardado con `PUT /api/v1/empresa`.
+3. Cierre de ventana: si el WServer no está en autostart, la app lo detiene al
+   salir (`onWindowClose`).
 
 **Trabajador Local** (cliente delgado, sin BD ni WServer propios):
 
-1. `/setup_preferences` — idioma y tema.
-2. `/mode_selection` — elige `TRABAJADOR`.
-3. `/worker_connection` — IP/URL y puerto del Servidor de la cuenta; verifica
-   la API (`GET /health`) y guarda `AppConfig.apiBaseUrl`.
-4. `/login` — credenciales de `balansoft_ws_local.usuarios`, creadas por el
-   administrador del Servidor. `LoginScreen` **no** llama
-   `WServerManager.ensureRunning()` en este modo.
+1. `/login` — `LoginScreen` **no** llama `WServerManager.ensureRunning()`: la
+   API es la del servidor titular (la URL viene en `config.json`).
+2. Credenciales de `balansoft_ws_local.usuarios`, creadas por el administrador
+   del Servidor.
+3. Cierre de ventana: no gestiona WServer propio.
 
-### 13.4 Estado persistido de la instalación
+**Conexiones** (Ajustes / menú): ver y corregir la URL de la API. Guarda en el
+override de usuario del `config.json` **conservando el rol** (solo acepta si
+`/api/v1/health` responde).
 
-| Preferencia (`AppConfig`) | Clave SharedPreferences | Significa |
-|---------------------------|-------------------------|-----------|
-| `setupPreferenciasCompletado` | `setup_preferencias_completado` | Paso 1 cerrado |
-| `modoEstacion` | `modo_estacion` | `SERVIDOR` o `TRABAJADOR` |
-| `licenciaVerificada` | `licencia_verificada` | Cuenta validada en el central |
-| `esTitularLicencia` | `es_titular_licencia` | Esta máquina es `SERVIDOR_LOCAL` |
-| `empresaSetupCapturado` | `empresa_setup_capturado` | Datos de empresa en la BD local |
-| `onboardingCompletado` | `onboarding_completado` | Wizard post-login sin pendientes |
+### 13.4 Estado persistido
 
-`AppConfig.instalacionCompletada` es **por modo**: el trabajador termina al
-guardar su conexión; el servidor exige `licenciaVerificada` **y**
-`empresaSetupCapturado`. `_rutaInicial()` (`frontend/lib/main.dart`) usa estos
-flags para reanudar la instalación donde quedó tras un reinicio.
+| Fuente | Clave | Significa |
+|--------|-------|-----------|
+| `config.json` (instalador) | `api_base_url` + `rol` | URL de la API y rol de la estación (fuente de verdad) |
+| Preferencia (`AppConfig`) | `onboarding_completado` | Wizard post-login sin pendientes |
+| Preferencia (`AppConfig`) | `offline`, `wserver_autostart`, `sync_auto_enabled` | Estado operativo del dispositivo |
+
+Las banderas del wizard antiguo (`setup_preferencias_completado`, `modo_estacion`,
+`licencia_verificada`, `es_titular_licencia`, `empresa_setup_capturado`) se
+**eliminaron** de la app; la migración las limpia al escribir el override.
 
 ---
 

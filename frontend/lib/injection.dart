@@ -12,7 +12,6 @@ import 'data/datasources/local/database_helper.dart';
 import 'core/config/app_config.dart';
 import 'core/security/secure_storage_service.dart';
 import 'data/repositories/auth_repository.dart';
-import 'data/repositories/activacion_repository.dart';
 import 'data/repositories/weighing_repository.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/accesos_repository.dart';
@@ -44,11 +43,6 @@ Future<void> init() async {
 
   // Repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepository(
-        apiClient: sl(),
-        localStorage: sl(),
-        secureStorage: sl(),
-      ));
-  sl.registerLazySingleton<ActivacionRepository>(() => ActivacionRepository(
         apiClient: sl(),
         localStorage: sl(),
         secureStorage: sl(),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/i18n/translations.dart';
-import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -116,37 +115,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     );
   }
 
-  Future<void> _reiniciarInstalacion() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('connection_reset_installation'.tr()),
-        content: Text('connection_reset_confirm'.tr()),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('btn_cancel'.tr()),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('btn_reset'.tr()),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-
-    await AppConfig.quitarApiBaseUrl();
-    di.sl<ApiClient>().setBaseUrl(AppConfig.defaultApiBaseUrl);
-    WServerManager.reset();
-
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/setup',
-      (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final esSetup = widget.setupMode;
@@ -185,13 +153,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           ),
           if (!esSetup) ...[
             const SizedBox(height: 8),
-            Center(
-              child: TextButton.icon(
-                onPressed: _reiniciarInstalacion,
-                icon: const Icon(Icons.settings_backup_restore, size: 18),
-                label: Text('back_to_setup'.tr()),
-              ),
-            ),
           ],
         ],
       ),
@@ -219,11 +180,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
         ),
         if (!esSetup) ...[
           const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _reiniciarInstalacion,
-            icon: const Icon(Icons.settings_backup_restore, size: 18),
-            label: Text('back_to_setup'.tr()),
-          ),
         ],
       ],
     );

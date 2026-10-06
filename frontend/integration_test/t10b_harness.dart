@@ -23,6 +23,7 @@
 // harness lee el factor del árbol montado en vez de repetir la inyección.
 
 import 'package:balansoft_ws/core/config/app_config.dart';
+import 'package:balansoft_ws/core/config/station_config.dart';
 import 'package:balansoft_ws/core/controllers/typography_controller.dart';
 import 'package:balansoft_ws/core/i18n/locale_controller.dart';
 import 'package:balansoft_ws/core/i18n/translations.dart';
@@ -198,12 +199,9 @@ Future<void> iniciarProceso() async {
 
   await AppConfig.init();
   // Modo seed, igual que `pesaje_flow_test.dart`: campos estáticos directos,
-  // sin escribir en las preferencias reales.
-  AppConfig.setupPreferenciasCompletado = true;
-  AppConfig.modoEstacion = 'SERVIDOR';
-  AppConfig.licenciaVerificada = true;
-  AppConfig.esTitularLicencia = true;
-  AppConfig.empresaSetupCapturado = true;
+  // sin escribir en las preferencias reales. El rol del instalador se fija en
+  // memoria; la app arranca igualmente en el login.
+  AppConfig.rol = StationRole.servidor;
   AppConfig.onboardingCompletado = true;
   AppConfig.offline = false;
   AppConfig.wserverAutostart = false;
@@ -259,11 +257,7 @@ Future<void> montarEstacion(
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
   await AppConfig.init();
-  AppConfig.setupPreferenciasCompletado = true;
-  AppConfig.modoEstacion = 'SERVIDOR';
-  AppConfig.licenciaVerificada = true;
-  AppConfig.esTitularLicencia = true;
-  AppConfig.empresaSetupCapturado = true;
+  AppConfig.rol = StationRole.servidor;
   AppConfig.onboardingCompletado = true;
   AppConfig.apiBaseUrl = baseUrl;
   AppConfig.offline = false;

@@ -11,7 +11,6 @@ import '../../../core/i18n/translations.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/utils/focus_search_bus.dart';
 import '../../../data/datasources/local/local_storage.dart';
-import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/user.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
@@ -38,7 +37,7 @@ import '../settings/settings_screen.dart';
 import '../settings/system_diagnostics_screen.dart';
 import '../settings/ticket_design_screen.dart';
 import '../settings/usuarios_screen.dart';
-import '../setup/worker_connection_screen.dart';
+import '../settings/connections_screen.dart';
 import '../weighing/weighing_form_screen.dart';
 import '../weighing/weighing_list_screen.dart';
 import 'dashboard_screen.dart';
@@ -730,15 +729,12 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Conexiones: misma pantalla del modo TRABAJADOR (host/puerto + /health),
-  /// reutilizando el cliente HTTP de la app.
+  /// Conexiones: URL de la API de la estación + prueba de /health. En el
+  /// TRABAJADOR esa URL apunta al servidor titular; en el SERVIDOR es la
+  /// propia (docs/MANEJO_DB.md §13).
   void _abrirConexiones() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => WorkerConnectionScreen(
-          clientFactory: (baseUrl) => ApiClient(baseUrl: baseUrl),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const ConnectionsScreen()),
     );
   }
 

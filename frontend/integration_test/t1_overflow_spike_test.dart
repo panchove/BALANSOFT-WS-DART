@@ -14,6 +14,7 @@
 // incluidos los de tamaño fijo (H-1). No se toca código de producción.
 
 import 'package:balansoft_ws/core/config/app_config.dart';
+import 'package:balansoft_ws/core/config/station_config.dart';
 import 'package:balansoft_ws/core/i18n/locale_controller.dart';
 import 'package:balansoft_ws/core/i18n/translations.dart';
 import 'package:balansoft_ws/domain/usecases/auth_usecases.dart';
@@ -146,12 +147,9 @@ void main() {
     await AppConfig.init();
 
     // Modo seed: campos estáticos directos, sin escribir en las preferencias
-    // reales (misma razón que el E2E de UI).
-    AppConfig.setupPreferenciasCompletado = true;
-    AppConfig.modoEstacion = 'SERVIDOR';
-    AppConfig.licenciaVerificada = true;
-    AppConfig.esTitularLicencia = true;
-    AppConfig.empresaSetupCapturado = true;
+    // reales (misma razón que el E2E de UI). El rol del instalador se fija en
+    // memoria; la app arranca igualmente en el login.
+    AppConfig.rol = StationRole.servidor;
     AppConfig.onboardingCompletado = true;
     AppConfig.apiBaseUrl = baseUrl;
     AppConfig.offline = false;

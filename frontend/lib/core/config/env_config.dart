@@ -9,7 +9,4 @@ class EnvConfig {
 
   static bool isKioskForEnv(String env) =>
       env == 'production' || env == 'prod' || isProduction;
-
-  static String get apiBaseUrl =>
-      isProduction ? 'https://api.balansoft.com' : 'http://localhost:8000';
 }

@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/config/app_config.dart';
 import 'core/config/env_config.dart';
+import 'core/config/station_config.dart';
 import 'core/controllers/typography_controller.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/i18n/translations.dart';
@@ -15,8 +16,6 @@ import 'core/services/wserver_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/utils/unsaved_work_guard.dart';
-import 'data/datasources/remote/api_client.dart';
-import 'data/repositories/activacion_repository.dart';
 import 'injection.dart' as di;
 import 'presentation/providers/bloc/auth/auth_bloc.dart';
 import 'presentation/providers/bloc/weighing/weighing_bloc.dart';
@@ -27,7 +26,6 @@ import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/auth/forgot_password_screen.dart';
 import 'presentation/screens/auth/reset_password_screen.dart';
 import 'presentation/screens/dashboard/home_shell.dart';
-import 'presentation/screens/setup/environment_check_screen.dart';
 import 'presentation/screens/weighing/weighing_detail_screen.dart';
 import 'presentation/screens/weighing/weighing_list_screen.dart'
     show weighingListRouteObserver;
@@ -35,42 +33,16 @@ import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/screens/settings/connections_screen.dart';
 import 'presentation/widgets/tipografia_scope.dart';
 
-import 'presentation/screens/setup/mode_selection_screen.dart';
-import 'presentation/screens/setup/database_config_screen.dart';
-import 'presentation/screens/setup/company_setup_screen.dart';
-import 'presentation/screens/setup/activation_screen.dart';
-import 'presentation/screens/setup/worker_connection_screen.dart';
-import 'presentation/screens/setup/preferences_screen.dart';
-
 final themeController = ThemeController();
 late final LocaleController localeController;
 
-/// Ruta de arranque según el estado de la instalación.
+/// Ruta de arranque: SIEMPRE el login.
 ///
-/// Cada modo tiene su propio camino (docs/MANEJO_DB.md §13):
-/// - Sin preferencias → idioma y tema.
-/// - Sin modo elegido → servidor o trabajador.
-/// - SERVIDOR: entorno → validar cuenta/licencia → datos de empresa.
-/// - TRABAJADOR: apuntar al servidor de la cuenta → login.
-/// Con la instalación cerrada, la app va directo al login (o al dashboard si
-/// la sesión sigue viva).
-String _rutaInicial() {
-  if (!AppConfig.setupPreferenciasCompletado) return '/setup_preferences';
-  if (AppConfig.modoEstacion == null) return '/mode_selection';
-
-  if (AppConfig.esTrabajador) {
-    return AppConfig.localApiConfigured ? '/login' : '/worker_connection';
-  }
-
-  if (AppConfig.esServidor) {
-    // Verificación de entorno (WServer + PostgreSQL) antes de validar la cuenta.
-    if (!AppConfig.licenciaVerificada) return '/setup';
-    // Cuenta validada: faltan los datos de empresa.
-    if (!AppConfig.empresaSetupCapturado) return '/company_setup';
-  }
-
-  return '/login';
-}
+/// El instalador (BALANSOFT-INSTALLER) decide el rol de la estación y escribe
+/// `config.json`; la app ya no tiene asistente de instalación. Si la config
+/// falta o es inválida, `main()` ni siquiera monta `BalansoftApp` (error duro
+/// con instrucciones), así que aquí solo hay login, registro y recuperación.
+String _rutaInicial() => '/login';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,7 +65,14 @@ void main() async {
 
   await _aplicarModoKiosk();
 
-  await AppConfig.init();
+  // Config de estación: `config.json` del instalador (override → sistema) con
+  // migración única del legado (wizard viejo). Sin config válida la app NO
+  // opera: se muestra el error de provisión en lugar del login.
+  await AppConfig.init(migrarLegado: true);
+  if (!AppConfig.instalacionValida) {
+    runApp(PantallaErrorConfig(error: AppConfig.configError));
+    return;
+  }
   await themeController.load();
   await di.init();
   localeController = di.sl<LocaleController>();
@@ -101,6 +80,66 @@ void main() async {
   AppTranslations.setController(localeController); // conectar singleton
 
   runApp(const BalansoftApp());
+}
+
+/// Pantalla mínima de error de provisión: se muestra cuando el instalador no
+/// escribió `config.json` (o lo escribió inválido). El operador no debería
+/// verla en una estación bien instalada; da la instrucción concreta en
+/// español e inglés (el locale aún no está cargado en este punto).
+class PantallaErrorConfig extends StatelessWidget {
+  final StationConfigError? error;
+
+  const PantallaErrorConfig({super.key, this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    final mensajeEs = error == null
+        ? 'No se encontró la configuración de la estación.'
+        : 'La configuración de la estación es inválida: ${error!.motivo.name}.';
+    final mensajeEn = error == null
+        ? 'Station configuration not found.'
+        : 'Invalid station configuration: ${error!.motivo.name}.';
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0E1F33),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.settings_suggest_outlined,
+                      color: Colors.amber, size: 64),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Balansoft-WS',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '$mensajeEs\n\n$mensajeEn'
+                    '\n\nEjecute el instalador de Balansoft-WS para configurar '
+                    'esta estación.\nRun the Balansoft-WS installer to '
+                    'configure this station.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Contexto raíz del `MaterialApp`, para dialogues launched por el
@@ -165,10 +204,14 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
       final salir = await _confirmarCierreConDatos();
       if (salir != true) return;
     }
-    final autostart =
-        await WServerManager.autostartActivo() || AppConfig.wserverAutostart;
-    if (!autostart) {
-      await WServerManager.detener();
+    // Solo la estación SERVIDOR gestiona el WServer (el TRABAJADOR es cliente
+    // delgado y jamás levanta backend local): no tiene nada que detener.
+    if (AppConfig.esServidor) {
+      final autostart =
+          await WServerManager.autostartActivo() || AppConfig.wserverAutostart;
+      if (!autostart) {
+        await WServerManager.detener();
+      }
     }
     await windowManager.destroy();
   }
@@ -264,29 +307,15 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          // Primera ejecución: paso 1 de instalación (idioma y tema) antes de
-          // cualquier requerimiento de red; luego selección de modo.
+          // La estación arranca siempre en el login: el instalador decidió el
+          // rol y escribió config.json (docs/MANEJO_DB.md §13).
           initialRoute: _rutaInicial(),
           routes: {
-            '/setup_preferences': (_) => SetupPreferencesScreen(
-                  localeController: localeController,
-                  themeController: themeController,
-                ),
-            '/mode_selection': (_) => const ModeSelectionScreen(),
-            '/setup': (_) => const EnvironmentCheckScreen(setupMode: true),
-            '/activation': (_) =>
-                ActivationScreen(repository: di.sl<ActivacionRepository>()),
-            '/worker_connection': (_) => WorkerConnectionScreen(
-                  clientFactory: (baseUrl) => ApiClient(baseUrl: baseUrl),
-                ),
-            '/db_config': (_) => const DatabaseConfigScreen(),
-            '/company_setup': (_) =>
-                CompanySetupScreen(localeController: localeController),
             '/login': (_) => const LoginScreen(),
             '/register': (_) => const RegisterScreen(),
             '/forgot-password': (_) => const ForgotPasswordScreen(),
             '/reset-password': (_) => const ResetPasswordScreen(),
-            '/connections': (_) => const ConnectionsScreen(setupMode: true),
+            '/connections': (_) => const ConnectionsScreen(),
             '/dashboard': (_) => HomeShell(themeController: themeController),
             '/weighing/detail': (ctx) {
               final boleto = ModalRoute.of(ctx)!.settings.arguments as String;
