@@ -52,6 +52,17 @@ MENSAJE_SIN_CONEXION = (
 
 CODIGO_ESQUEMA_PENDIENTE = "esquema_mssql_pendiente"
 CODIGO_SIN_CONEXION = "sqlserver_sin_conexion"
+CODIGO_SIN_DRIVERS = "sqlserver_sin_drivers"
+
+# Mensaje accionable del 503 «sin drivers» (contrato con la app Flutter):
+# incluye las dos cosas que el operador debe instalar: el extra de uv y el
+# driver ODBC del sistema. El texto reutiliza el de error_drivers_faltantes(),
+# pero como detalle del 503, no como abort del arranque (Opción B).
+MENSAJE_SIN_DRIVERS = (
+    "Faltan los drivers ODBC de SQL Server (DATABASE_URL=mssql+…). "
+    "Instala el extra: uv sync --extra sqlserver (aioodbc, pyodbc) y el "
+    "«Microsoft ODBC Driver 18 for SQL Server» del sistema."
+)
 
 # SQLSTATE que significan «el objeto no existe todavía» (42S02/42703/42P01/42704
 # son los códigos T-SQL; 42P01/42703/42704 por compatibilidad con el texto PG).
@@ -80,6 +91,15 @@ class EsquemaPendienteError(Exception):
     """El esquema de SQL Server aún no está aplicado (modo degradado Fase 1)."""
 
 
+class DriversFaltantesError(Exception):
+    """Sin drivers ODBC de SQL Server: modo degradado sin conexión posible.
+
+    En vez de abortar el arranque (fail-fast), el WServer sigue vivo con
+    health 200 y cualquier endpoint de BD responde 503 con
+    ``codigo=sqlserver_sin_drivers`` (Opción B).
+    """
+
+
 # ---------------------------------------------------------------------------
 # Caché de estado del esquema (por proceso)
 # ---------------------------------------------------------------------------
@@ -87,6 +107,7 @@ _TTL_PENDIENTE_SEG = 60.0
 _candado = threading.Lock()
 _estado: str | None = None  # None | "pendiente" | "aplicado"
 _estado_marcado_en: float = 0.0
+_drivers_faltantes_sqlserver: bool = False
 
 
 def estado_esquema() -> str | None:
@@ -108,13 +129,35 @@ def marcar_estado_esquema(estado: str | None) -> None:
 def reiniciar_estado_esquema() -> None:
     """Vuelve la caché al valor inicial ``{"valor": None, "ts": 0.0}``.
 
-    Uso: arranque, tests y LOW-001 (un fallo de conexión al consultar el
-    esquema no debe dejar un ``"pendiente"`` caduco que enmascare reintentos).
+    También restablece el flag de drivers faltantes: es el «reinicio total de
+    la guardia» (arranque, tests y LOW-001). Uso: arranque, tests y LOW-001
+    (un fallo de conexión al consultar el esquema no debe dejar un
+    ``"pendiente"`` caduco que enmascare reintentos).
     """
-    global _estado, _estado_marcado_en
+    global _estado, _estado_marcado_en, _drivers_faltantes_sqlserver
     with _candado:
         _estado = None
         _estado_marcado_en = 0.0
+        _drivers_faltantes_sqlserver = False
+
+
+def marcar_drivers_faltantes() -> None:
+    """Siembra que los drivers ODBC de SQL Server no están instalados.
+
+    Lo llama ``database.py`` al capturar un ``ModuleNotFoundError`` al crear
+    los engines con URL ``mssql+…`` (sin abortar el arranque). Persiste hasta
+    ``reiniciar_estado_esquema()`` (p. ej. reinicio del WServer tras instalar
+    el extra ``sqlserver``).
+    """
+    global _drivers_faltantes_sqlserver
+    with _candado:
+        _drivers_faltantes_sqlserver = True
+
+
+def drivers_faltantes() -> bool:
+    """True si los drivers ODBC de SQL Server no están disponibles."""
+    with _candado:
+        return _drivers_faltantes_sqlserver
 
 
 def _estado_fresco() -> bool:
@@ -250,6 +293,12 @@ async def asegurar_esquema_listo() -> None:
     if detectar_motor(settings.database_url) != "sqlserver":
         return
 
+    if drivers_faltantes():
+        # Sin drivers no hay forma de consultar sys.tables. No se siembra TTL:
+        # el flag persiste hasta el reinicio con el extra instalado, y el 503
+        # sale con codigo=sqlserver_sin_drivers (contrato con la app Flutter).
+        raise DriversFaltantesError(MENSAJE_SIN_DRIVERS)
+
     estado = estado_esquema()
     if estado is None or (estado == "pendiente" and not _estado_fresco()):
         try:
@@ -345,6 +394,21 @@ def manejador_esquema_pendiente(request, exc) -> JSONResponse:
     )
 
 
+def manejador_drivers_faltantes(request, exc) -> JSONResponse:
+    """503 de drivers ODBC ausentes (modo degradado, Opción B).
+
+    El ``codigo`` es exactamente ``sqlserver_sin_drivers``: la app Flutter lo
+    mira para pintar el aviso con la instrucción de instalación.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": MENSAJE_SIN_DRIVERS,
+            "codigo": CODIGO_SIN_DRIVERS,
+        },
+    )
+
+
 def manejador_error_bd(request, exc) -> Response:
     """Traduce errores de BD SQL Server a 503 con significado.
 
@@ -399,14 +463,15 @@ def manejador_error_bd(request, exc) -> Response:
 
 
 def error_drivers_faltantes(motor: str, exc: BaseException | None) -> RuntimeError:
-    """RuntimeError con la instrucción de instalación de los drivers ODBC."""
+    """RuntimeError con la instrucción de instalación de los drivers ODBC.
+
+    Sigue existiendo para los avisos de consola del bootstrap del WServer
+    (``wserver.py``) y para tests; el flujo de la API ya NO aborta con él:
+    ``database.py`` siembra ``marcar_drivers_faltantes()`` en su lugar y el
+    503 sale vía ``manejador_drivers_faltantes`` (Opción B).
+    """
     if motor == "sqlserver":
-        mensaje = (
-            "SQL Server seleccionado (DATABASE_URL=mssql+…) pero faltan los "
-            "drivers ODBC. Instala el extra: uv sync --extra sqlserver "
-            "(aioodbc, pyodbc) y el «Microsoft ODBC Driver 18 for SQL Server» "
-            "del sistema."
-        )
+        mensaje = MENSAJE_SIN_DRIVERS
     else:
         mensaje = f"Faltan los drivers del motor {motor!r} requerido por DATABASE_URL."
     if exc is not None:
@@ -419,4 +484,5 @@ def registrar_manejadores_bd(app) -> None:
     import sqlalchemy.exc
 
     app.add_exception_handler(EsquemaPendienteError, manejador_esquema_pendiente)
+    app.add_exception_handler(DriversFaltantesError, manejador_drivers_faltantes)
     app.add_exception_handler(sqlalchemy.exc.DBAPIError, manejador_error_bd)

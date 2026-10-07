@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -19,23 +20,30 @@ class Base(DeclarativeBase):
     pass
 
 
-def _revisar_drivers_faltantes(url: str, exc: ModuleNotFoundError) -> None:
-    """Fase 1 SQL Server: si faltan los drivers ODBC, da la instrucción clara.
+def _registrar_drivers_faltantes(url: str, exc: ModuleNotFoundError) -> bool:
+    """Fase 1 SQL Server (Opción B): siembra el modo degradado y NO aborta.
 
-    Si la URL no es de SQL Server (o su prefijo es ilegible) NO hace nada y el
-    llamador re-lanza el ``ModuleNotFoundError`` original, de modo que el camino
-    PostgreSQL queda byte-idéntico al de siempre.
+    Si la URL es de SQL Server y faltan los drivers ODBC, marca el flag global
+    en ``db_engine`` (el 503 ``sqlserver_sin_drivers`` saldrá por el gate de
+    ``get_db``) y deja que el WServer arranque con health 200.
+
+    Devuelve True si sembró (motor SQL Server); False si el motor no es
+    SQL Server o su prefijo es ilegible — en ese caso el llamador re-lanza el
+    ``ModuleNotFoundError`` original y el camino PostgreSQL queda byte-idéntico.
     """
-    from app.core.db_engine import detectar_motor, error_drivers_faltantes
+    from app.core.db_engine import detectar_motor, marcar_drivers_faltantes
 
     try:
         motor = detectar_motor(url)
     except ValueError:
-        return
-    if motor == "sqlserver":
-        raise error_drivers_faltantes(motor, exc) from exc
+        return False
+    if motor != "sqlserver":
+        return False
+    marcar_drivers_faltantes()
+    return True
 
 
+async_engine: AsyncEngine | None
 try:
     async_engine = create_async_engine(
         settings.database_url,
@@ -44,8 +52,9 @@ try:
         echo=False,
     )
 except ModuleNotFoundError as exc:
-    _revisar_drivers_faltantes(settings.database_url, exc)
-    raise
+    if not _registrar_drivers_faltantes(settings.database_url, exc):
+        raise
+    async_engine = None
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
@@ -55,11 +64,13 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 # Engine síncrono solo para tareas de scripting (seed, mantenimiento)
+sync_engine: Engine | None
 try:
     sync_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
 except ModuleNotFoundError as exc:
-    _revisar_drivers_faltantes(settings.database_url_sync, exc)
-    raise
+    if not _registrar_drivers_faltantes(settings.database_url_sync, exc):
+        raise
+    sync_engine = None
 SyncSessionLocal = sessionmaker(bind=sync_engine, autoflush=False, expire_on_commit=False)
 
 # ---------------------------------------------------------------------------
@@ -67,6 +78,7 @@ SyncSessionLocal = sessionmaker(bind=sync_engine, autoflush=False, expire_on_com
 # con APP_ROLE=server (o desde el rol local para validar contra el central).
 # create_async_engine no conecta hasta el primer uso: seguro para tests.
 # ---------------------------------------------------------------------------
+server_async_engine: AsyncEngine | None
 try:
     server_async_engine = create_async_engine(
         settings.active_server_database_url,
@@ -75,8 +87,9 @@ try:
         echo=False,
     )
 except ModuleNotFoundError as exc:
-    _revisar_drivers_faltantes(settings.active_server_database_url, exc)
-    raise
+    if not _registrar_drivers_faltantes(settings.active_server_database_url, exc):
+        raise
+    server_async_engine = None
 
 ServerSessionLocal = async_sessionmaker(
     bind=server_async_engine,

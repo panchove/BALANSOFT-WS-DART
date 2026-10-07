@@ -19,8 +19,11 @@ from app.core.database import get_db
 from app.core.db_engine import (
     CODIGO_ESQUEMA_PENDIENTE,
     CODIGO_SIN_CONEXION,
+    CODIGO_SIN_DRIVERS,
     MENSAJE_FASE_2,
     MENSAJE_SIN_CONEXION,
+    MENSAJE_SIN_DRIVERS,
+    DriversFaltantesError,
     EsquemaPendienteError,
 )
 from app.main import app as app_real
@@ -267,12 +270,107 @@ def test_password_no_se_filtra_en_logs_del_handler(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 503 sin drivers ODBC (Opción B: el WServer arranca igual, en degradado)
+# ---------------------------------------------------------------------------
+def test_sin_drivers_las_tres_cosas_health_200_503_codigo_pg_intacto(monkeypatch, app):
+    """Contrato sin drivers ODBC: las tres cosas a la vez.
+
+    1) health 200 con DATABASE_URL mssql (el WServer arranca, no aborta).
+    2) endpoint de BD → 503 con codigo EXACTO ``sqlserver_sin_drivers`` y el
+       mensaje accionable (extra de uv + driver ODBC del sistema).
+    3) PostgreSQL intacto: con DATABASE_URL postgresql el gate no consulta
+       y health responde 200 igual que antes.
+    """
+    # (1) health 200 en modo mssql sin drivers
+    monkeypatch.setattr(settings, "database_url", URL_MSSQL)
+    db_engine.marcar_drivers_faltantes()
+    assert TestClient(app).get("/api/v1/health").status_code == 200
+
+    # (2) endpoint de BD → 503 sqlserver_sin_drivers (sin llegar a la BD)
+    _forzar_auth(app)
+    r = TestClient(app).get("/api/v1/empresa/series")
+    assert r.status_code == 503, r.text
+    body = r.json()
+    assert body["codigo"] == CODIGO_SIN_DRIVERS
+    assert "uv sync --extra sqlserver" in body["detail"]
+    assert "aioodbc" in body["detail"] and "pyodbc" in body["detail"]
+    assert "Microsoft ODBC Driver 18 for SQL Server" in body["detail"]
+    assert "Fase 2" not in body["detail"]
+
+    # (3) PostgreSQL intacto: el flag no afecta a PG y el health sigue 200.
+    #     La clave "postgres" del environment conserva su contrato.
+    db_engine.reiniciar_estado_esquema()
+    assert db_engine.drivers_faltantes() is False
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+asyncpg://u:p@localhost:5432/balansoft_ws",
+    )
+    assert TestClient(app).get("/api/v1/health").status_code == 200
+    r_env = TestClient(app).get("/api/v1/environment")
+    assert r_env.status_code == 200
+    assert r_env.json()["motor"] == "postgresql"
+    assert "postgres" in r_env.json()
+
+
+async def test_gate_con_drivers_faltantes_lanza_sin_consultar_bd(monkeypatch):
+    """Con el flag de drivers puesto, el gate NO toca la BD (ni sys.tables)."""
+    monkeypatch.setattr(settings, "database_url", URL_MSSQL)
+    db_engine.marcar_drivers_faltantes()
+    capturado: list[str] = []
+    monkeypatch.setattr(
+        "app.core.database.AsyncSessionLocal", lambda: _SesionFake(0, capturado)
+    )
+    with pytest.raises(DriversFaltantesError) as excinfo:
+        await db_engine.asegurar_esquema_listo()
+    assert MENSAJE_SIN_DRIVERS in str(excinfo.value)
+    assert not capturado, "sin drivers no debe consultarse sys.tables"
+
+
+def test_registrar_drivers_faltantes_mssql_siembra_y_no_lanza():
+    """database._registrar_drivers_faltantes NO aborta: siembra y devuelve True."""
+    from app.core.database import _registrar_drivers_faltantes
+
+    db_engine.reiniciar_estado_esquema()
+    ok = _registrar_drivers_faltantes(
+        URL_MSSQL, ModuleNotFoundError("No module named 'aioodbc'")
+    )
+    assert ok is True
+    assert db_engine.drivers_faltantes() is True
+    # El mismo flag es el que produce el 503: nunca un abort del arranque.
+
+
+def test_registrar_drivers_faltantes_pg_no_siembra():
+    """Con PostgreSQL la función devuelve False: el llamador re-lanza igual."""
+    from app.core.database import _registrar_drivers_faltantes
+
+    db_engine.reiniciar_estado_esquema()
+    ok = _registrar_drivers_faltantes(
+        "postgresql+asyncpg://u:p@localhost:5432/bd",
+        ModuleNotFoundError("No module named 'asyncpg'"),
+    )
+    assert ok is False
+    assert db_engine.drivers_faltantes() is False
+
+
+def test_error_drivers_faltantes_sigue_siendo_runtimeerror_para_consola():
+    """wserver.py sigue imprimiendo el aviso: la función no desaparece."""
+    from app.core.db_engine import error_drivers_faltantes
+
+    err = error_drivers_faltantes("sqlserver", None)
+    assert isinstance(err, RuntimeError)
+    assert "uv sync --extra sqlserver" in str(err)
+    assert "Microsoft ODBC Driver 18 for SQL Server" in str(err)
+
+
+# ---------------------------------------------------------------------------
 # Handlers registrados + /api/v1/environment
 # ---------------------------------------------------------------------------
 def test_handlers_registrados_en_app(app):
     import sqlalchemy.exc
 
     assert EsquemaPendienteError in app.exception_handlers
+    assert DriversFaltantesError in app.exception_handlers
     assert sqlalchemy.exc.DBAPIError in app.exception_handlers
 
 

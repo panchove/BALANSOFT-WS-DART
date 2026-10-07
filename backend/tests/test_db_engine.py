@@ -273,6 +273,38 @@ def test_cache_estado_invalido_es_rechazado():
         marcar_estado_esquema("cualquier_cosa")
 
 
+def test_flag_drivers_faltantes_flujo_completo():
+    from app.core.db_engine import drivers_faltantes, marcar_drivers_faltantes
+
+    reiniciar_estado_esquema()
+    assert drivers_faltantes() is False
+    marcar_drivers_faltantes()
+    assert drivers_faltantes() is True
+    # reiniciar_estado_esquema = reinicio total de la guardia: también limpia
+    # el flag (lo usan el fixture autouse de tests y LOW-001).
+    reiniciar_estado_esquema()
+    assert drivers_faltantes() is False
+
+
+async def test_asegurar_esquema_listo_con_drivers_faltantes(monkeypatch):
+    """Con drivers faltantes el gate lanza DriversFaltantesError sin consultar."""
+    from app.core import config as config_module
+    from app.core.db_engine import (
+        MENSAJE_SIN_DRIVERS,
+        DriversFaltantesError,
+        asegurar_esquema_listo,
+        marcar_drivers_faltantes,
+    )
+
+    marcar_drivers_faltantes()
+    monkeypatch.setattr(
+        config_module.settings, "database_url", "mssql+aioodbc://sa:p@h:1433/bd"
+    )
+    with pytest.raises(DriversFaltantesError) as excinfo:
+        await asegurar_esquema_listo()
+    assert MENSAJE_SIN_DRIVERS in str(excinfo.value)
+
+
 async def test_asegurar_esquema_listo_postgres_es_no_op(monkeypatch):
     """Con PostgreSQL el gate no toca nada (camino intacto)."""
     from app.core import config as config_module
