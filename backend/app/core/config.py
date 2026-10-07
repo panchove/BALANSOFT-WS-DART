@@ -164,6 +164,43 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _coherencia_motores(self) -> Settings:
+        """Valida el motor derivado de DATABASE_URL y alinea DATABASE_URL_SYNC.
+
+        El motor se decide SOLO por el prefijo de ``DATABASE_URL`` (no hay
+        variables de entorno nuevas; ver ``app/core/db_engine.py``):
+
+        1. Prefijo desconocido → ``ValueError`` (fail-fast al arrancar).
+        2. ``DATABASE_URL_SYNC`` vacío → se deriva de ``DATABASE_URL``.
+        3. Sync con un motor distinto → aviso y se deriva en memoria (NO se
+           reescribe el ``.env``: la precedencia es de ``DATABASE_URL``).
+        4. Mismo motor → se conserva tal cual (query params incluidos).
+
+        ``SERVER_DATABASE_URL`` no se toca: es la BD del central.
+        """
+        from app.core.db_engine import derivar_url_sync, detectar_motor
+
+        motor = detectar_motor(self.database_url)  # ValueError si el prefijo no vale
+        sync = (self.database_url_sync or "").strip()
+        if not sync:
+            self.database_url_sync = derivar_url_sync(self.database_url)
+            return self
+        try:
+            motor_sync = detectar_motor(sync)
+        except ValueError:
+            motor_sync = None
+        if motor_sync != motor:
+            log.warning(
+                "DATABASE_URL_SYNC no corresponde al motor de DATABASE_URL "
+                "(sync=%r, async=%r); se deriva en memoria de DATABASE_URL. "
+                "Edita el .env para fijarla.",
+                sync.split("://", 1)[0],
+                self.database_url.split("://", 1)[0],
+            )
+            self.database_url_sync = derivar_url_sync(self.database_url)
+        return self
+
     @property
     def cors_origins_list(self) -> list[str]:
         if isinstance(self.cors_origins, str):
@@ -172,6 +209,13 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
         return list(self.cors_origins)
+
+    @property
+    def db_engine(self) -> str:
+        """Motor de DATABASE_URL: ``"postgresql"`` | ``"sqlserver"``."""
+        from app.core.db_engine import detectar_motor
+
+        return detectar_motor(self.database_url)
 
     @property
     def active_server_database_url(self) -> str:

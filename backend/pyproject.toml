@@ -26,6 +26,13 @@ dependencies = [
     "pillow>=10.0",
 ]
 
+[project.optional-dependencies]
+# Fase 1 (modo degradado) de soporte SQL Server: el motor se decide por el
+# prefijo de DATABASE_URL y estos drivers solo hacen falta ahí. Instalación:
+#   uv sync --extra sqlserver
+# Además el sistema necesita el «Microsoft ODBC Driver 18 for SQL Server».
+sqlserver = ["aioodbc>=0.4", "pyodbc>=5.0"]
+
 [dependency-groups]
 dev = [
     "ruff>=0.5",

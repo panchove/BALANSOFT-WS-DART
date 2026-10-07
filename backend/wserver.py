@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 # Directorio raíz de los archivos embebidos en el binario (PyInstaller).
 if getattr(sys, "frozen", False):
@@ -109,25 +110,66 @@ def _migrar_api_host_lan(env_file: Path) -> None:
 # ---------------------------------------------------------------------------
 # Bootstrap de la base de datos local
 # ---------------------------------------------------------------------------
-def _descomponer_url(url: str) -> dict[str, object]:
-    """Extrae host, puerto, usuario, password y bd de una URL SQLAlchemy."""
-    from urllib.parse import unquote, urlparse
+def _descomponer_url(url: str) -> dict[str, Any]:
+    """Extrae motor, host, puerto, usuario, password, bd y query de una URL.
 
-    u = url.replace("postgresql+psycopg2://", "postgresql://").replace(
-        "postgresql+asyncpg://", "postgresql://"
-    )
-    p = urlparse(u)
+    Normaliza los prefijos con driver (``postgresql+asyncpg``,
+    ``mssql+aioodbc``…) a su forma base solo para poder parsearlos; el prefijo
+    ORIGINAL se devuelve en la clave ``prefijo`` para poder reconstruir la URL
+    byte a byte. El puerto por defecto depende del motor (5432 / 1433).
+    """
+    from urllib.parse import parse_qsl, unquote, urlparse
+
+    from app.core.db_engine import detectar_motor, puerto_default
+
+    motor = detectar_motor(url)
+    corte = url.find("://")
+    prefijo = url[: corte + 3] if corte >= 0 else "postgresql://"
+    esquema_crudo = prefijo[:-3].lower()
+    esquema_base = "postgresql" if esquema_crudo.startswith("postgresql") else "mssql"
+    resto = url[corte + 3 :] if corte >= 0 else url
+    p = urlparse(f"{esquema_base}://{resto}")
     return {
+        "motor": motor,
+        "prefijo": prefijo,
         "host": p.hostname or "localhost",
-        "port": p.port or 5432,
+        "port": p.port or puerto_default(motor),
         "user": unquote(p.username or ""),
         "password": unquote(p.password or ""),
         "db": p.path.lstrip("/"),
+        "query": p.query,
+        "params": dict(parse_qsl(p.query)),
     }
 
 
 def _existe_esquema(db_url_sync: str) -> bool:
-    """True si la BD local ya tiene tablas (esquema aplicado previamente)."""
+    """True si la BD destino ya tiene tablas (esquema aplicado previamente)."""
+    from app.core.db_engine import detectar_motor, dsn_pyodbc
+
+    if detectar_motor(db_url_sync) == "sqlserver":
+        # Fase 1: solo se puede detectar si alguien creó tablas a mano; el
+        # DDL canónico (sys.tables) llega en Fase 2. LOW-002: el filtro es
+        # explícito sobre el esquema dbo, como en PG schemaname='public'
+        # (mismo criterio que sql_conteo_tablas de app/core/db_engine.py).
+        try:
+            import pyodbc
+        except Exception:  # noqa: BLE001 (sin driver no hay forma de comprobar)
+            return False
+        c = _descomponer_url(db_url_sync)
+        conn = None
+        try:
+            conn = pyodbc.connect(dsn_pyodbc(c), autocommit=True, timeout=3)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = N'dbo'"
+            )
+            return bool(cur.fetchone()[0])
+        except Exception:  # noqa: BLE001 (espejo del camino PG: cualquier fallo = False)
+            return False
+        finally:
+            if conn is not None:
+                conn.close()
+
     import psycopg2
 
     c = _descomponer_url(db_url_sync)
@@ -152,7 +194,19 @@ def _existe_esquema(db_url_sync: str) -> bool:
 
 
 def crear_bd_si_falta(db_url_sync: str) -> None:
-    """Crea la base de datos si no existe (conexión a la DB 'postgres')."""
+    """Crea la base de datos si no existe.
+
+    * PostgreSQL → conexión a la DB ``postgres`` (camino actual, sin cambios).
+    * SQL Server → conexión a ``master`` con la sentencia idempotente
+      ``IF DB_ID(N'…') IS NULL CREATE DATABASE […]``; si el usuario no tiene
+      permisos se avisa y se continúa (no bloquea el arranque).
+    """
+    from app.core.db_engine import detectar_motor
+
+    if detectar_motor(db_url_sync) == "sqlserver":
+        _crear_bd_sqlserver(db_url_sync)
+        return
+
     import psycopg2
     from psycopg2 import sql
 
@@ -185,6 +239,52 @@ def crear_bd_si_falta(db_url_sync: str) -> None:
         print(
             f"[WServer] ⚠ No se pudo verificar/crear '{c['db']}' "
             f"({c['host']}:{c['port']}): {exc}",
+            file=sys.stderr,
+        )
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _crear_bd_sqlserver(db_url: str) -> None:
+    """Crea la BD en SQL Server si falta (conexión a ``master``, autocommit).
+
+    Idempotente y tolerante a permisos ausentes: un login sin
+    ``CREATE DATABASE`` solo genera un aviso, porque en Fase 1 la BD puede
+    venir ya creada por el administrador.
+    """
+    from app.core.db_engine import dsn_pyodbc
+
+    import pyodbc
+
+    c = _descomponer_url(db_url)
+    nombre = str(c["db"])
+    # Escapes T-SQL: comilla simple duplicada en la literal N'…' y corchete
+    # duplicado en el identificador […].
+    literal = nombre.replace("'", "''")
+    identificador = nombre.replace("]", "]]")
+    conn = None
+    try:
+        conn = pyodbc.connect(dsn_pyodbc({**c, "db": "master"}), autocommit=True, timeout=5)
+        cur = conn.cursor()
+        cur.execute(f"SELECT DB_ID(N'{literal}')")
+        existia = cur.fetchone()[0] is not None
+        if not existia:
+            # Sentencia idempotente: si otra instancia lo creó en medio, no falla.
+            cur.execute(
+                f"IF DB_ID(N'{literal}') IS NULL CREATE DATABASE [{identificador}];"
+            )
+            print(f"[WServer] Base de datos '{nombre}' creada (SQL Server).")
+        cur.close()
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[WServer] ⚠ No se pudo verificar/crear '{nombre}' "
+            f"({c['host']}:{c['port']}): {exc}",
+            file=sys.stderr,
+        )
+        print(
+            "[WServer] ⚠ Si el usuario no tiene permiso CREATE DATABASE, crea la "
+            "BD manualmente (o pide permisos) y vuelve a arrancar el WServer.",
             file=sys.stderr,
         )
     finally:
@@ -230,15 +330,64 @@ def _registrar_migracion(cur, version: str) -> None:
     )
 
 
+def _asegurar_db_sqlserver(db_url: str) -> None:
+    """Bootstrap SQL Server en Fase 1: SOLO crea la BD y comprueba tablas.
+
+    No aplica ``balansoft-ws-local.sql`` ni ``migrations/*.sql`` (son DDL de
+    PostgreSQL): el esquema de SQL Server llega en **Fase 2**. El resultado se
+    siembra en la caché de ``app.core.db_engine`` para que la API responda
+    503 «esquema pendiente» hasta entonces. **No falla el arranque.**
+    """
+    import importlib.util
+
+    from app.core.db_engine import error_drivers_faltantes, marcar_estado_esquema
+
+    if importlib.util.find_spec("pyodbc") is None:
+        print(f"[WServer] ✗ {error_drivers_faltantes('sqlserver', None)}", file=sys.stderr)
+        return
+
+    c = _descomponer_url(db_url)
+    try:
+        crear_bd_si_falta(db_url)
+        con_tablas = _existe_esquema(db_url)
+    except Exception as exc:  # noqa: BLE001 (una BD inalcanzable no tumba el arranque)
+        print(
+            f"[WServer] ⚠ No se pudo verificar la BD de SQL Server '{c['db']}' "
+            f"({c['host']}:{c['port']}): {exc}",
+            file=sys.stderr,
+        )
+        con_tablas = False
+
+    marcar_estado_esquema("aplicado" if con_tablas else "pendiente")
+    print(
+        "[WServer] SQL Server en modo degradado — Fase 2: el esquema de SQL Server "
+        "se aplicará en Fase 2; el WServer funciona en modo degradado sin datos. "
+        "No se aplican balansoft-ws-local.sql ni migrations/*.sql a esta base de datos."
+    )
+    print(
+        "[WServer] Estado del esquema: "
+        + ("pendiente (la API responderá 503 hasta Fase 2)" if not con_tablas else "tablas detectadas")
+        + "."
+    )
+
+
 def asegurar_db(db_url_sync: str) -> None:
     """Crea la BD si falta y aplica el esquema local + migraciones pendientes.
 
-    Idempotente: el esquema canónico solo se aplica cuando la BD está vacía;
-    las migraciones de ``migrations/*.sql`` se aplican **en cada arranque**
-    usando el registro ``schema_migrations``, para que las estaciones ya
-    instaladas reciban las columnas nuevas. Para un vaciado real:
-    ``scripts/reset_db.sh``.
+    PostgreSQL (camino actual, sin cambios): idempotente; el esquema canónico
+    solo se aplica cuando la BD está vacía y las migraciones de
+    ``migrations/*.sql`` se aplican **en cada arranque** usando el registro
+    ``schema_migrations``. Para un vaciado real: ``scripts/reset_db.sh``.
+
+    SQL Server (Fase 1, modo degradado): ver ``_asegurar_db_sqlserver``; solo
+    crea la BD y comprueba si hay tablas, sin aplicar DDL.
     """
+    from app.core.db_engine import detectar_motor
+
+    if detectar_motor(db_url_sync) == "sqlserver":
+        _asegurar_db_sqlserver(db_url_sync)
+        return
+
     c = _descomponer_url(db_url_sync)
     esquema_previo = _existe_esquema(db_url_sync)
 
@@ -293,6 +442,8 @@ def asegurar_db(db_url_sync: str) -> None:
 
 
 def _procesar_script(uri: str, script: Path, etiqueta: str) -> None:
+    # Código muerto en el arranque normal (lo usaban los scripts de soporte);
+    # el bootstrap de SQL Server Fase 1 no lo invoca.
     import psycopg2
 
     c = _descomponer_url(uri)
@@ -356,7 +507,13 @@ def _es_bind_red(host: str) -> bool:
 
 
 def _actualizar_env_si_aplica(home: Path, args: argparse.Namespace) -> None:
-    """Actualiza el archivo .env con los parámetros proporcionados."""
+    """Actualiza el archivo .env con los parámetros proporcionados.
+
+    Conserva el prefijo original del motor (``postgresql+asyncpg``,
+    ``mssql+aioodbc``…) y su query string (p. ej. ``TrustServerCertificate``);
+    ``DATABASE_URL_SYNC`` se reconstruye con ``PREFIJO_SYNC`` para que ambas
+    líneas sigan apuntando al mismo motor.
+    """
     if not any([args.db_host, args.db_port, args.db_user, args.db_pass, args.db_name, args.api_port, args.api_host]):
         return
         
@@ -365,29 +522,82 @@ def _actualizar_env_si_aplica(home: Path, args: argparse.Namespace) -> None:
         return
         
     texto = env_file.read_text(encoding="utf-8")
-    
-    # 1. Extraer los valores actuales de DATABASE_URL
-    match = re.search(r"DATABASE_URL=postgresql\+asyncpg://(.*?):(.*?)@(.*?):(\d+)/(.*)", texto)
-    if match:
-        curr_user, curr_pass, curr_host, curr_port, curr_db = match.groups()
+
+    def _defaults_postgres() -> dict[str, object]:
+        return {
+            "motor": "postgresql",
+            "prefijo": "postgresql+asyncpg://",
+            "user": "balansoft",
+            "password": "CHANGE_ME",
+            "host": "localhost",
+            "port": "5432",
+            "db": "balansoft_ws_local",
+            "query": "",
+        }
+
+    # 1. Localizar la URL actual (sin exigir puerto ni motor concreto)
+    match = re.search(r"^DATABASE_URL=(.*)$", texto, flags=re.MULTILINE)
+    if not match:
+        print(
+            "[WServer] ⚠ No se encontró DATABASE_URL en el .env; se usan los "
+            "defaults PostgreSQL.",
+            file=sys.stderr,
+        )
+        comp = _defaults_postgres()
     else:
-        curr_user, curr_pass, curr_host, curr_port, curr_db = "balansoft", "CHANGE_ME", "localhost", "5432", "balansoft_ws_local"
-        
+        try:
+            comp = _descomponer_url(match.group(1).strip())
+        except ValueError as exc:
+            print(
+                f"[WServer] ⚠ DATABASE_URL ilegible ({exc}); se usan los "
+                "defaults PostgreSQL.",
+                file=sys.stderr,
+            )
+            comp = _defaults_postgres()
+
     # 2. Aplicar overrides
+    curr_user = str(comp["user"])
+    curr_pass = str(comp["password"])
+    curr_host = str(comp["host"])
+    curr_port = str(comp["port"])
+    curr_db = str(comp["db"])
+    query = str(comp["query"])
+    prefijo = str(comp["prefijo"])
+
     new_user = args.db_user if args.db_user else curr_user
     new_pass = args.db_pass if args.db_pass else curr_pass
     new_host = args.db_host if args.db_host else curr_host
     new_port = args.db_port if args.db_port else curr_port
     new_db = args.db_name if args.db_name else curr_db
-    
-    # 3. Reemplazar URLs en el texto
-    new_url_async = f"postgresql+asyncpg://{new_user}:{new_pass}@{new_host}:{new_port}/{new_db}"
-    new_url_sync = f"postgresql+psycopg2://{new_user}:{new_pass}@{new_host}:{new_port}/{new_db}"
-    
-    texto = re.sub(r"^DATABASE_URL=.*$", f"DATABASE_URL={new_url_async}", texto, flags=re.MULTILINE)
-    texto = re.sub(r"^DATABASE_URL_SYNC=.*$", f"DATABASE_URL_SYNC={new_url_sync}", texto, flags=re.MULTILINE)
-    
-    # 4. Reemplazar puerto / host del API si aplica
+
+    # 3. Reconstruir conservando prefijo original y query original
+    from urllib.parse import quote
+
+    from app.core.db_engine import PREFIJO_SYNC
+
+    def _url(pref: str) -> str:
+        base = (
+            f"{pref}{quote(str(new_user), safe='')}:{quote(str(new_pass), safe='')}"
+            f"@{new_host}:{new_port}/{new_db}"
+        )
+        return f"{base}?{query}" if query else base
+
+    new_url_async = _url(prefijo)
+    new_url_sync = _url(PREFIJO_SYNC[prefijo.lower()])
+
+    # 4. Reemplazar URLs en el texto (lambda: una password con '\g' o '\' no
+    # debe interpretarse como referencia de grupo de re.sub)
+    texto = re.sub(
+        r"^DATABASE_URL=.*$", lambda _: f"DATABASE_URL={new_url_async}", texto, flags=re.MULTILINE
+    )
+    texto = re.sub(
+        r"^DATABASE_URL_SYNC=.*$",
+        lambda _: f"DATABASE_URL_SYNC={new_url_sync}",
+        texto,
+        flags=re.MULTILINE,
+    )
+
+    # 5. Reemplazar puerto / host del API si aplica
     if args.api_port:
         texto = re.sub(r"^API_PORT=.*$", f"API_PORT={args.api_port}", texto, flags=re.MULTILINE)
     if args.api_host:
@@ -409,9 +619,10 @@ def main() -> int:
         action="store_true",
         help="no tocar la BD: solo levantar la API con la configuración existente",
     )
-    # Argumentos de configuración de BD
-    parser.add_argument("--db-host", type=str, help="Host de la base de datos PostgreSQL")
-    parser.add_argument("--db-port", type=str, help="Puerto de la base de datos PostgreSQL")
+    # Argumentos de configuración de BD (PostgreSQL o SQL Server: el motor se
+    # decide por el prefijo de DATABASE_URL, ver app/core/db_engine.py)
+    parser.add_argument("--db-host", type=str, help="Host de la base de datos PostgreSQL o SQL Server")
+    parser.add_argument("--db-port", type=str, help="Puerto de la base de datos PostgreSQL o SQL Server")
     parser.add_argument("--db-user", type=str, help="Usuario de la base de datos")
     parser.add_argument("--db-pass", type=str, help="Contraseña de la base de datos")
     parser.add_argument("--db-name", type=str, help="Nombre de la base de datos")

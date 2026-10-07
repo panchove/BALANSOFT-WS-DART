@@ -1,7 +1,7 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.4
-**Fecha:** 2026-10-02
+**Versión:** 2.5
+**Fecha:** 2026-10-07
 **Estado:** Vigente
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
@@ -638,6 +638,32 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 > ⚠️ **Superficie expuesta por diseño:** la estación escucha en `0.0.0.0:8000`, accesible desde la LAN, y `/openapi.json` describe las 82 rutas. Los endpoints operativos exigen JWT y están aislados por `id_empresa` (§multi-tenancy), así que el esquema por sí solo no da acceso a datos. **Si una instalación requiere ocultarlo, el camino correcto es autenticar `/docs`, `/redoc` y `/openapi.json`, no volver a poner la bandera en `false`**, porque eso dejaría el esquema publicado igual.
 
 > **Nota:** `.env.example` (referencia del servidor central, expuesto a internet) conserva `API_DOCS_ENABLED=false`. Esa decisión es **independiente** de la estación: el VPS tiene un perfil de riesgo distinto (red pública) y merece su propia decisión antes de exponerlo.
+
+### 11.5 Motor de BD: PostgreSQL (soportado) y SQL Server (Fase 1 degradada)
+
+> Las «Fase 1/Fase 2» de esta sección son las del **soporte SQL Server** y no tienen nada que ver con las fases homónimas del §10.
+
+**Decisión:** el motor se decide **únicamente por el prefijo de `DATABASE_URL`** (`backend/app/core/db_engine.py`); **no hay variables de entorno nuevas**. `DATABASE_URL_SYNC` debe apuntar al mismo motor; si está vacía o incoherente se **deriva en memoria** con `PREFIJO_SYNC` (precedencia a `DATABASE_URL`) y se avisa por log. `Settings.db_engine` (`"postgresql"` | `"sqlserver"`) expone el resultado y `_coherencia_motores` aborta el arranque ante un prefijo desconocido.
+
+| Prefijo de `DATABASE_URL` | Motor | Prefijo de `DATABASE_URL_SYNC` |
+|---|---|---|
+| `postgresql+asyncpg://`, `postgresql://`, `postgresql+psycopg2://` | `postgresql` | `postgresql+psycopg2://` |
+| `mssql+aioodbc://`, `mssql+pyodbc://`, `mssql://` | `sqlserver` | `mssql+pyodbc://` |
+
+**Instalación del extra (solo estaciones SQL Server):** `uv sync --extra sqlserver` (añade `aioodbc`/`pyodbc` al lock) y el sistema debe tener el *Microsoft ODBC Driver 18 for SQL Server*. Sin drivers la app **sigue arrancando**: los engines son perezosos y el error indica el comando exacto. El `WServer.spec` empaqueta `pyodbc`/`aioodbc` solo si están instalados en el entorno de build, así que los builds PG no cambian.
+
+**Qué hace la estación con `motor=sqlserver` (modo degradado):**
+
+- **El WServer NO aplica DDL**: `crear_bd_si_falta` crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (y si no hay permisos, avisa sin tumbar el arranque), pero **no ejecuta `balansoft-ws-local.sql` ni `migrations/*.sql`** (Fase 2): imprime el aviso «Fase 2» y `get_db` siembra el caché de esquema en `pendiente`.
+- **`GET /api/v1/entorno`** añade la clave `"motor"`; la clave `"postgres"` **no se renombra** (contrato con la app Flutter) y su SQL por motor sale de `sql_conteo_tablas()`.
+- **Esquema ausente o servidor caído → HTTP 503, no 500**: `manejador_error_bd` clasifica el error (`42S02`/«invalid object name» → `codigo=esquema_mssql_pendiente`; SQLSTATE `08*` → `codigo=sqlserver_sin_conexion`) y cualquier otro error sube tal cual (500, idéntico al de hoy en PG). Antes de cada consulta `asegurar_esquema_listo` consulta `sys.tables`/`pg_tables` con caché (60 s mientras esté `pendiente`); **si esa consulta falla, la caché vuelve a su valor inicial antes de propagar**, para que un corte no deje un `pendiente` caduco (LOW-001).
+- **Ningún mensaje de error expone passwords**: `_texto_orig` aplica `sanear_password_en_mensaje` (MED-001) — la password real de `DATABASE_URL` en crudo y percent-encoded, más los patrones `PWD=`/`Password = …` de cualquier conn-string ODBC (case-insensitive, con espacios) y `://user:pwd@` de cualquier URL → `password=***` / `://user:***@`; el resto del mensaje no se toca.
+- **Conteo de tablas por esquema por defecto**: `dbo` en SQL Server (coherente con `schemaname='public'` en PG) tanto en `sql_conteo_tablas` como en `wserver._existe_esquema` (LOW-002).
+- **La ruta PostgreSQL queda byte-idéntica**: con URL PG todo lo anterior cae en la rama `else` (mismo SQL, mismo `raise`, mismo 500), verificado por los 423 tests preexistentes en verde.
+
+**Limitación de Fase 1:** con SQL Server la estación arranca y la API responde, pero los endpoints que tocan BD devuelven 503 hasta que el esquema exista (**PostgreSQL sigue siendo el motor soportado en producción**). El DDL/migraciones y el sync sobre SQL Server son Fase 2.
+
+**Tests:** `backend/tests/test_db_engine.py` (detección de motor, coherencia del sync, handlers), `test_sqlserver_degradado.py` (API con `motor=sqlserver`: 503 + contratos) y `test_wserver_db_bootstrap.py` (SQL exacto de `master`/`pg_database`, idempotencia, `.env` sin destruir credenciales); los tres usan drivers falsos, sin conexiones reales.
 
 ## 12. Documentos Relacionados
 

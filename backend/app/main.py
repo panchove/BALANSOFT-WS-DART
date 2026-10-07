@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.endpoints import API_ROUTERS, SERVER_ROUTERS
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
+from app.core.db_engine import registrar_manejadores_bd
 from app.core.logging_config import configurar_logging
 from app.core.monitoring import MetricsMiddleware, metrics_text
 from app.core.rate_limit import RateLimitMiddleware
@@ -141,6 +142,11 @@ if settings.metrics_enabled:
 
 for router in ROUTERS:
     app.include_router(router)
+
+# Exception handlers globales de BD (Fase 1 SQL Server): 503 de esquema
+# pendiente / sin conexión solo cuando el motor es SQL Server; en PostgreSQL
+# se re-lanzan los errores y el 500 de siempre queda intacto.
+registrar_manejadores_bd(app)
 
 os.makedirs(settings.media_dir, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")

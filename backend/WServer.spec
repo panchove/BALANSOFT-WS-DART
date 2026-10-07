@@ -7,6 +7,7 @@
 #         datos embebidos: esquemas SQL, migraciones y plantilla .env)
 # ============================================================
 
+import importlib.util
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -44,6 +45,12 @@ hiddenimports = collect_submodules("app") + [
     "asyncpg",
     "psycopg2",
 ]
+
+# Drivers ODBC de SQL Server (extra `uv sync --extra sqlserver`): solo se
+# empaquetan si están instalados en el entorno de build; los builds de
+# PostgreSQL quedan exactamente igual que antes.
+if importlib.util.find_spec("pyodbc") is not None:
+    hiddenimports += ["pyodbc", "aioodbc"]
 
 a = Analysis(
     [str(ROOT / "wserver.py")],
