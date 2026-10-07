@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = logging.getLogger("balansoft_ws.config")
@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     app_role: str = "local"
     # URL base del servidor (solo para roles "local"; vacío = no configurado)
     server_api_url: str = ""
+    # Timeout (s) de las llamadas HTTP al central desde login-central
+    # (env CENTRAL_TIMEOUT, case-insensitive). El arranque en frío contra el
+    # central incluye DNS + TLS + cold start de Cloudflare: con 10 s salía un
+    # ConnectTimeout intermitente. Ahora 30 s + un reintento único ante
+    # ConnectTimeout/ReadTimeout (docs/MANEJO_DB.md §11).
+    central_timeout: Annotated[int, Field(ge=1, le=600)] = 30
     # URL de la DB del servidor. En rol "server" se usa database_url si esto es None.
     server_database_url: str | None = None
 

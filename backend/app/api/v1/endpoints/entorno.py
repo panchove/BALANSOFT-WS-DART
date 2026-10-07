@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter
 from sqlalchemy import TextClause, text
 
+from app.api.v1.endpoints.auth import _MAX_INTENTOS_CENTRAL
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.db_engine import sql_conteo_tablas
@@ -108,6 +109,12 @@ async def environment() -> dict:
             "app_role": settings.app_role,
         },
         "api": {"version": API_VERSION},
+        # Diagnóstico del central: mismo objeto que /api/v1/health, para que
+        # el soporte vea el timeout efectivo sin leer el .env.
+        "central": {
+            "timeout_s": settings.central_timeout,
+            "max_intentos": _MAX_INTENTOS_CENTRAL,
+        },
         # Clave "postgres" con el estado de la BD: contrato con la app
         # Flutter, NO se renombra aunque el motor sea SQL Server.
         "postgres": {

@@ -573,6 +573,7 @@ DATABASE_URL_SYNC=postgresql+psycopg2://sqlman:7767@localhost:5432/balansoft_ws
 # BDs de la arquitectura split (pruebas en este mismo equipo)
 # SERVER_API_URL=http://localhost:8002
 # SERVER_DATABASE_URL=postgresql+asyncpg://sqlman:7767@localhost:5432/balansoft_ws_server
+# CENTRAL_TIMEOUT=30   # Timeout (s) de login-central; +1 reintento único ante timeout
 
 SECRET_KEY=<generado con openssl rand -hex 32>
 ALGORITHM=HS256
@@ -611,6 +612,12 @@ DEBUG_MODE=false
 
 DATABASE_URL=postgresql+asyncpg://balansoft:pass@localhost:5432/balansoft_ws_local
 SERVER_API_URL=http://servidor.empresa.com:8002/api/v1
+# Timeout (s) de login-central contra el central (default 30). El arranque en
+# frío (DNS + TLS + Cloudflare) excedía 10 s de forma intermitente → 30 s +
+# UN reintento solo ante ConnectTimeout/ReadTimeout (log: «intento n/2»).
+# El timeout efectivo se expone en /api/v1/health y /api/v1/environment
+# (clave "central": {"timeout_s", "max_intentos"}) para diagnóstico sin .env.
+CENTRAL_TIMEOUT=30
 
 SECRET_KEY=<generado con openssl rand -hex 32>
 ALGORITHM=HS256

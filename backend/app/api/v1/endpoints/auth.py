@@ -7,6 +7,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +49,15 @@ from app.services.password_reset_service import (
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
+
+# login-central contra el central: con el timeout de 10 s la primera petición
+# de un proceso recién arrancado (DNS + TLS + cold start de Cloudflare) sufría
+# ConnectTimeout intermitente. Ahora: timeout configurable (CENTRAL_TIMEOUT,
+# default 30 s) + UN reintento único ante ConnectTimeout/ReadTimeout; con el
+# socket ya caliente el reintento suele responder en <1 s. A nivel de módulo
+# para poder parchearlo en tests (docs/MANEJO_DB.md §11).
+_ESPERA_REINTENTO_CENTRAL = 2.0  # s entre intentos (contrato: 1-2 s)
+_MAX_INTENTOS_CENTRAL = 2
 
 
 def _company_out(e: Empresa) -> CompanyOut:
@@ -276,7 +286,10 @@ async def login_central(
 
     Errores de red se propagan como 502 para que el cliente caiga al modo
     offline; 401/403 del central (credencial inválida o límite de sesiones de
-    la licencia) se devuelven tal cual.
+    la licencia) se devuelven tal cual. Ante ConnectTimeout/ReadTimeout se
+    reintenta UNA vez (timeout CENTRAL_TIMEOUT, default 30 s) antes del 502:
+    el arranque en frío contra el central (DNS + TLS + Cloudflare) excedía
+    el timeout de 10 s de forma intermitente.
     """
     server_url = (payload.server_url or settings.server_api_url or "").strip().rstrip("/")
     if not server_url:
@@ -286,8 +299,6 @@ async def login_central(
         )
 
     import socket
-
-    import httpx
 
     # 1) Validar la cuenta en el panel (DB del servidor central).
     cuerpo = {
@@ -302,9 +313,33 @@ async def login_central(
         "device_model": payload.device_model,
     }
     try:
-        resp = await httpx.AsyncClient(timeout=10, follow_redirects=True).post(
-            f"{server_url}/api/v1/auth/login", json=cuerpo
-        )
+        # Un SOLO cliente para todos los intentos: si el 1º falló tras abrir
+        # conexión, los sockets del pool siguen vivos («socket caliente») y el
+        # cliente se cierra siempre con el async with.
+        async with httpx.AsyncClient(
+            timeout=settings.central_timeout, follow_redirects=True
+        ) as cliente:
+            for intento in range(_MAX_INTENTOS_CENTRAL):
+                try:
+                    resp = await cliente.post(
+                        f"{server_url}/api/v1/auth/login", json=cuerpo
+                    )
+                    break
+                except (httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                    if intento >= _MAX_INTENTOS_CENTRAL - 1:
+                        raise  # 2º timeout → sale por el TransportError de abajo
+                    # Solo timeout reintentable. ConnectError/DNS/proxy/caído
+                    # NO reintentan (solo 1 llamada y 502).
+                    logger.warning(
+                        "login-central: timeout (%s) contra %s; reintento en %.0f s "
+                        "(intento %d/%d)",
+                        type(exc).__name__,
+                        server_url,
+                        _ESPERA_REINTENTO_CENTRAL,
+                        intento + 1,
+                        _MAX_INTENTOS_CENTRAL,  # NUNCA se loguea `cuerpo` (password)
+                    )
+                    await asyncio.sleep(_ESPERA_REINTENTO_CENTRAL)
     except httpx.TransportError as exc:
         # Se deja rastro en el log de la estación: si el instalador reporta
         # "no conecta con el servidor", aquí está la causa real (DNS, TLS,

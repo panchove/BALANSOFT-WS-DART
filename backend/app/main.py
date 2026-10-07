@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.endpoints import API_ROUTERS, SERVER_ROUTERS
+from app.api.v1.endpoints.auth import _MAX_INTENTOS_CENTRAL
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
 from app.core.db_engine import registrar_manejadores_bd
@@ -158,6 +159,13 @@ async def health() -> dict:
         "status": "healthy",
         "version": API_VERSION,
         "timestamp": datetime.now(UTC).isoformat(),
+        # Diagnóstico para el instalador/soporte: timeout efectivo del central
+        # (CENTRAL_TIMEOUT) sin leer el .env. Clave nueva; las existentes
+        # no cambian.
+        "central": {
+            "timeout_s": settings.central_timeout,
+            "max_intentos": _MAX_INTENTOS_CENTRAL,
+        },
     }
 
 
