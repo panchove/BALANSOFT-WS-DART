@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa, get_current_user
@@ -97,7 +97,7 @@ async def create_usuario(
                     select(Usuario).where(
                         Usuario.id_empresa == empresa.id_empresa,
                         Usuario.rol == "ADMIN",
-                        Usuario.activo.is_(True),
+                        Usuario.activo == true(),
                     )
                 )
             )

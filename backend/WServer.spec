@@ -22,6 +22,10 @@ datas = [
 ]
 for mig in sorted((ROOT / "migrations").glob("*.sql")):
     datas.append((str(mig), "migrations"))
+# Esquema T-SQL de SQL Server (Fase 2): dentro de un subdirectorio para no
+# confundirlo con el canónico de PostgreSQL.
+if (ROOT / "sqlserver" / "balansoft-ws-local.sql").exists():
+    datas.append((str(ROOT / "sqlserver" / "balansoft-ws-local.sql"), "sqlserver"))
 
 # --- Módulos con import dinámico que PyInstaller no detecta solo -----------
 hiddenimports = collect_submodules("app") + [

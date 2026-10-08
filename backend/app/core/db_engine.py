@@ -160,6 +160,25 @@ def drivers_faltantes() -> bool:
         return _drivers_faltantes_sqlserver
 
 
+def desactivar_pooling_pyodbc() -> None:
+    """Desactiva el pooling interno de pyodbc (necesario con SQL Server).
+
+    pyodbc 5+ activa por defecto un pool interno a nivel de proceso; al devolver
+    una conexión con resultados pendientes (p. ej. tras ``executescript`` de
+    un lote DDL) la siguiente consulta falla con ``HY000 Connection is busy
+    with results for another command`` (flaky intermitente, ~27 % en la suite
+    T8). SQLAlchemy gestiona su propio pool; desactivar el de pyodbc es la
+    práctica recomendada con aioodbc/pyodbc y evita el error tanto en el
+    bootstrap del WServer como en los tests contra el contenedor de prueba.
+    """
+    try:
+        import pyodbc
+
+        pyodbc.pooling = False
+    except Exception:  # noqa: BLE001 (sin pyodbc no hay nada que desactivar)
+        pass
+
+
 def _estado_fresco() -> bool:
     """True mientras el ``"pendiente"`` marcado tenga menos de ``TTL``."""
     with _candado:

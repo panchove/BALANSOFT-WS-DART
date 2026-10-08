@@ -68,6 +68,7 @@ filterwarnings = [
 ]
 markers = [
     "e2e: flujo end-to-end con el stub firmante del LM (ver tests/e2e)",
+    "mssql: requiere SQL Server real (MSSQL_TEST_URL / MSSQL_TEST_URL_SYNC); se salta sin él",
 ]
 
 [tool.mypy]

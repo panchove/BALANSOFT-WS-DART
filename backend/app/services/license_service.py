@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -35,7 +35,7 @@ async def sincronizar_licencia_e_identidad(
     """
     identidad = (
         await db.execute(
-            select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+            select(IdentidadLocal).where(IdentidadLocal.id == true())
         )
     ).scalar_one_or_none()
 

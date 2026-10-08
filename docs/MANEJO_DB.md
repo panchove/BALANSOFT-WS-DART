@@ -1,7 +1,7 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.5
-**Fecha:** 2026-10-07
+**Versión:** 2.6
+**Fecha:** 2026-10-08
 **Estado:** Vigente
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
@@ -646,7 +646,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 > **Nota:** `.env.example` (referencia del servidor central, expuesto a internet) conserva `API_DOCS_ENABLED=false`. Esa decisión es **independiente** de la estación: el VPS tiene un perfil de riesgo distinto (red pública) y merece su propia decisión antes de exponerlo.
 
-### 11.5 Motor de BD: PostgreSQL (soportado) y SQL Server (Fase 1 degradada)
+### 11.5 Motor de BD: PostgreSQL (soportado) y SQL Server (Fase 2 completa)
 
 > Las «Fase 1/Fase 2» de esta sección son las del **soporte SQL Server** y no tienen nada que ver con las fases homónimas del §10.
 
@@ -661,7 +661,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 **Qué hace la estación con `motor=sqlserver` (modo degradado):**
 
-- **El WServer NO aplica DDL**: `crear_bd_si_falta` crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (y si no hay permisos, avisa sin tumbar el arranque), pero **no ejecuta `balansoft-ws-local.sql` ni `migrations/*.sql`** (Fase 2): imprime el aviso «Fase 2» y `get_db` siembra el caché de esquema en `pendiente`.
+- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (27 tablas = 24 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 27 PK, 37 FK, 33 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 21 migraciones plegadas (`001.sql`…`021.sql`) → marca el caché en `aplicado`. Las migraciones **022+ aún no son dual-dialecto** (futuro).
 - **`GET /api/v1/entorno`** añade la clave `"motor"`; la clave `"postgres"` **no se renombra** (contrato con la app Flutter) y su SQL por motor sale de `sql_conteo_tablas()`.
 - **Esquema ausente o servidor caído → HTTP 503, no 500**: `manejador_error_bd` clasifica el error (`42S02`/«invalid object name» → `codigo=esquema_mssql_pendiente`; SQLSTATE `08*` → `codigo=sqlserver_sin_conexion`) y cualquier otro error sube tal cual (500, idéntico al de hoy en PG). Antes de cada consulta `asegurar_esquema_listo` consulta `sys.tables`/`pg_tables` con caché (60 s mientras esté `pendiente`); **si esa consulta falla, la caché vuelve a su valor inicial antes de propagar**, para que un corte no deje un `pendiente` caduco (LOW-001).
 - **Sin drivers ODBC el WServer arranca igual (Opción B)**: `database._registrar_drivers_faltantes` **no lanza** — siembra el flag global `drivers_faltantes()` en `db_engine` y deja los engines en `None` (bind nominal, nunca usado porque el gate lanza antes). Cualquier endpoint de BD responde 503 con **`codigo=sqlserver_sin_drivers`** y el mensaje accionable (`MENSAJE_SIN_DRIVERS`: «uv sync --extra sqlserver» + «Microsoft ODBC Driver 18 for SQL Server»); `/api/v1/health` sigue en 200 para que la app Flutter pueda mostrar el aviso (el instalador no da rojo en el paso 8 por un extra cancelado). El flag se limpia con `reiniciar_estado_esquema()` (reinicio de la guardia).
@@ -669,9 +669,13 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 - **Conteo de tablas por esquema por defecto**: `dbo` en SQL Server (coherente con `schemaname='public'` en PG) tanto en `sql_conteo_tablas` como en `wserver._existe_esquema` (LOW-002).
 - **La ruta PostgreSQL queda byte-idéntica**: con URL PG todo lo anterior cae en la rama `else` (mismo SQL, mismo `raise`, mismo 500), verificado por los 423 tests preexistentes en verde.
 
-**Limitación de Fase 1:** con SQL Server la estación arranca y la API responde, pero los endpoints que tocan BD devuelven 503 hasta que el esquema exista (**PostgreSQL sigue siendo el motor soportado en producción**). El DDL/migraciones y el sync sobre SQL Server son Fase 2.
+**Limitación de Fase 2 (residual):** la ruta del sync bidireccional y las migraciones post-021 sobre SQL Server aún no están validadas en E2E (el flujo transaccional de negocio sí: pesaje, series, reportes). **PostgreSQL sigue siendo el motor soportado en producción**; SQL Server es soporte de estación para entornos que lo exigen.
 
-**Tests:** `backend/tests/test_db_engine.py` (detección de motor, coherencia del sync, handlers), `test_sqlserver_degradado.py` (API con `motor=sqlserver`: 503 + contratos) y `test_wserver_db_bootstrap.py` (SQL exacto de `master`/`pg_database`, idempotencia, `.env` sin destruir credenciales); los tres usan drivers falsos, sin conexiones reales.
+**Tests:** suite T8 en `backend/tests/` con tres niveles (marcador `mssql`):
+- `test_sqlserver_tsql_n0.py` (11, **siempre corre**): anti-GO, conteos 27/27/37, guards idempotentes, `NVARCHAR≤255` en columnas indexadas y paridad de nombres de tablas contra `balansoft-ws-local.sql` (PG).
+- `test_sqlserver_mssql_n1.py` (2, requiere `MSSQL_TEST_URL_SYNC`): aplica el T-SQL a una BD dedicada, verifica 27/27/37 en `sys.*`, idempotencia (re-aplicación), siembra 21 migraciones sin duplicar y `asegurar_db` Fase 2 sobre BD nueva.
+- `test_sqlserver_mssql_n2.py` (1, requiere `MSSQL_TEST_URL_SYNC`): flujo funcional — serie activa `TA-` emite `TA-00000001…3` con `siguiente=4` (FOR UPDATE/UPDLOCK), `monthly` cuenta solo los `CERRADO` del mes y `peso_rango` distribuye buckets (regresión del error 8120) ignorando `ANULADO`.
+- Sin `MSSQL_TEST_URL_SYNC` (o sin SQL Server alcanzable) N1/N2 se **saltan**, no fallan → CI sin SQL Server queda verde (528 rápidos + 34 E2E). Ejecutar con: `MSSQL_TEST_URL_SYNC='mssql+pyodbc://…' uv run pytest -m mssql` (**3 tests**: N1 2 + N2 1); para los **14** completos (11 N0 + 2 N1 + 1 N2) correr los tres archivos `tests/test_sqlserver_tsql_n0.py tests/test_sqlserver_mssql_n1.py tests/test_sqlserver_mssql_n2.py`.
 
 ## 12. Documentos Relacionados
 

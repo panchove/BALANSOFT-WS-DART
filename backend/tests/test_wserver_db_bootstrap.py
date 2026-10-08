@@ -128,7 +128,7 @@ class _CursorMSSQL:
     def __init__(self, conn: _ConexionMSSQL):
         self._conn = conn
 
-    def execute(self, sql):  # noqa: ANN001
+    def execute(self, sql, params=None):  # noqa: ANN001
         self._conn.sql.append(str(sql))
 
     def fetchone(self):
@@ -137,6 +137,12 @@ class _CursorMSSQL:
 
     def close(self):
         pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):  # noqa: ANN002
+        self.close()
 
 
 class _ConexionMSSQL:
@@ -150,6 +156,9 @@ class _ConexionMSSQL:
 
     def cursor(self) -> _CursorMSSQL:
         return _CursorMSSQL(self)
+
+    def commit(self):
+        pass
 
     def close(self):
         self.cerrada = True
@@ -355,10 +364,24 @@ class _Mock:
         return []
 
 
-def test_asegurar_db_sqlserver_no_aplica_esquema_ni_migraciones(
+def test_asegurar_db_sqlserver_aplica_esquema_y_siembra_migraciones(
     monkeypatch, capsys, tmp_path
 ):
-    fake = _pyodbc_falso()
+    # Fase 2: sobre una BD SQL Server recién creada (sin tablas), el WServer
+    # aplica el T-SQL autocontenido y siembra schema_migrations con las
+    # migraciones plegadas 001-021; el estado final queda "aplicado".
+    estado = {"aplicado": False}
+
+    def respuestas(sql: str) -> tuple:
+        if "DB_ID" in sql:
+            return (None,)  # la BD no existe → se crea
+        if "sys.tables" in sql:
+            return (7,) if estado["aplicado"] else (0,)
+        if "schema_migrations" in sql:
+            return (0,)  # tabla vacía → se siembra
+        return (None,)
+
+    fake = _pyodbc_falso(respuestas=respuestas)
     monkeypatch.setitem(sys.modules, "pyodbc", fake)
     aplicar_sql = _Mock()
     migraciones = _Mock()
@@ -367,20 +390,32 @@ def test_asegurar_db_sqlserver_no_aplica_esquema_ni_migraciones(
     monkeypatch.setattr(wserver, "_migraciones_pendientes", migraciones)
     monkeypatch.setattr(wserver, "_registrar_migracion", registrar)
 
-    # Rutas que NO existen: si la rama las llegara a tocar, el test revienta.
+    _aplicar_tsql_original = wserver._aplicar_tsql_sqlserver
+
+    def _aplicar_tsql_con_estado(conn, ruta_absoluta, etiqueta):
+        _aplicar_tsql_original(conn, ruta_absoluta, etiqueta)
+        estado["aplicado"] = True  # simula que el DDL creó las tablas
+
+    monkeypatch.setattr(wserver, "_aplicar_tsql_sqlserver", _aplicar_tsql_con_estado)
+
     wserver.asegurar_db("mssql+pyodbc://sa:p@localhost:1433/bd_que_no_existe")
 
-    assert aplicar_sql.llamadas == 0, "no se aplica balansoft-ws-local.sql"
-    assert migraciones.llamadas == 0, "no se aplican migrations/*.sql"
+    # No toca la rama PostgreSQL (balansoft-ws-local.sql ni migrations/*.sql).
+    assert aplicar_sql.llamadas == 0, "no se aplica balansoft-ws-local.sql (PG)"
+    assert migraciones.llamadas == 0, "no se aplican migrations/*.sql (PG)"
     assert registrar.llamadas == 0
+    # La conexión de bootstrap ejecutó el T-SQL del esquema embebido.
+    conn_bootstrap = fake.conexiones[2]
+    assert any(
+        "balansoft-ws-local.sql" in sql for sql in conn_bootstrap.sql
+    ) or any("CREATE TABLE" in sql for sql in conn_bootstrap.sql)
+    assert db_engine.estado_esquema() == "aplicado"
     salida = capsys.readouterr().out
-    assert "Fase 2" in salida
-    assert "balansoft-ws-local.sql" in salida
-    assert "migrations/*.sql" in salida
-    assert db_engine.estado_esquema() == "pendiente"
+    assert "Esquema SQL Server aplicado" in salida
+    assert "Migraciones plegadas registradas: 21" in salida
 
 
-def test_asegurar_db_sqlserver_con_tablas_marcado_aplicado(monkeypatch):
+def test_asegurar_db_sqlserver_con_tablas_no_reaplica(monkeypatch, capsys):
     fake = _pyodbc_falso(respuestas=lambda sql: (3,) if "sys.tables" in sql else (None,))
     monkeypatch.setitem(sys.modules, "pyodbc", fake)
     monkeypatch.setattr(wserver, "_aplicar_sql", _Mock())
@@ -388,8 +423,10 @@ def test_asegurar_db_sqlserver_con_tablas_marcado_aplicado(monkeypatch):
 
     wserver.asegurar_db(URL_MSSQL)
 
-    # Tablas creadas manualmente → Fase 1 no exige DDL propio.
+    # Tablas creadas manualmente → el bootstrap no re-aplica el T-SQL.
     assert db_engine.estado_esquema() == "aplicado"
+    salida = capsys.readouterr().out
+    assert "ya aplicado (no se re-aplica)" in salida
 
 
 def test_asegurar_db_sqlserver_templa_fallo_de_conexion(monkeypatch, capsys):

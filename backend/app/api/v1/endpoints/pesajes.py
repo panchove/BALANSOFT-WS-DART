@@ -29,7 +29,7 @@ from fastapi import (
     UploadFile,
 )
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa, get_current_user
@@ -209,7 +209,7 @@ async def create_weighing(
     if empresa.licencia_key:
         identidad = (
             await db.execute(
-                select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+                select(IdentidadLocal).where(IdentidadLocal.id == true())
             )
         ).scalar_one_or_none()
         hardware_id = (

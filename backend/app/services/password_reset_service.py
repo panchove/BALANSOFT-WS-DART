@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -81,7 +81,7 @@ async def crear_token_reset(db: AsyncSession, usuario: Usuario) -> str:
         await db.execute(
             select(PasswordResetToken).where(
                 PasswordResetToken.id_usuario == usuario.id_usuario,
-                PasswordResetToken.usado.is_(False),
+                PasswordResetToken.usado == false(),
             )
         )
     ).scalars().all()

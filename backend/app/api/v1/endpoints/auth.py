@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
@@ -92,7 +92,7 @@ async def _persistir_hardware_id(
     """
     identidad = (
         await db.execute(
-            select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+            select(IdentidadLocal).where(IdentidadLocal.id == true())
         )
     ).scalar_one_or_none()
     if identidad is None:
@@ -202,7 +202,7 @@ async def login(
     # Validar ligadura de dispositivo titular para la cuenta ADMIN
     identidad_actual = (
         await db.execute(
-            select(IdentidadLocal).where(IdentidadLocal.id.is_(True))
+            select(IdentidadLocal).where(IdentidadLocal.id == true())
         )
     ).scalar_one_or_none()
     hardware_id_req = payload.hardware_id or obtener_hardware_id()
@@ -462,7 +462,7 @@ async def login_central(
 
     # 4) Identidad local (vínculo singleton con la cuenta del servidor).
     identidad = (
-        await db.execute(select(IdentidadLocal).where(IdentidadLocal.id.is_(True)))
+        await db.execute(select(IdentidadLocal).where(IdentidadLocal.id == true()))
     ).scalar_one_or_none()
     if identidad is None:
         identidad = IdentidadLocal(id=True)

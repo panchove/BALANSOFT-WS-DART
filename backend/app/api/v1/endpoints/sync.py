@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa
@@ -49,7 +49,7 @@ async def get_sync_status(
         await db.execute(
             select(func.count())
             .select_from(BoletoPesaje)
-            .where(BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.sincronizado.is_(False))
+            .where(BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.sincronizado == false())
         )
     ).scalar() or 0
 
@@ -80,7 +80,7 @@ async def pull_sync_data(
         select(BoletoPesaje)
         .where(
             BoletoPesaje.id_empresa == empresa.id_empresa,
-            BoletoPesaje.sincronizado.is_(True),
+            BoletoPesaje.sincronizado == true(),
         )
         .order_by(BoletoPesaje.created_at.desc())
         .limit(500)
@@ -108,7 +108,7 @@ async def list_usuarios_pendientes(
         .where(
             SyncQueue.id_empresa == empresa.id_empresa,
             SyncQueue.entidad == "usuario",
-            SyncQueue.pendiente.is_(True),
+            SyncQueue.pendiente == true(),
         )
         .order_by(SyncQueue.created_at)
     )

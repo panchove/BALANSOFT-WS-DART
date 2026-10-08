@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, overload
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -334,7 +334,7 @@ async def _verificar_limite_sync(db: AsyncSession, cred: Credencial) -> None:
             .join(Credencial, Sesion.id_credencial == Credencial.id_credencial)
             .where(
                 Credencial.id_cuenta == cred.id_cuenta,
-                Sesion.revocada.is_(False),
+                Sesion.revocada == false(),
                 Sesion.expira > now,
             )
         )
@@ -380,7 +380,7 @@ async def get_server_credencial(
     cred = (
         await db.execute(
             select(Credencial).where(
-                Credencial.id_credencial == cred_id, Credencial.activo.is_(True)
+                Credencial.id_credencial == cred_id, Credencial.activo == true()
             )
         )
     ).scalar_one_or_none()
@@ -412,7 +412,7 @@ async def get_server_proveedor(
         await db.execute(
             select(ProveedorUsuario).where(
                 ProveedorUsuario.id_usuario == user_id,
-                ProveedorUsuario.activo.is_(True),
+                ProveedorUsuario.activo == true(),
             )
         )
     ).scalar_one_or_none()
@@ -553,7 +553,7 @@ async def server_login(
         equipo_count = (
             await db.execute(
                 select(Dispositivo.id_dispositivo).where(
-                    Dispositivo.id_cuenta == cuenta.id_cuenta, Dispositivo.activo.is_(True)
+                    Dispositivo.id_cuenta == cuenta.id_cuenta, Dispositivo.activo == true()
                 )
             )
         ).scalars().all()
@@ -572,7 +572,7 @@ async def server_login(
             select(Sesion).where(
                 Sesion.id_credencial == cred.id_credencial,
                 Sesion.id_dispositivo == disp.id_dispositivo,
-                Sesion.revocada.is_(False),
+                Sesion.revocada == false(),
                 Sesion.expira > now,
             )
         )
@@ -592,7 +592,7 @@ async def server_login(
                 .join(Credencial, Sesion.id_credencial == Credencial.id_credencial)
                 .where(
                     Credencial.id_cuenta == cuenta.id_cuenta,
-                    Sesion.revocada.is_(False),
+                    Sesion.revocada == false(),
                     Sesion.expira > now,
                 )
             )
@@ -1231,7 +1231,7 @@ async def server_sync_push(
     disp = (
         await db.execute(
             select(Dispositivo)
-            .where(Dispositivo.id_cuenta == cred.id_cuenta, Dispositivo.activo.is_(True))
+            .where(Dispositivo.id_cuenta == cred.id_cuenta, Dispositivo.activo == true())
             .order_by(Dispositivo.ultima_conexion.desc())
         )
     ).scalar_one_or_none()

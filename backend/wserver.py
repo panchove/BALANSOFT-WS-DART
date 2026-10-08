@@ -35,6 +35,7 @@ SCHEMA_LOCAL = "balansoft-ws-local.sql"
 SCHEMA_SERVER = "balansoft-ws-server.sql"
 ENV_PLANTILLA = ".env.plantilla"
 MIGRACIONES_DIR = "migrations"
+SQLSERVER_SCHEMA_DIR = "sqlserver"
 
 WSERVER_VERSION = "1.0.0"
 
@@ -144,7 +145,7 @@ def _descomponer_url(url: str) -> dict[str, Any]:
 
 def _existe_esquema(db_url_sync: str) -> bool:
     """True si la BD destino ya tiene tablas (esquema aplicado previamente)."""
-    from app.core.db_engine import detectar_motor, dsn_pyodbc
+    from app.core.db_engine import desactivar_pooling_pyodbc, detectar_motor, dsn_pyodbc
 
     if detectar_motor(db_url_sync) == "sqlserver":
         # Fase 1: solo se puede detectar si alguien creó tablas a mano; el
@@ -155,6 +156,7 @@ def _existe_esquema(db_url_sync: str) -> bool:
             import pyodbc
         except Exception:  # noqa: BLE001 (sin driver no hay forma de comprobar)
             return False
+        desactivar_pooling_pyodbc()
         c = _descomponer_url(db_url_sync)
         conn = None
         try:
@@ -253,9 +255,11 @@ def _crear_bd_sqlserver(db_url: str) -> None:
     ``CREATE DATABASE`` solo genera un aviso, porque en Fase 1 la BD puede
     venir ya creada por el administrador.
     """
-    from app.core.db_engine import dsn_pyodbc
-
     import pyodbc
+
+    from app.core.db_engine import desactivar_pooling_pyodbc, dsn_pyodbc
+
+    desactivar_pooling_pyodbc()
 
     c = _descomponer_url(db_url)
     nombre = str(c["db"])
@@ -330,29 +334,110 @@ def _registrar_migracion(cur, version: str) -> None:
     )
 
 
-def _asegurar_db_sqlserver(db_url: str) -> None:
-    """Bootstrap SQL Server en Fase 1: SOLO crea la BD y comprueba tablas.
+def _aplicar_tsql_sqlserver(conn: Any, ruta_absoluta: Path, etiqueta: str) -> None:
+    """Ejecuta un archivo T-SQL sobre la conexión pyodbc (un solo lote).
 
-    No aplica ``balansoft-ws-local.sql`` ni ``migrations/*.sql`` (son DDL de
-    PostgreSQL): el esquema de SQL Server llega en **Fase 2**. El resultado se
-    siembra en la caché de ``app.core.db_engine`` para que la API responda
-    503 «esquema pendiente» hasta entonces. **No falla el arranque.**
+    Los esquemas T-SQL de Balansoft no contienen ``GO``: se ejecutan lote a
+    lote y llevan su propia ``BEGIN TRANSACTION``/``COMMIT``. pyodbc envía el
+    texto completo como un único lote; el ``COMMIT`` explícito del script
+    cierra la transacción.
+    """
+    sql_texto = ruta_absoluta.read_text(encoding="utf-8")
+    with conn.cursor() as cur:
+        cur.execute(sql_texto)
+    print(f"[WServer] Esquema SQL Server aplicado: {etiqueta}")
+
+
+def _sembrar_migraciones_sqlserver(conn: Any, versiones: list[str]) -> None:
+    """Registra en ``schema_migrations`` las migraciones plegadas en el T-SQL.
+
+    El esquema canónico de SQL Server es autocontenido (incluye el efecto de
+    ``migrations/001..021``); al aplicarlo por primera vez se siembra el
+    registro para que las futuras migraciones dual-dialecto (022+) partan de
+    un estado coherente. Idempotente: si ya hay filas, no toca nada.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
+        if cur.fetchone()[0] == 0:
+            for version in versiones:
+                cur.execute(
+                    "INSERT INTO dbo.schema_migrations (version) VALUES (?)",
+                    (version,),
+                )
+            conn.commit()
+            print(f"[WServer] Migraciones plegadas registradas: {len(versiones)}")
+
+
+def _asegurar_db_sqlserver(db_url: str) -> None:
+    """Bootstrap SQL Server (Fase 2): crea la BD y aplica el esquema T-SQL.
+
+    Aplica ``sqlserver/balansoft-ws-local.sql`` (autocontenido e idempotente:
+    el esquema canónico con las 24 tablas + ``password_reset_tokens`` +
+    ``series_numeracion`` + ``schema_migrations``) solo cuando la BD no tiene
+    tablas, y siembra ``schema_migrations`` con la lista de migraciones
+    plegadas. Las migraciones ``migrations/*.sql`` son DDL de PostgreSQL; a
+    partir de la 022 deberán ser dual-dialecto y se aplicarán aquí. El
+    resultado se siembra en la caché de ``app.core.db_engine`` (la API
+    responde 503 «esquema pendiente» si el driver no está o la BD es
+    inalcanzable). **No falla el arranque.**
     """
     import importlib.util
 
-    from app.core.db_engine import error_drivers_faltantes, marcar_estado_esquema
+    from app.core.db_engine import (
+        desactivar_pooling_pyodbc,
+        dsn_pyodbc,
+        error_drivers_faltantes,
+        marcar_estado_esquema,
+    )
 
     if importlib.util.find_spec("pyodbc") is None:
         print(f"[WServer] ✗ {error_drivers_faltantes('sqlserver', None)}", file=sys.stderr)
         return
 
+    import pyodbc
+
+    desactivar_pooling_pyodbc()
+
     c = _descomponer_url(db_url)
+    con_tablas = False
     try:
         crear_bd_si_falta(db_url)
         con_tablas = _existe_esquema(db_url)
+        if con_tablas:
+            # Esquema ya presente (instalación previa o creada por el
+            # administrador): no se re-aplica (idempotencia).
+            print("[WServer] Esquema SQL Server ya aplicado (no se re-aplica).")
+        else:
+            ruta = ROOT / SQLSERVER_SCHEMA_DIR / SCHEMA_LOCAL
+            if not ruta.exists():
+                raise FileNotFoundError(
+                    f"No se encontró el esquema SQL Server embebido: {ruta}"
+                )
+            conn = None
+            try:
+                conn = pyodbc.connect(dsn_pyodbc(c), autocommit=False, timeout=20)
+                _aplicar_tsql_sqlserver(conn, ruta, SCHEMA_LOCAL)
+                mig_dir = ROOT / MIGRACIONES_DIR
+                versiones = (
+                    [m.name for m in sorted(mig_dir.glob("*.sql"))]
+                    if mig_dir.exists()
+                    else []
+                )
+                _sembrar_migraciones_sqlserver(conn, versiones)
+            except Exception:
+                if conn is not None:
+                    try:
+                        conn.rollback()
+                    except Exception:  # noqa: BLE001 (rollback best-effort)
+                        pass
+                raise
+            finally:
+                if conn is not None:
+                    conn.close()
+            con_tablas = _existe_esquema(db_url)
     except Exception as exc:  # noqa: BLE001 (una BD inalcanzable no tumba el arranque)
         print(
-            f"[WServer] ⚠ No se pudo verificar la BD de SQL Server '{c['db']}' "
+            f"[WServer] ⚠ No se pudo inicializar la BD de SQL Server '{c['db']}' "
             f"({c['host']}:{c['port']}): {exc}",
             file=sys.stderr,
         )
@@ -360,13 +445,8 @@ def _asegurar_db_sqlserver(db_url: str) -> None:
 
     marcar_estado_esquema("aplicado" if con_tablas else "pendiente")
     print(
-        "[WServer] SQL Server en modo degradado — Fase 2: el esquema de SQL Server "
-        "se aplicará en Fase 2; el WServer funciona en modo degradado sin datos. "
-        "No se aplican balansoft-ws-local.sql ni migrations/*.sql a esta base de datos."
-    )
-    print(
-        "[WServer] Estado del esquema: "
-        + ("pendiente (la API responderá 503 hasta Fase 2)" if not con_tablas else "tablas detectadas")
+        "[WServer] Estado del esquema SQL Server: "
+        + ("aplicado" if con_tablas else "pendiente (la API responderá 503)")
         + "."
     )
 
@@ -379,8 +459,9 @@ def asegurar_db(db_url_sync: str) -> None:
     ``migrations/*.sql`` se aplican **en cada arranque** usando el registro
     ``schema_migrations``. Para un vaciado real: ``scripts/reset_db.sh``.
 
-    SQL Server (Fase 1, modo degradado): ver ``_asegurar_db_sqlserver``; solo
-    crea la BD y comprueba si hay tablas, sin aplicar DDL.
+    SQL Server (Fase 2): ``_asegurar_db_sqlserver`` crea la BD, aplica el
+    esquema T-SQL autocontenido (``sqlserver/balansoft-ws-local.sql``) y
+    siembra ``schema_migrations`` con las migraciones plegadas 001-021.
     """
     from app.core.db_engine import detectar_motor
 

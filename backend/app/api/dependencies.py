@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -41,7 +41,7 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Token inválido") from None
 
     result = await db.execute(
-        select(Usuario).where(Usuario.id_usuario == user_id, Usuario.activo.is_(True))
+        select(Usuario).where(Usuario.id_usuario == user_id, Usuario.activo == true())
     )
     user = result.scalar_one_or_none()
     if user is None:

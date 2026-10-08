@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -140,6 +140,7 @@ class WeighingService:
                             SerieNumeracion.id_serie == id_serie,
                         )
                         .with_for_update()
+                        .with_hint(SerieNumeracion, "WITH (UPDLOCK, ROWLOCK)", "mssql")
                         .limit(1)
                     )
                 ).scalar_one_or_none()
@@ -153,9 +154,10 @@ class WeighingService:
                     select(SerieNumeracion)
                     .where(
                         SerieNumeracion.id_empresa == id_empresa,
-                        SerieNumeracion.activa.is_(True),
+                        SerieNumeracion.activa == true(),
                     )
                     .with_for_update()
+                    .with_hint(SerieNumeracion, "WITH (UPDLOCK, ROWLOCK)", "mssql")
                     .limit(1)
                 )
             ).scalar_one_or_none()

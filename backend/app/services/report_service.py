@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import case, func, literal_column, select
+from sqlalchemy import Date, bindparam, case, cast, func, select
+from sqlalchemy.dialects import mssql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Almacen, BoletoPesaje, Empresa, Kardex, Producto, Tercero, Transporte
@@ -74,11 +75,22 @@ class ReportService:
         ).where(*base)
         agg = (await db.execute(agg_stmt)).one()
 
-        # Conteo por día usando SQL
-        dia_stmt = select(
-            func.date(BoletoPesaje.fecha_hora_entrada).label("fecha"),
-            func.count().label("pesajes"),
-        ).where(*base).group_by(literal_column("fecha")).order_by(literal_column("fecha"))
+        # Conteo por día usando SQL. ``fecha_dia`` trunca a DATE en PG y mssql:
+        # SQLAlchemy emite ``CAST(x AS DATE)`` en PostgreSQL y, con la variante
+        # ``mssql.DATE``, también ``CAST(x AS DATE)`` en SQL Server (sin la
+        # variante emitiría ``CAST(x AS DATETIME)`` y no agruparía por día).
+        # Se agrupa/ordena por la MISMA expresión, no por un alias literal:
+        # T-SQL no acepta ``GROUP BY <alias>`` como PostgreSQL.
+        fecha_dia = cast(
+            BoletoPesaje.fecha_hora_entrada,
+            Date().with_variant(mssql.DATE, "mssql"),
+        )
+        dia_stmt = (
+            select(fecha_dia.label("fecha"), func.count().label("pesajes"))
+            .where(*base)
+            .group_by(fecha_dia)
+            .order_by(fecha_dia)
+        )
 
         por_dia = [
             {"fecha": str(r.fecha), "pesajes": r.pesajes}
@@ -399,14 +411,28 @@ class ReportService:
         fecha_hasta: datetime,
     ) -> dict:
         """Distribución de pesos netos por bucket (SIN_PESO cuando no aplica)."""
+        # La misma expresión CASE se repite en el SELECT y en el GROUP BY, y
+        # T-SQL exige que ambas apariciones sean IDÉNTICAS. ODBC es posicional:
+        # un bindparam normal se expande a ``?`` con posiciones distintas en
+        # cada aparición y SQL Server rechaza la query (error 8120 «not
+        # contained in GROUP BY»). Con ``literal_execute=True`` el valor se
+        # incrusta como literal en el texto SQL final (los ``__[POSTCOMPILE_…]``
+        # del compilador se resuelven con el mismo valor en ambas apariciones),
+        # de modo que el CASE del SELECT y el del GROUP BY coinciden
+        # textualmente; es válido en PostgreSQL y SQL Server. El orden final de
+        # los buckets lo reordena el servicio.
+        _rangos = [(0, "SIN_PESO"), (1000, "0-1t"), (5000, "1-5t"),
+                   (10000, "5-10t"), (20000, "10-20t"), (40000, "20-40t")]
         bucket = case(
-            (BoletoPesaje.peso_neto <= 0, "SIN_PESO"),
-            (BoletoPesaje.peso_neto <= 1000, "0-1t"),
-            (BoletoPesaje.peso_neto <= 5000, "1-5t"),
-            (BoletoPesaje.peso_neto <= 10000, "5-10t"),
-            (BoletoPesaje.peso_neto <= 20000, "10-20t"),
-            (BoletoPesaje.peso_neto <= 40000, "20-40t"),
-            else_="40t+",
+            *[
+                (
+                    BoletoPesaje.peso_neto
+                    <= bindparam(f"rango_max_{i}", maximo, literal_execute=True),
+                    bindparam(f"rango_nombre_{i}", nombre, literal_execute=True),
+                )
+                for i, (maximo, nombre) in enumerate(_rangos)
+            ],
+            else_=bindparam("rango_nombre_else", "40t+", literal_execute=True),
         )
         stmt = (
             select(
@@ -421,8 +447,12 @@ class ReportService:
                 BoletoPesaje.fecha_hora_entrada >= fecha_desde,
                 BoletoPesaje.fecha_hora_entrada <= fecha_hasta,
             )
-            .group_by("rango")
-            .order_by(func.min(BoletoPesaje.peso_neto))
+            # T-SQL no acepta ``GROUP BY <alias>`` ni ``ORDER BY`` con una expresión
+            # no agregada fuera del GROUP BY; se agrupa por la MISMA expresión
+            # (el CASE), válida en PostgreSQL y SQL Server, y se omite el
+            # ORDER BY: el orden final de los buckets lo reordena el servicio
+            # (``orden``) y no depende del orden de las filas SQL.
+            .group_by(bucket)
         )
         rows = (await db.execute(stmt)).all()
         orden = ["SIN_PESO", "0-1t", "1-5t", "5-10t", "10-20t", "20-40t", "40t+"]
