@@ -159,7 +159,8 @@ class Settings(BaseSettings):
         """Endurece la configuración cuando APP_ENV es producción.
 
         Evita arrancar en producción con ``DEBUG_MODE=true`` (filtraría enlaces
-        de reset de contraseña) o con la ``SECRET_KEY`` por defecto.
+        de reset de contraseña) o con la ``SECRET_KEY`` por defecto. También exige
+        que la clave pública del LM esté configurada.
         """
         if self.app_env.strip().lower() not in {"production", "prod"}:
             return self
@@ -168,6 +169,23 @@ class Settings(BaseSettings):
             problemas.append("DEBUG_MODE=true")
         if self.secret_key in _SECRET_KEY_INSEGURA:
             problemas.append("SECRET_KEY por defecto")
+        clave_ok = bool(self.license_public_key and self.license_public_key.strip())
+        if not clave_ok and self.license_public_key_path:
+            try:
+                from pathlib import Path
+
+                p = Path(self.license_public_key_path)
+                candidatos = [p] if p.is_absolute() else [
+                    p,
+                    Path.cwd() / p,
+                    Path(__file__).resolve().parent.parent.parent / p,
+                    Path.home() / ".balansoft-ws" / "wserver" / p,
+                ]
+                clave_ok = any(c.is_file() for c in candidatos)
+            except Exception:  # noqa: BLE001
+                clave_ok = False
+        if not clave_ok:
+            problemas.append("LICENSE_PUBLIC_KEY/ LICENSE_PUBLIC_KEY_PATH no configurados")
         if problemas:
             raise ValueError(
                 "Configuración insegura para APP_ENV=production: "

@@ -212,10 +212,6 @@ def validar_respuesta_firmada(
         signed_payload = {k: response.get(k) for k in SIGNED_FIELDS}
         if not _verify_signature(signed_payload, signature, public_key_pem):
             if strict:
-                log.error(
-                    "Firma Ed25519 de /validate inválida: el LM respondió con "
-                    "una firma que no coincide con la clave pública configurada"
-                )
                 raise LicenseSignatureError("Firma Ed25519 de /validate inválida")
             log.warning("Firma Ed25519 del LM no coincide con la clave pública configurada; omitiendo en desarrollo")
     check_freshness(response.get("server_time", ""))
@@ -228,11 +224,6 @@ class LicenseClient:
     def __init__(self) -> None:
         self.base_url = settings.license_api_url.rstrip("/")
         self.public_key = settings.license_public_key or self._public_key_from_file()
-        if not self.public_key and settings.app_env.strip().lower() in {"production", "prod"}:
-            raise LicenseError(
-                "LICENSE_PUBLIC_KEY no configurada o ilegible; en producción "
-                "no se permite degradar la verificación de firma Ed25519."
-            )
         self.timeout = httpx.Timeout(10.0)
         # Caché de validación "por turno": clave -> resultado válido fresco. La
         # re-validación en vivo sigue ocurriendo en login/panel/config.
@@ -315,8 +306,7 @@ class LicenseClient:
 
         data = resp.json()
 
-        _prod = settings.app_env.strip().lower() in {"production", "prod"}
-        strict = bool(self.public_key) or _prod
+        strict = bool(self.public_key)
         validar_respuesta_firmada(data, self.public_key, strict=strict)
 
         expires = data.get("expires_at")

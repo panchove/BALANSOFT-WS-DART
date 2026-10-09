@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -288,7 +289,7 @@ async def login(
 async def login_central(
     payload: LoginCentralRequest,
     db: AsyncSession = Depends(get_db),
-) -> LoginResponse:
+) -> LoginResponse | JSONResponse:
     """Login CENTRAL-first.
 
     Valida la cuenta+credencial contra el serVIDOR central (la DB del panel
@@ -369,9 +370,16 @@ async def login_central(
 
     if resp.status_code != 200:
         detalle = "Error al validar la cuenta en el servidor central"
+        extra: dict = {}
         try:
             datos = resp.json()
             detalle = datos.get("detail") or detalle
+            # Propagar los campos informativos del 403 de titular para que la
+            # app Flutter pueda mostrar un mensaje accionable (equipo titular +
+            # hardware) en vez de un texto genérico.
+            for k in ("hardware_titular", "nombre_equipo_titular"):
+                if datos.get(k) is not None:
+                    extra[k] = datos[k]
         except Exception:  # noqa: BLE001 - respuesta no JSON del central
             pass
         codigo = resp.status_code if resp.status_code in (400, 401, 403) else 502
@@ -384,6 +392,11 @@ async def login_central(
             payload.email,
             detalle,
         )
+        if extra:
+            return JSONResponse(
+                status_code=codigo,
+                content={"detail": detalle, **extra},
+            )
         raise HTTPException(status_code=codigo, detail=detalle)
 
     central = resp.json()

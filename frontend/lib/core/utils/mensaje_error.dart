@@ -30,3 +30,32 @@ String mensajeDeError(Object e, {String? fallback}) {
   }
   return fallback ?? 'Ocurrió un error inesperado. Inténtalo de nuevo.';
 }
+
+/// Extrae del 403 del login-central el hardware/equipo titular de la licencia
+/// para que la UI pueda mostrar un mensaje accionable (reasignar titular).
+///
+/// Devuelve `null` en `hardwareTitular` si el error no es un 403 de titular.
+({String mensaje, String? hardwareTitular, String? nombreEquipoTitular})
+    parsearErrorTitular(Object e, {String? fallback}) {
+  if (e is DioException) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final hw = data['hardware_titular'];
+      final nombre = data['nombre_equipo_titular'];
+      final detalle = (data['detail'] as String?)?.trim() ?? '';
+      if (hw is String && hw.isNotEmpty) {
+        return (
+          mensaje: detalle.isNotEmpty ? detalle : (fallback ?? ''),
+          hardwareTitular: hw,
+          nombreEquipoTitular:
+              (nombre is String && nombre.isNotEmpty) ? nombre : null,
+        );
+      }
+    }
+  }
+  return (
+    mensaje: mensajeDeError(e, fallback: fallback),
+    hardwareTitular: null,
+    nombreEquipoTitular: null,
+  );
+}

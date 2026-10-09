@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, overload
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -507,7 +508,7 @@ async def server_register(
 async def server_login(
     payload: ServerLoginRequest,
     db: AsyncSession = Depends(get_server_db),
-) -> ServerLoginResponse:
+) -> ServerLoginResponse | JSONResponse:
     """Login global: valida credencial + licencia y registra el dispositivo."""
     email = payload.email.lower()
     cred = (
@@ -537,11 +538,29 @@ async def server_login(
                 payload.hardware_id,
             )
         elif licencia.hardware_id != payload.hardware_id:
-            raise HTTPException(
+            # Buscar el nombre del equipo titular para que el 403 sea accionable
+            # desde la app Flutter (mensaje con nombre + hardware + cómo resolver).
+            disp_titular = (
+                await db.execute(
+                    select(Dispositivo).where(
+                        Dispositivo.id_cuenta == cuenta.id_cuenta,
+                        Dispositivo.hardware_id == licencia.hardware_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            return JSONResponse(
                 status_code=403,
-                detail="La cuenta ADMIN está activada en otro equipo titular. No se permite abrir la sesión de administrador desde este dispositivo.",
+                content={
+                    "detail": (
+                        "La cuenta ADMIN está activada en otro equipo titular. "
+                        "No se permite abrir la sesión de administrador desde este dispositivo."
+                    ),
+                    "hardware_titular": licencia.hardware_id,
+                    "nombre_equipo_titular": (
+                        disp_titular.nombre_equipo if disp_titular else None
+                    ),
+                },
             )
-
     disp = await _dispositivo(
         db,
         cuenta.id_cuenta,
@@ -1301,7 +1320,7 @@ async def server_sync_users(
     errores = 0
     detalle: list[str] = []
     for item in payload.items:
-        email = str(item.email).lower()
+        email = item.email.lower()
         cred_existente = (
             await db.execute(select(Credencial).where(Credencial.email == email))
         ).scalar_one_or_none()

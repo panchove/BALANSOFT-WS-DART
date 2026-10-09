@@ -56,7 +56,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
       emit(AuthAuthenticated(user));
     } catch (e) {
-      emit(AuthError(mensajeDeError(e)));
+      // Si el 403 del login-central trae el equipo titular, mostramos un
+      // mensaje accionable (nombre + hardware + cómo resolver); si no,
+      // usamos el mensaje genérico del backend.
+      final info = parsearErrorTitular(e);
+      if (info.hardwareTitular != null) {
+        final nombre = info.nombreEquipoTitular ?? info.hardwareTitular!;
+        emit(AuthError(
+          'Esta cuenta ADMIN está activada en el equipo titular "$nombre" '
+          '(hardware ${info.hardwareTitular}). Para usarla desde este equipo, '
+          'reasigne el titular desde el panel del servidor o contacte al distribuidor.',
+        ));
+      } else {
+        emit(AuthError(info.mensaje));
+      }
     }
   }
 
