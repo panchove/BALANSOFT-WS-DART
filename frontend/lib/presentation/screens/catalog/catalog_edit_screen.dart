@@ -6,6 +6,7 @@ import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/utils/uppercase_formatter.dart';
 import '../../../core/widgets/photo_picker_field.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
@@ -359,9 +360,13 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
           ? TextInputAction.done
           : TextInputAction.next,
       onFieldSubmitted: (_) => _avanzar(campo),
-      inputFormatters: campo.tipo == CatalogFieldType.entero
-          ? [FilteringTextInputFormatter.digitsOnly]
-          : null,
+      inputFormatters: switch (campo.tipo) {
+        CatalogFieldType.entero => [FilteringTextInputFormatter.digitsOnly],
+        CatalogFieldType.texto || CatalogFieldType.multilinea => const [
+            UpperCaseTextFormatter(),
+          ],
+        _ => null,
+      },
       decoration: InputDecoration(
         labelText: context.tr(campo.label) + (campo.requerido ? ' *' : ''),
         prefixIcon: Icon(campo.icono),

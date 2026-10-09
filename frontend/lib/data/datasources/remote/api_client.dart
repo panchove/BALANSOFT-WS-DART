@@ -373,6 +373,46 @@ class ApiClient {
     );
   }
 
+  // ── Backups de estación (REQ-NF-BKP-001/002/003) ───────────────────────
+
+  /// Dispara un respaldo automático por inactividad (cualquier usuario
+  /// autenticado local; el backend resuelve el tenant del token).
+  Future<Map<String, dynamic>> crearBackupAuto() async {
+    final response = await _dio.post('$_baseUrl${ApiConstants.backupsAuto}');
+    return (response.data as Map<String, dynamic>?) ?? const {};
+  }
+
+  /// Lista los snapshots de la empresa (solo ADMIN; más recientes primero).
+  Future<List<Map<String, dynamic>>> listarBackups() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.backupsBase}');
+    final data = response.data;
+    if (data is List) {
+      return data.whereType<Map<String, dynamic>>().toList();
+    }
+    return const [];
+  }
+
+  /// Descarga un snapshot comprimido (solo ADMIN).
+  Future<List<int>> descargarBackup(String archivo) async {
+    final response = await _dio.get<List<int>>(
+      '$_baseUrl${ApiConstants.backupDownload(archivo)}',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const [];
+  }
+
+  /// Restaura un snapshot (solo ADMIN; exige confirmar=true en el backend).
+  Future<Map<String, dynamic>> restaurarBackup(
+    String archivo, {
+    bool confirmar = false,
+  }) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.backupRestore(archivo)}',
+      data: {'confirmar': confirmar},
+    );
+    return (response.data as Map<String, dynamic>?) ?? const {};
+  }
+
   Future<Response> createWeighing(Map<String, dynamic> body) async {
     final response = await _dio.post('$_baseUrl${ApiConstants.weighingCreate}', data: body);
     return response;

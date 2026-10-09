@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/i18n/locale_controller.dart';
@@ -24,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
+
+  // URL de proveedores oficiales del producto.
+  static const String _proveedoresUrl = 'http://www.balansoft.com.ve/#proveedores';
 
   @override
   void initState() {
@@ -54,6 +58,20 @@ class _LoginScreenState extends State<LoginScreen> {
           email: _email.text.trim(),
           password: _password.text,
         ));
+  }
+
+  /// Abre el enlace de proveedores oficiales en el navegador externo.
+  Future<void> _abrirProveedores() async {
+    final uri = Uri.parse(_proveedoresUrl);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('No se pudo abrir el enlace de proveedores')),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    }
   }
 
   @override
@@ -118,12 +136,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     const BrandText(size: 64, withTagline: true),
                     const SizedBox(height: 36),
                     _buildLoginForm(),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
                     Text(
                       'works_offline'.tr(),
                       style:
                           const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
+                    const SizedBox(height: 8),
+                    _buildProveedoresLink(),
                   ],
                 ),
               ),
@@ -171,6 +191,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   'works_offline'.tr(),
                   style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
+                const SizedBox(height: 8),
+                _buildProveedoresLink(),
               ],
             ),
           ),
@@ -225,12 +247,36 @@ class _LoginScreenState extends State<LoginScreen> {
                       style:
                           const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
+                    const SizedBox(height: 8),
+                    _buildProveedoresLink(),
                   ],
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─── Enlace a proveedores oficiales ────────────────────────────────────
+  Widget _buildProveedoresLink() {
+    return TextButton.icon(
+      onPressed: _abrirProveedores,
+      style: TextButton.styleFrom(
+        foregroundColor: SwsColors.accent,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: const Icon(Icons.storefront_outlined, size: 14),
+      label: Text(
+        context.tr('Proveedores oficiales'),
+        style: const TextStyle(
+          fontSize: 12,
+          decoration: TextDecoration.underline,
+          decorationColor: SwsColors.accent,
+        ),
       ),
     );
   }

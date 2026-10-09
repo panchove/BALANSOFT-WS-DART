@@ -492,11 +492,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
                     ),
                   ),
                 ),
-              IconButton(
+              TextButton.icon(
                 key: const Key('dispositivos_escanear'),
-                tooltip: context.tr('Escanea básculas conectadas'),
-                icon: const Icon(Icons.radar_outlined),
                 onPressed: _escanear,
+                icon: const Icon(Icons.radar_outlined),
+                label: Text(context.tr('detectar_balanzas')),
               ),
             ],
           ),
@@ -534,16 +534,35 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   Widget _listaVacia() {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      children: const [
-        SizedBox(height: 80),
-        Icon(Icons.scale_outlined, size: 56, color: SwsColors.gray400),
-        SizedBox(height: 12),
-        Center(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        const SizedBox(height: 80),
+        const Icon(Icons.scale_outlined, size: 56, color: SwsColors.gray400),
+        const SizedBox(height: 12),
+        const Center(
           child: Text(
             'No hay básculas registradas.\n'
-            'Use "Añadir báscula" o "Escanear" para detectarlas.',
+            'Use "Añadir báscula" o "Detectar" para encontrarlas.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SwsColors.gray500),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: FilledButton.tonalIcon(
+            key: const Key('dispositivos_escanear_vacio'),
+            onPressed: _escanear,
+            icon: const Icon(Icons.radar_outlined),
+            label: Text(context.tr('detectar_balanzas')),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Center(
+          child: OutlinedButton.icon(
+            key: const Key('dispositivos_agregar_vacio'),
+            onPressed: _agregarBalanza,
+            icon: const Icon(Icons.add),
+            label: Text(context.tr('Añadir báscula')),
           ),
         ),
       ],

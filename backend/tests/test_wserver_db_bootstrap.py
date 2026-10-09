@@ -604,3 +604,27 @@ def test_actualizar_env_url_ilegible_usa_defaults_pg(tmp_path):
     wserver._actualizar_env_si_aplica(tmp_path, _args(db_host="1.2.3.4"))
     texto = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "DATABASE_URL=postgresql+asyncpg://balansoft:CHANGE_ME@1.2.3.4:5432/" in texto
+
+
+# asegurar_estructura: BACKUP_DIR absoluto del runtime
+def test_asegurar_estructura_genera_env_con_backup_dir_absoluto(tmp_path, monkeypatch):
+    """La plantilla trae ``BACKUP_DIR=backups`` (relativo al CWD) y puede
+    quedar ilegible en instalaciones (p. ej. Program Files); al generar el
+    ``.env`` el WServer lo reemplaza por el directorio de respaldos del
+    runtime, que ya fue creado por asegurar_estructura()."""
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    (raiz / ".env.plantilla").write_text(
+        "SECRET_KEY=__SECRET_KEY__\nBACKUP_DIR=backups\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(wserver, "ROOT", raiz)
+
+    home = tmp_path / "runtime"
+    wserver.asegurar_estructura(home)
+
+    assert (home / "backups").is_dir()
+    lineas = (home / ".env").read_text(encoding="utf-8").splitlines()
+    assert f"BACKUP_DIR={home / 'backups'}" in lineas
+    assert "BACKUP_DIR=backups" not in lineas
+    assert not any("__SECRET_KEY__" in linea for linea in lineas)

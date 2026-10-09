@@ -10,6 +10,7 @@ import '../../../core/utils/medida_conversion.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../core/utils/unsaved_work_guard.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/utils/uppercase_formatter.dart';
 import '../../../core/widgets/forms/autocomplete_creatable.dart';
 import '../../../core/widgets/forms/create_item_dialog.dart';
 import '../../../core/widgets/photo_picker_field.dart';
@@ -2766,6 +2767,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 _confirmarCampo(_idxDocumento);
                 _avanzarAlSiguienteCampo(_idxDocumento);
               },
+              inputFormatters: const [UpperCaseTextFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Documento',
                 prefixIcon: Icon(Icons.description),
@@ -2783,6 +2785,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 _confirmarCampo(_idxGuiaSunagro);
                 _avanzarAlSiguienteCampo(_idxGuiaSunagro);
               },
+              inputFormatters: const [UpperCaseTextFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Guía SUNAGRO',
                 prefixIcon: Icon(Icons.receipt_long),
@@ -2912,6 +2915,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 _confirmarCampo(_idxFlete);
                 _avanzarAlSiguienteCampo(_idxFlete);
               },
+              inputFormatters: const [UpperCaseTextFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Flete (ref.)',
                 prefixIcon: Icon(Icons.local_shipping_outlined),
@@ -2959,6 +2963,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           _confirmarCampo(_idxObservaciones);
           _avanzarAlSiguienteCampo(_idxObservaciones);
         },
+        inputFormatters: const [UpperCaseTextFormatter()],
         decoration: const InputDecoration(
           hintText: 'Observaciones del pesaje...',
           border: OutlineInputBorder(),

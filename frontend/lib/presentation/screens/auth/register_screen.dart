@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/uppercase_formatter.dart';
 import '../../../core/widgets/brand_text.dart';
 import '../../providers/bloc/auth/auth_bloc.dart';
 
@@ -125,6 +126,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         v == null || v.trim().isEmpty
                                             ? 'Ingresa el nombre de la empresa'
                                             : null,
+                                    inputFormatters: const [
+                                      UpperCaseTextFormatter()
+                                    ],
                                   ),
                                   const SizedBox(height: 16),
                                   TextFormField(
@@ -138,6 +142,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         v == null || v.trim().isEmpty
                                             ? 'Ingresa el RIF'
                                             : null,
+                                    inputFormatters: const [
+                                      UpperCaseTextFormatter()
+                                    ],
                                   ),
                                   const SizedBox(height: 20),
                                   Align(
@@ -163,6 +170,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         v == null || v.trim().isEmpty
                                             ? 'Ingresa tu nombre'
                                             : null,
+                                    inputFormatters: const [
+                                      UpperCaseTextFormatter()
+                                    ],
                                   ),
                                   const SizedBox(height: 16),
                                   TextFormField(
@@ -223,6 +233,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           Icon(Icons.vpn_key_outlined),
                                       border: OutlineInputBorder(),
                                     ),
+                                    inputFormatters: const [
+                                      UpperCaseTextFormatter()
+                                    ],
                                   ),
                                   if (_error != null) ...[
                                     const SizedBox(height: 12),

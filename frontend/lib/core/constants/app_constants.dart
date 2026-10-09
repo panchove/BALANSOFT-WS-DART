@@ -8,4 +8,8 @@ class AppConstants {
   static const int maxSyncRetries = 3;
   static const int syncIntervalMinutes = 2;
   static const int healthCheckSeconds = 10;
+
+  // Backups automáticos por inactividad (REQ-NF-BKP-001; estación SERVIDOR).
+  // Mismo valor por defecto que `backup_auto_idle_minutes` del backend.
+  static const int backupAutoIdleMinutes = 5;
 }

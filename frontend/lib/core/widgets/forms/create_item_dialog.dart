@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../i18n/translations.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
+import '../../utils/uppercase_formatter.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
 
@@ -380,11 +381,15 @@ class _CreateItemDialogState extends State<_CreateItemDialog> {
       textInputAction:
           esUltimo ? TextInputAction.done : TextInputAction.next,
       onFieldSubmitted: (_) => _avanzar(campo),
-      inputFormatters: campo.tipo == CrearCampoTipo.numero
-          ? [
-              FilteringTextInputFormatter.allow(RegExp(r'[\d.\-]')),
-            ]
-          : null,
+      inputFormatters: switch (campo.tipo) {
+        CrearCampoTipo.numero => [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.\-]')),
+          ],
+        CrearCampoTipo.texto || CrearCampoTipo.multilinea => const [
+            UpperCaseTextFormatter(),
+          ],
+        _ => null,
+      },
       decoration: InputDecoration(
         labelText: labelTraducido + (campo.requerido ? ' *' : ''),
         prefixIcon: Icon(campo.icon),

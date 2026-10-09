@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/i18n/translations.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/uppercase_formatter.dart';
 import '../../../providers/bloc/auth/auth_bloc.dart';
 
 class RegisterFormContent extends StatefulWidget {
@@ -102,6 +103,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
             style: const TextStyle(color: Colors.white),
             decoration: _buildInputDecoration('Nombre de la Empresa', Icons.business_outlined),
             validator: (v) => v == null || v.trim().isEmpty ? 'Ingresa el nombre de la empresa' : null,
+            inputFormatters: const [UpperCaseTextFormatter()],
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -109,6 +111,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
             style: const TextStyle(color: Colors.white),
             decoration: _buildInputDecoration('RIF / NIT', Icons.badge_outlined),
             validator: (v) => v == null || v.trim().isEmpty ? 'Ingresa el RIF' : null,
+            inputFormatters: const [UpperCaseTextFormatter()],
           ),
 
           const SizedBox(height: 20),
@@ -126,6 +129,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
             style: const TextStyle(color: Colors.white),
             decoration: _buildInputDecoration('Nombre del Usuario', Icons.person_outline),
             validator: (v) => v == null || v.trim().isEmpty ? 'Ingresa tu nombre' : null,
+            inputFormatters: const [UpperCaseTextFormatter()],
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -165,6 +169,7 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
             controller: _licenciaCtrl,
             style: const TextStyle(color: Colors.white),
             decoration: _buildInputDecoration('Clave de Licencia', Icons.vpn_key_outlined, hintText: 'WS-XXXX-XXXX-XXXX-XXXX'),
+            inputFormatters: const [UpperCaseTextFormatter()],
           ),
           const SizedBox(height: 28),
 

@@ -628,6 +628,10 @@ OFFLINE_GRACE_DAYS=7
 CORS_ORIGINS=["http://localhost:8003"]
 ```
 
+> **Respaldo automático** (`GET/POST /api/v1/backups*`): `BACKUP_DIR` (default `backups`, relativo al CWD). El WServer reescribe esta clave al generar el `.env` con la **ruta absoluta del runtime** (`~/balansoft-ws/wserver/backups`), que `asegurar_estructura()` crea siempre; así no depende del directorio de trabajo, que en instalaciones tipo Program Files no es escribible. En dev, si `backend/backups` queda con permisos restrictivos (p. ej. creado con sudo), fijar `BACKUP_DIR` a una ruta escribible o corregir el propietario; el endpoint registra la causa real en el log (`PermissionError`, etc.) en vez de un 500 ciego.
+>
+> **Rotación abuelo-padre-hijo (GFS)**: al crear cada snapshot se conserva el **último** de cada día (`BACKUP_KEEP_DAILY`, hijo), semana ISO (`BACKUP_KEEP_WEEKLY`, padre) y mes calendario (`BACKUP_KEEP_MONTHLY`, abuelo) dentro de las últimas N ventanas; el resto se elimina. Un mismo archivo puede cubrir varios niveles. `BACKUP_RETENTION_DAYS` es un límite duro opcional de edad: `0` = sin límite (solo gobierna el GFS); un valor > 0 elimina también cualquier snapshot (incluso mensual) más viejo que esa edad. El timestamp del **nombre** del archivo es la fuente de verdad (no el mtime). El backup de seguridad previo a una restauración (`motivo=pre-restauracion`) entra en la misma rotación.
+
 ---
 
 ### 11.4 Documentación de API (`/docs`, `/redoc`, `/openapi.json`)

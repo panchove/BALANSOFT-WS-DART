@@ -81,6 +81,16 @@ def asegurar_estructura(home: Path) -> None:
         )
     texto = plantilla.read_text(encoding="utf-8")
     texto = texto.replace("__SECRET_KEY__", secrets.token_hex(32))
+    # ``BACKUP_DIR=backups`` (relativo al CWD) puede quedar ilegible en
+    # instalaciones (p. ej. Program Files): se fija al directorio de
+    # respaldos del runtime, que asegurar_estructura() ya creó arriba.
+    if "BACKUP_DIR=backups" in texto:
+        texto = texto.replace("BACKUP_DIR=backups", f"BACKUP_DIR={(home / 'backups')}")
+    else:
+        print(
+            "[WServer] Aviso: la plantilla no trae BACKUP_DIR=backups; "
+            "el directorio de respaldos quedará relativo al CWD."
+        )
     env_file.write_text(texto, encoding="utf-8")
     print(f"[WServer] .env generado en {env_file}")
 

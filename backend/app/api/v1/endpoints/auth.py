@@ -46,6 +46,7 @@ from app.services.password_reset_service import (
     reset_pwd,
     solicitar_reset_pwd,
 )
+from app.services.seed_service import SeedService
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
@@ -165,6 +166,11 @@ async def register(
     await db.refresh(usuario)
     await db.refresh(empresa)
 
+    # Seed inicial de catálogos (REQ-FN-023): primer arranque de la empresa.
+    # Nunca rompe el flujo de auth: la siembra y el commit están protegidos
+    # dentro del servicio (ante cualquier fallo hace rollback y continúa).
+    await SeedService.sembrar_si_aplicable(db, empresa)
+
     access = create_access_token(str(usuario.id_usuario), extra={"rol": usuario.rol})
     refresh = create_refresh_token(str(usuario.id_usuario))
     return {
@@ -261,6 +267,12 @@ async def login(
             ) from e
 
     inc_active_user((empresa.licencia_tier or "UNKNOWN").upper())
+
+    # Seed inicial de catálogos (REQ-FN-023): si la empresa aún no tiene
+    # catálogos (primer arranque), sembrar la base y confirmar (nunca rompe
+    # el login: el servicio protege siembra y commit con rollback).
+    await SeedService.sembrar_si_aplicable(db, empresa)
+
     access = create_access_token(str(usuario.id_usuario), extra={"rol": usuario.rol})
     refresh = create_refresh_token(str(usuario.id_usuario))
     return LoginResponse(
@@ -485,6 +497,9 @@ async def login_central(
     await db.refresh(usuario_admin)
     await db.refresh(empresa)
 
+    # Seed inicial de catálogos (REQ-FN-023): primer arranque del espejo local.
+    await SeedService.sembrar_si_aplicable(db, empresa)
+
     access = create_access_token(str(usuario_admin.id_usuario), extra={"rol": usuario_admin.rol})
     refresh = create_refresh_token(str(usuario_admin.id_usuario))
     licencia_local: dict | None = {
@@ -542,6 +557,9 @@ async def login_local(
     ).scalar_one()
     if not empresa.activa:
         raise HTTPException(status_code=403, detail="Empresa inactiva")
+
+    # Seed inicial de catálogos (REQ-FN-023): primer arranque sin red local.
+    await SeedService.sembrar_si_aplicable(db, empresa)
 
     access = create_access_token(
         str(usuario.id_usuario), extra={"rol": usuario.rol, "offline": True}

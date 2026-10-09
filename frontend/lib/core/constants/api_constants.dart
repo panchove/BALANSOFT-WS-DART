@@ -110,4 +110,12 @@ class ApiConstants {
   static const String syncUsuariosPendientes = '$apiPrefix/sync/usuarios/pendientes';
   static const String syncUsuariosEntregados = '$apiPrefix/sync/usuarios/entregados';
   static const String syncUsersServer = '$apiPrefix/sync/users';
+
+  // Backups de estación (REQ-NF-BKP-001/002/003; rol local)
+  static const String backupsBase = '$apiPrefix/backups';
+  static const String backupsAuto = '$apiPrefix/backups/auto';
+  static String backupDownload(String archivo) =>
+      '$apiPrefix/backups/$archivo/download';
+  static String backupRestore(String archivo) =>
+      '$apiPrefix/backups/$archivo/restore';
 }

@@ -19,6 +19,7 @@ import 'connections_screen.dart';
 import 'usuarios_screen.dart';
 import 'system_diagnostics_screen.dart';
 import 'typography_settings_screen.dart';
+import 'backups_screen.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
@@ -263,6 +264,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'Archivos',
         children: [_DirectorioTile()],
       ),
+      // Respaldos de estación: solo en la máquina que aloja la BD local
+      // (el TRABAJADOR es cliente delgado y no tiene datos propios).
+      if (AppConfig.esServidor)
+        _SectionCard(
+          icon: Icons.backup_outlined,
+          title: 'backup_titulo'.tr(),
+          children: [
+            ListTile(
+              leading: const Icon(Icons.backup_outlined),
+              title: Text('backup_titulo'.tr()),
+              subtitle: Text('backup_crear'.tr()),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BackupsScreen()),
+              ),
+            ),
+          ],
+        ),
       _cierreSesion(context),
     ];
 

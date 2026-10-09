@@ -55,9 +55,15 @@ void main() async {
     await windowManager.ensureInitialized();
     await windowManager.setPreventClose(true);
     // La estación arranca maximizada (el operador no debe redimensionar).
+    // El `center: true` de las opciones se aplica al mostrar la ventana, así
+    // que `maximize()` se pide después de `show()`/`focus()` para que la
+    // maximización sea la última palabra y no compita con el centrado
+    // (REQ-FN-020).
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(minimumSize: Size(1280, 800), center: true),
       () async {
+        await windowManager.show();
+        await windowManager.focus();
         await windowManager.maximize();
       },
     );

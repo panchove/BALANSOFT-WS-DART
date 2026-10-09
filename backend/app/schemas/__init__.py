@@ -831,3 +831,36 @@ class AjusteInventarioOut(BaseModel):
     documento: str | None
     fecha_kardex: datetime
     created_at: datetime
+
+
+class SeedCatalogosResponse(BaseModel):
+    """Resultado de la siembra inicial de catálogos (REQ-FN-023)."""
+
+    aplicado: bool
+    categorias: int
+    productos: int
+    almacenes: int
+
+
+class BackupOut(BaseModel):
+    """Metadatos de un snapshot de estación (REQ-NF-BKP-001/002/003)."""
+
+    archivo: str
+    creado_en: datetime
+    motivo: str
+    tamano_bytes: int
+    id_empresa: uuid.UUID
+    empresa_nombre: str | None
+    empresa_rif: str | None
+    conteos: dict[str, int]
+    version: int
+
+
+class BackupRestoreRequest(BaseModel):
+    confirmar: bool = False
+
+
+class BackupRestoreResponse(BaseModel):
+    archivo: str
+    restaurados: dict[str, int]
+    advertencia: str

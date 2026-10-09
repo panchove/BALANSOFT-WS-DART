@@ -4,6 +4,7 @@ import '../../i18n/translations.dart';
 
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
+import '../../utils/uppercase_formatter.dart';
 import 'create_item_dialog.dart';
 
 class CreatableSpec<T> {
@@ -217,6 +218,7 @@ class _AutocompleteCreatableState<T extends Object>
                 : null,
           ),
           textCapitalization: TextCapitalization.none,
+          inputFormatters: const [UpperCaseTextFormatter()],
           validator: widget.required
               ? (v) => Validators.required(v, widget.fieldName)
               : null,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
+import '../../../application/backup/auto_backup_service.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/locale_controller.dart';
@@ -101,6 +102,9 @@ class _HomeShellState extends State<HomeShell> {
     context.read<WeighingBloc>().add(const ListWeighingsEvent());
     ServicesBinding.instance.keyboard.addHandler(_onKey);
     WidgetsBinding.instance.addPostFrameCallback((_) => _abrirOnboardingSiFalta());
+    // Respaldo automático por inactividad (REQ-NF-BKP-001): solo arranca en
+    // estaciones SERVIDOR; el servicio se detiene al cerrar la sesión.
+    AutoBackupService.instance.iniciar();
   }
 
   /// Primera instalación: el primer ADMIN completa empresa, formatos de
@@ -146,6 +150,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     ServicesBinding.instance.keyboard.removeHandler(_onKey);
+    AutoBackupService.instance.detener();
     super.dispose();
   }
 
@@ -177,6 +182,9 @@ class _HomeShellState extends State<HomeShell> {
 
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    // Toda interacción de teclado cuenta como actividad para el respaldo
+    // automático por inactividad (mismo efecto que el puntero).
+    AutoBackupService.instance.registrarActividad();
     final key = event.logicalKey;
     final kb = HardwareKeyboard.instance;
     final ctrl = kb.isControlPressed || kb.isMetaPressed;
@@ -857,19 +865,23 @@ class _HomeShellState extends State<HomeShell> {
       listener: (context, state) {
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
       },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            if (!usarSidebar)
-              _buildMobileBody(idx, contenido)
-            else
-              _buildDesktopBody(idx, contenido),
-            if (_commandPaletteOpen)
-              CommandPalette(
-                onClose: () => setState(() => _commandPaletteOpen = false),
-                onExecute: _onCommandPaletteCommand,
-              ),
-          ],
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => AutoBackupService.instance.registrarActividad(),
+        child: Scaffold(
+          body: Stack(
+            children: [
+              if (!usarSidebar)
+                _buildMobileBody(idx, contenido)
+              else
+                _buildDesktopBody(idx, contenido),
+              if (_commandPaletteOpen)
+                CommandPalette(
+                  onClose: () => setState(() => _commandPaletteOpen = false),
+                  onExecute: _onCommandPaletteCommand,
+                ),
+            ],
+          ),
         ),
       ),
     );

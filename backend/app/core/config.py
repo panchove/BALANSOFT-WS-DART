@@ -142,7 +142,17 @@ class Settings(BaseSettings):
 
     # Backups
     backup_dir: str = "backups"
-    backup_retention_days: int = 30
+    # Rotación GFS (abuelo-padre-hijo): conserva el último snapshot de cada
+    # día (hijo), semana ISO (padre) y mes calendario (abuelo) dentro de las
+    # últimas N ventanas. ``0`` en un nivel desactiva esa capa. La retención
+    # dura por edad es opcional: ``0`` = sin límite (solo gobierna el GFS).
+    backup_retention_days: int = 0
+    backup_keep_daily: int = 7
+    backup_keep_weekly: int = 5
+    backup_keep_monthly: int = 12
+    #: Minutos de inactividad del operador tras los cuales la app Flutter
+    #: dispara ``POST /api/v1/backups/auto`` en estaciones SERVIDOR.
+    backup_auto_idle_minutes: int = 5
 
     @model_validator(mode="after")
     def _validar_entorno_produccion(self) -> Settings:
