@@ -92,6 +92,11 @@ class CompanySetupForm extends StatefulWidget {
   /// (se cambian desde el panel del proveedor).
   final bool initialLock;
 
+  /// Logo ya guardado en el servidor (URL **absoluta**, resuelta por el
+  /// llamador). Se muestra como referencia en el paso 1 para que no parezca
+  /// que el logo "se perdió" al reabrir el formulario.
+  final String? logoUrlExistente;
+
   const CompanySetupForm({
     super.key,
     required this.localeController,
@@ -102,6 +107,7 @@ class CompanySetupForm extends StatefulWidget {
     this.mostrarOmitir = true,
     this.onOmitir,
     this.initialLock = false,
+    this.logoUrlExistente,
   });
 
   @override
@@ -213,9 +219,22 @@ class CompanySetupFormState extends State<CompanySetupForm> {
   }
 
   Future<void> _siguiente() async {
+    if (_paso >= 2) return;
     if (_paso == 1) await _aplicarIdiomaLocal();
-    if (_paso == 0) await _verificarRuta();
-    if (mounted) setState(() => _paso++);
+    if (mounted) {
+      _pages.nextPage(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _anterior() {
+    if (_paso <= 0) return;
+    _pages.previousPage(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _finalizar() async {
@@ -242,6 +261,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
                 child: PageView(
                   controller: _pages,
                   physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _paso = i),
                   children: [_pasoEmpresa(), _pasoFormatos(), _pasoReportes()],
                 ),
               ),
@@ -257,10 +277,10 @@ class CompanySetupFormState extends State<CompanySetupForm> {
     return _lista([
       Text(
         'initial_setup_step_company'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: SwsColors.white,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
       const SizedBox(height: 16),
@@ -269,6 +289,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
         fotos: _logo,
         onChanged: (f) => setState(() => _logo = f),
         maxFotos: 1,
+        imagenUrl: widget.logoUrlExistente,
       ),
       const SizedBox(height: 16),
       _texto(0, 'initial_setup_company_legal_name', Icons.badge_outlined,
@@ -291,10 +312,10 @@ class CompanySetupFormState extends State<CompanySetupForm> {
     return _lista([
       Text(
         'initial_setup_step_appearance'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: SwsColors.white,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
       const SizedBox(height: 6),
@@ -302,7 +323,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
         'setup_language_note'.tr(),
         style: TextStyle(
           fontSize: 12,
-          color: SwsColors.white.withValues(alpha: 0.6),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
       const SizedBox(height: 20),
@@ -336,10 +357,10 @@ class CompanySetupFormState extends State<CompanySetupForm> {
     return _lista([
       Text(
         'initial_setup_step_reports'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: SwsColors.white,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
       const SizedBox(height: 6),
@@ -347,13 +368,13 @@ class CompanySetupFormState extends State<CompanySetupForm> {
         'initial_setup_reports_folder_hint'.tr(),
         style: TextStyle(
           fontSize: 12,
-          color: SwsColors.white.withValues(alpha: 0.6),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
       const SizedBox(height: 16),
       TextField(
         controller: _crear(6, ''),
-        style: const TextStyle(color: SwsColors.white),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
         decoration: InputDecoration(
           labelText: 'initial_setup_reports_folder'.tr(),
           prefixIcon: const Icon(Icons.folder_open_rounded),
@@ -415,14 +436,18 @@ class CompanySetupFormState extends State<CompanySetupForm> {
       controller: _crear(indice, ''),
       readOnly: bloqueado,
       style: TextStyle(
-        color: bloqueado ? Colors.white70 : SwsColors.white,
+        color: bloqueado
+            ? Theme.of(context).colorScheme.onSurfaceVariant
+            : Theme.of(context).colorScheme.onSurface,
       ),
       decoration: InputDecoration(
         labelText: etiqueta.tr(),
         prefixIcon: Icon(icono),
         helperText: bloqueado ? 'company_field_from_server'.tr() : null,
-        helperStyle:
-            const TextStyle(fontSize: 11, color: SwsColors.accentLight),
+        helperStyle: TextStyle(
+          fontSize: 11,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -437,8 +462,8 @@ class CompanySetupFormState extends State<CompanySetupForm> {
     return DropdownButtonFormField<String>(
       initialValue: valor,
       isExpanded: true,
-      dropdownColor: SwsColors.darkCard,
-      style: const TextStyle(color: SwsColors.white),
+      dropdownColor: Theme.of(context).colorScheme.surface,
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
       decoration: InputDecoration(
         labelText: etiqueta.tr(),
         prefixIcon: Icon(icono),
@@ -449,7 +474,8 @@ class CompanySetupFormState extends State<CompanySetupForm> {
             value: o,
             child: Text(
               o == 'system' ? 'language_system'.tr() : _etiquetaFormato(o),
-              style: const TextStyle(color: SwsColors.white),
+              style:
+                  TextStyle(color: Theme.of(context).colorScheme.onSurface),
             ),
           ),
       ],
@@ -492,7 +518,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: OutlinedButton(
-                    onPressed: _enviando ? null : () => setState(() => _paso--),
+                    onPressed: _enviando ? null : _anterior,
                     child: Text('btn_back'.tr()),
                   ),
                 ),
@@ -542,9 +568,9 @@ class _StepperHeader extends StatelessWidget {
         children: [
           Text(
             titulos[paso].tr(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: SwsColors.accentLight,
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -557,8 +583,8 @@ class _StepperHeader extends StatelessWidget {
                     height: 4,
                     decoration: BoxDecoration(
                       color: i <= paso
-                          ? SwsColors.accentLight
-                          : SwsColors.surfaceGlassBorder,
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),

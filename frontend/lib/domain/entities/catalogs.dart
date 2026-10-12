@@ -357,6 +357,12 @@ class Scale {
   final String? ipAddress;
   final int? puertoTcp;
   final String protocolo;
+  /// Formato de la trama en el cable: `auto` | `json` | `ascii` (migración 022).
+  final String formatoTrama;
+  /// Velocidad serial (solo aplica a `serial`).
+  final int baudrate;
+  /// Separador de trama: `lf` | `cr` | `crlf` | `stx_etx` (NULL = `lf`).
+  final String? delimitador;
 
   const Scale({
     required this.id,
@@ -372,6 +378,9 @@ class Scale {
     this.ipAddress,
     this.puertoTcp,
     this.protocolo = 'tcp',
+    this.formatoTrama = 'auto',
+    this.baudrate = 9600,
+    this.delimitador,
   });
 
   factory Scale.fromJson(Map<String, dynamic> json) => Scale(
@@ -388,6 +397,9 @@ class Scale {
         ipAddress: json['ip_address'],
         puertoTcp: (json['puerto_tcp'] as num?)?.toInt(),
         protocolo: json['protocolo'] ?? 'tcp',
+        formatoTrama: (json['formato_trama'] as String?) ?? 'auto',
+        baudrate: (json['baudrate'] as num?)?.toInt() ?? 9600,
+        delimitador: json['delimitador'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -404,6 +416,9 @@ class Scale {
         'ip_address': ipAddress,
         'puerto_tcp': puertoTcp,
         'protocolo': protocolo,
+        'formato_trama': formatoTrama,
+        'baudrate': baudrate,
+        'delimitador': delimitador,
       };
 
   String get etiqueta => codigo != null ? '$codigo - $descripcion' : descripcion;

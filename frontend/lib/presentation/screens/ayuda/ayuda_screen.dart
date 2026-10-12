@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/welcome_guide_dialog.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
 
@@ -18,6 +19,49 @@ class AyudaScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: SwsColors.blue100,
+                        foregroundColor: SwsColors.primary,
+                        child: Icon(Icons.school_outlined, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'help_quick_guide_section'.tr(),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'help_quick_guide_desc'.tr(),
+                    style:
+                        const TextStyle(color: SwsColors.gray600, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      key: const Key('ayuda_guia_btn'),
+                      onPressed: () => mostrarGuiaRapida(context),
+                      icon: const Icon(Icons.play_circle_outline, size: 18),
+                      label: Text('help_open_guide'.tr()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(

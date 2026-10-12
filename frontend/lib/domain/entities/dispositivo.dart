@@ -17,6 +17,8 @@ class ScaleDescubierta {
   final String? puertoCom;
   final double? pesoKg;
   final bool isSimulada;
+  /// Formato de trama detectado/propuesto: `auto` | `json` | `ascii`.
+  final String formatoTrama;
 
   const ScaleDescubierta({
     required this.descripcion,
@@ -26,6 +28,7 @@ class ScaleDescubierta {
     this.puertoCom,
     this.pesoKg,
     this.isSimulada = false,
+    this.formatoTrama = 'auto',
   });
 
   factory ScaleDescubierta.fromJson(Map<String, dynamic> json) =>
@@ -37,6 +40,7 @@ class ScaleDescubierta {
         puertoCom: json['puerto_com'] as String?,
         pesoKg: (json['peso_kg'] as num?)?.toDouble(),
         isSimulada: json['is_simulada'] as bool? ?? false,
+        formatoTrama: json['formato_trama'] as String? ?? 'auto',
       );
 
   /// Configuración de hardware resumida para mostrar en la UI.

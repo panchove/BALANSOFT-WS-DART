@@ -375,6 +375,41 @@ class AppTranslations {
       'initial_setup_saving': 'Guardando configuración...',
       'initial_setup_saved': 'Configuración inicial guardada',
       'initial_setup_error': 'No se pudo guardar la configuración: ',
+      // ── Mini tutorial de bienvenida (una vez; repetible desde Ayuda) ───────
+      'tutorial_title': 'Guía rápida',
+      'tutorial_subtitle':
+          'Te mostramos lo esencial para empezar a pesar. Puedes repetirlo desde Ayuda.',
+      'tutorial_step': 'Paso {0} de {1}',
+      'tutorial_next': 'Siguiente',
+      'tutorial_back': 'Anterior',
+      'tutorial_skip': 'Saltar',
+      'tutorial_finish': 'Finalizar',
+      'tutorial_shortcut': 'Atajo',
+      'tutorial_sidebar_title': 'Barra lateral',
+      'tutorial_sidebar_text':
+          'Desde aquí navegas a todos los módulos: Operación Báscula, Catálogos, Reportes y Mantenimiento. Pulsa F10 para ocultarla y ganar espacio.',
+      'tutorial_dashboard_title': 'Inicio',
+      'tutorial_dashboard_text':
+          'Resumen del día: pesajes recientes, totales y estado de la estación. Ctrl+1 te devuelve aquí desde cualquier módulo.',
+      'tutorial_quick_actions_title': 'Acciones rápidas',
+      'tutorial_quick_actions_text':
+          'Pesaje Manual y Pesaje Auto abren el boleto; Ajustes de Inventario corrige existencias y Auditoría revisa la bitácora.',
+      'tutorial_weighing_title': 'Pesaje',
+      'tutorial_weighing_text':
+          'F2 nuevo pesaje de entrada, F3 congela el peso de la báscula, F4 guarda, F5 imprime el boleto y F6 registra la salida. Esc cancela.',
+      'tutorial_palette_title': 'Paleta de comandos',
+      'tutorial_palette_text':
+          'Pulsa Ctrl+K y escribe go:in, go:out, new:truck, t:#123 o p:PLACA para navegar o buscar rápido sin usar el menú.',
+      'tutorial_connection_title': 'Conexión y usuario',
+      'tutorial_connection_text':
+          'El indicador SYNC/LOCAL muestra si la estación está en línea. Ctrl+L bloquea la sesión y Ctrl+Q sale del sistema.',
+      'tutorial_help_title': 'Ayuda y soporte',
+      'tutorial_help_text':
+          'Este tutorial siempre está disponible desde el menú Ayuda y Soporte, donde también encontrarás el correo de soporte.',
+      'help_quick_guide_section': 'Guía rápida',
+      'help_quick_guide_desc':
+          'Recorre los módulos, los botones principales y los atajos más usados del sistema.',
+      'help_open_guide': 'Ver guía rápida',
       'initial_setup_reopen': 'Configuración inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture el peso y guarde',
       'weighing_save_first': 'Guarde el pesaje primero para imprimir',
@@ -625,6 +660,16 @@ class AppTranslations {
       'connection': 'Conexión',
       'tcp': 'TCP',
       'serial': 'Serial',
+      'frame_format': 'Formato de trama',
+      'frame_auto': 'Automático',
+      'frame_json': 'JSON (simulador)',
+      'frame_ascii': 'ASCII (indicador real)',
+      'baudrate': 'Velocidad (baudios)',
+      'frame_delimiter': 'Delimitador de trama',
+      'delimiter_lf': 'Salto de línea (LF)',
+      'delimiter_cr': 'Retorno de carro (CR)',
+      'delimiter_crlf': 'CR + LF',
+      'delimiter_stx_etx': 'STX…ETX',
       'printer_active_saved':
           'Impresora activa guardada exitosamente en el módulo de dispositivos',
       'printers_connected': 'Impresoras Conectadas al Sistema',
@@ -1163,6 +1208,41 @@ class AppTranslations {
       'initial_setup_saving': 'Saving configuration...',
       'initial_setup_saved': 'Initial configuration saved',
       'initial_setup_error': 'Could not save the configuration: ',
+      // ── Welcome mini-tutorial (once; repeatable from Help) ─────────────────
+      'tutorial_title': 'Quick Guide',
+      'tutorial_subtitle':
+          'Here is what you need to know to start weighing. You can repeat it from Help.',
+      'tutorial_step': 'Step {0} of {1}',
+      'tutorial_next': 'Next',
+      'tutorial_back': 'Back',
+      'tutorial_skip': 'Skip',
+      'tutorial_finish': 'Finish',
+      'tutorial_shortcut': 'Shortcut',
+      'tutorial_sidebar_title': 'Sidebar',
+      'tutorial_sidebar_text':
+          'From here you navigate to every module: Scale Operation, Catalogs, Reports and Maintenance. Press F10 to hide it and gain space.',
+      'tutorial_dashboard_title': 'Home',
+      'tutorial_dashboard_text':
+          'Daily summary: recent weighings, totals and station status. Ctrl+1 returns here from any module.',
+      'tutorial_quick_actions_title': 'Quick actions',
+      'tutorial_quick_actions_text':
+          'Manual and Auto Weighing open the ticket; Inventory Adjustments correct stock and Audit reviews the system log.',
+      'tutorial_weighing_title': 'Weighing',
+      'tutorial_weighing_text':
+          'F2 new inbound weighing, F3 freezes the scale reading, F4 saves, F5 prints the ticket and F6 records the outbound. Esc cancels.',
+      'tutorial_palette_title': 'Command palette',
+      'tutorial_palette_text':
+          'Press Ctrl+K and type go:in, go:out, new:truck, t:#123 or p:PLATE to navigate or search fast without the menu.',
+      'tutorial_connection_title': 'Connection and user',
+      'tutorial_connection_text':
+          'The SYNC/LOCAL indicator shows whether the station is online. Ctrl+L locks the session and Ctrl+Q quits the system.',
+      'tutorial_help_title': 'Help and support',
+      'tutorial_help_text':
+          'This tutorial is always available from the Help and Support menu, where you will also find the support email.',
+      'help_quick_guide_section': 'Quick guide',
+      'help_quick_guide_desc':
+          'Walk through the modules, the main buttons and the most used shortcuts.',
+      'help_open_guide': 'View quick guide',
       'initial_setup_reopen': 'Initial configuration',
       'weighing_entry_mode_title': 'Entry mode — capture the weight and save',
       'weighing_save_first': 'Save the weighing first to print',
@@ -1402,6 +1482,16 @@ class AppTranslations {
       'connection': 'Connection',
       'tcp': 'TCP',
       'serial': 'Serial',
+      'frame_format': 'Frame format',
+      'frame_auto': 'Automatic',
+      'frame_json': 'JSON (simulator)',
+      'frame_ascii': 'ASCII (real indicator)',
+      'baudrate': 'Baud rate',
+      'frame_delimiter': 'Frame delimiter',
+      'delimiter_lf': 'Line feed (LF)',
+      'delimiter_cr': 'Carriage return (CR)',
+      'delimiter_crlf': 'CR + LF',
+      'delimiter_stx_etx': 'STX…ETX',
       'printer_active_saved':
           'Active printer saved successfully in the devices module',
       'printers_connected': 'Printers Connected to the System',
@@ -1932,6 +2022,41 @@ class AppTranslations {
       'initial_setup_saving': 'Salvando configuração...',
       'initial_setup_saved': 'Configuração inicial salva',
       'initial_setup_error': 'Não foi possível salvar a configuração: ',
+      // ── Mini tutorial de boas-vindas (uma vez; repetível em Ajuda) ─────────
+      'tutorial_title': 'Guia rápida',
+      'tutorial_subtitle':
+          'Veja o essencial para começar a pesar. Dá para repetir em Ajuda.',
+      'tutorial_step': 'Passo {0} de {1}',
+      'tutorial_next': 'Próximo',
+      'tutorial_back': 'Anterior',
+      'tutorial_skip': 'Pular',
+      'tutorial_finish': 'Concluir',
+      'tutorial_shortcut': 'Atalho',
+      'tutorial_sidebar_title': 'Barra lateral',
+      'tutorial_sidebar_text':
+          'A partir daqui você navega para todos os módulos: Operação de Balança, Catálogos, Relatórios e Manutenção. Pressione F10 para ocultá-la e ganhar espaço.',
+      'tutorial_dashboard_title': 'Início',
+      'tutorial_dashboard_text':
+          'Resumo do dia: pesagens recentes, totais e status da estação. Ctrl+1 volta para cá de qualquer módulo.',
+      'tutorial_quick_actions_title': 'Ações rápidas',
+      'tutorial_quick_actions_text':
+          'Pesagem Manual e Pesagem Auto abrem o ticket; Ajustes de Estoque corrigem o saldo e Auditoria revisa o histórico do sistema.',
+      'tutorial_weighing_title': 'Pesagem',
+      'tutorial_weighing_text':
+          'F2 nova pesagem de entrada, F3 congela o peso da balança, F4 salva, F5 imprime o ticket e F6 registra a saída. Esc cancela.',
+      'tutorial_palette_title': 'Paleta de comandos',
+      'tutorial_palette_text':
+          'Pressione Ctrl+K e digite go:in, go:out, new:truck, t:#123 ou p:PLACA para navegar ou buscar rápido sem usar o menu.',
+      'tutorial_connection_title': 'Conexão e usuário',
+      'tutorial_connection_text':
+          'O indicador SYNC/LOCAL mostra se a estação está on-line. Ctrl+L bloqueia a sessão e Ctrl+Q sai do sistema.',
+      'tutorial_help_title': 'Ajuda e suporte',
+      'tutorial_help_text':
+          'Este tutorial está sempre disponível no menu Ajuda e Suporte, onde você também encontrará o e-mail de suporte.',
+      'help_quick_guide_section': 'Guia rápida',
+      'help_quick_guide_desc':
+          'Percorra os módulos, os botões principais e os atalhos mais usados do sistema.',
+      'help_open_guide': 'Ver guia rápida',
       'initial_setup_reopen': 'Configuração inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture o peso e salve',
       'weighing_save_first': 'Salve a pesagem primeiro para imprimir',
@@ -2176,6 +2301,16 @@ class AppTranslations {
       'connection': 'Conexão',
       'tcp': 'TCP',
       'serial': 'Serial',
+      'frame_format': 'Formato de trama',
+      'frame_auto': 'Automático',
+      'frame_json': 'JSON (simulador)',
+      'frame_ascii': 'ASCII (indicador real)',
+      'baudrate': 'Velocidade (baud)',
+      'frame_delimiter': 'Delimitador de trama',
+      'delimiter_lf': 'Avanço de linha (LF)',
+      'delimiter_cr': 'Retorno de carro (CR)',
+      'delimiter_crlf': 'CR + LF',
+      'delimiter_stx_etx': 'STX…ETX',
       'printer_active_saved':
           'Impressora ativa salva com sucesso no módulo de dispositivos',
       'printers_connected': 'Impressoras Conectadas ao Sistema',

@@ -11,6 +11,7 @@ import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/utils/focus_search_bus.dart';
+import '../../../core/widgets/welcome_guide_dialog.dart';
 import '../../../data/datasources/local/local_storage.dart';
 import '../../../domain/entities/user.dart';
 import '../../../injection.dart' as di;
@@ -122,10 +123,27 @@ class _HomeShellState extends State<HomeShell> {
           onFinish: () {
             Navigator.of(ctx).pop();
             if (mounted) setState(() {});
+            // Tras completar la empresa, mini tutorial de bienvenida (una vez).
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _abrirTutorialSiEsPrimeraVez());
           },
         ),
       ),
     );
+  }
+
+  /// Primera instalación: después de completar la configuración inicial se
+  /// muestra el mini tutorial una sola vez (`AppConfig.tutorialVisto`). Se
+  /// puede repetir desde Ayuda y Soporte.
+  Future<void> _abrirTutorialSiEsPrimeraVez() async {
+    if (AppConfig.tutorialVisto ||
+        !AppConfig.onboardingCompletado ||
+        !mounted) {
+      return;
+    }
+    final usuario = await di.sl<LocalStorage>().getCachedUser();
+    if (!mounted || usuario == null || !_esAdmin(usuario)) return;
+    await mostrarGuiaRapida(context, marcarVisto: true);
   }
 
   bool _esAdmin(User usuario) {

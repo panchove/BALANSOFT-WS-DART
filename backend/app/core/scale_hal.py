@@ -1,14 +1,28 @@
 """HAL (Hardware Abstraction Layer) de balanza (B7 / REQ-NF-ARQ-004).
 
-Permite leer el peso en vivo desde hardware real (serial/RS-232) o desde un
-servidor TCP (p. ej. el simulador BSDD que emite líneas JSON
-``{"weight_kg":..., "status":"stable"}``).
+Permite leer el peso en vivo desde hardware real:
+
+- **Serial/RS-232/USB** (``pyserial``): lee una línea por lectura.
+- **TCP**: soporta tanto el simulador BSDD (líneas JSON
+  ``{"weight_kg":..., "status":"stable"}``) como **indicadores reales** que
+  emiten un flujo ASCII continuo (Toledo/GSI ``ST,GS,+00320.00kg``, etc.).
+
+El parseo numérico vive en ``app/core/scale_parser.py`` (función pura
+``parse_weight_frame``), de modo que serial y TCP comparten la misma robustez
+(signo, prefijos de estado, STX/ETX, unidades, dirección adherida) y no hay
+falsos positivos con números desnudos.
 
 Por defecto la lectura es de un tiro (abre/cierra la conexión). El TCP además
 soporta **emparejamiento persistente** (``conectar``/``leer_muestra``/``cerrar``)
 que ``ScaleSession`` usa para mantener una misma conexión viva. ``get_scale_hal``
 decide la implementación según la configuración de la balanza (``puerto_com`` vs
-``ip_address``/``puerto_tcp``).
+``ip_address``/``puerto_tcp``) y propaga ``formato_trama``, ``baudrate`` y
+``delimitador``.
+
+**Formatos de trama** (``formato_trama``): ``auto`` (default; detecta JSON vs
+ASCII), ``json`` (simulador BSDD) y ``ascii`` (indicador de flujo continuo).
+**Delimitador** (``delimitador``): ``lf`` (default), ``cr``, ``crlf`` o
+``stx_etx``.
 
 **Concurrencia serial:** ``SerialScaleHAL`` usa un ``threading.Lock`` por ruta
 de puerto (compartido a nivel de clase). El bloqueo se aplica **dentro del
@@ -29,7 +43,22 @@ import threading
 import time
 from abc import ABC, abstractmethod
 
+from app.core.scale_parser import clasificar_trama, parse_weight_frame
+
 log = logging.getLogger("balansoft_ws.scale")
+
+#: Separadores de frame por nombre de delimitador.
+_DELIMITADORES: dict[str, bytes] = {
+    "lf": b"\n",
+    "cr": b"\r",
+    "crlf": b"\r\n",
+    "stx_etx": b"\x03",
+}
+
+
+def _normalizar_delimitador(delimitador: str | None) -> str:
+    valor = (delimitador or "lf").strip().lower()
+    return valor if valor in _DELIMITADORES else "lf"
 
 
 async def _cerrar_writer(writer: asyncio.StreamWriter | None) -> None:
@@ -45,6 +74,23 @@ async def _cerrar_writer(writer: asyncio.StreamWriter | None) -> None:
         await asyncio.wait_for(writer.wait_closed(), timeout=2.0)
     except (TimeoutError, OSError, ValueError):
         pass
+
+
+def _parse_json_line(linea: str) -> tuple[float | None, str | None]:
+    """Extrae ``(peso_kg, status)`` de una línea JSON (simulador BSDD)."""
+    try:
+        payload = json.loads(linea)
+    except ValueError:
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    peso = payload.get("weight_kg")
+    if peso is None:
+        return None, None
+    try:
+        return float(peso), payload.get("status")
+    except (TypeError, ValueError):
+        return None, None
 
 
 class ScaleHAL(ABC):
@@ -101,10 +147,21 @@ class SerialScaleHAL(ScaleHAL):
     _thread_locks: dict[str, threading.Lock] = {}
     _thread_locks_guard = threading.Lock()
 
-    def __init__(self, port: str, baudrate: int = 9600, timeout: float = 1):
+    def __init__(
+        self,
+        port: str,
+        baudrate: int = 9600,
+        timeout: float = 1,
+        formato_trama: str = "auto",
+        delimitador: str | None = None,
+        capacidad_max: float | None = None,
+    ):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
+        self.formato_trama = formato_trama
+        self.delimitador = _normalizar_delimitador(delimitador)
+        self.capacidad_max = capacidad_max
 
     @classmethod
     def _lock_for(cls, port: str) -> threading.Lock:
@@ -117,24 +174,29 @@ class SerialScaleHAL(ScaleHAL):
             return lock
 
     def _parse_line(self, line: str) -> float | None:
-        """Convierte una línea de la báscula en un número.
+        """Convierte una línea de la báscula en un número (multi-marca).
 
-        Acepta formatos como:
-        - ``+320.00``
-        - ``ST,GS,+00320.00kg``
-        - ``320.0``
+        Delegado en ``scale_parser.parse_weight_frame``; acepta formatos como
+        ``+320.00``, ``ST,GS,+00320.00kg``, ``ST,GS,+  320.00 kg``,
+        ``01+000320.0`` y ``-  12.50``, y rechaza números desnudos.
         """
-        t = line.strip()
-        if not t:
-            return None
-        # Quita unidades alfabéticas finales (kg, g, lb, etc.).
-        t = t.rstrip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        # Toma el último token y normaliza coma decimal → punto.
-        token = t.split()[-1].replace(",", ".")
-        try:
-            return float(token)
-        except (TypeError, ValueError):
-            return None
+        peso, _status, _motivo = parse_weight_frame(
+            line, capacidad_max=self.capacidad_max
+        )
+        return peso
+
+    def _leer_frame(self, ser) -> str:  # noqa: ANN001 - serial.Serial
+        """Lee una trama del puerto según el delimitador configurado."""
+        delim = self.delimitador
+        if delim == "cr":
+            raw = ser.read_until(b"\r")
+        elif delim == "crlf":
+            raw = ser.read_until(b"\r\n")
+        elif delim == "stx_etx":
+            raw = ser.read_until(b"\x03")
+        else:
+            raw = ser.readline()
+        return raw.decode("ascii", errors="ignore")
 
     async def read_weight(self) -> float | None:
         try:
@@ -172,7 +234,7 @@ class SerialScaleHAL(ScaleHAL):
                             ser.reset_input_buffer()
                         except Exception:  # noqa: BLE001
                             pass
-                        line = ser.readline().decode("ascii", errors="ignore")
+                        line = self._leer_frame(ser)
                     return self._parse_line(line)
                 except serial.SerialException as exc:
                     last_exc = exc
@@ -214,7 +276,22 @@ class SerialScaleHAL(ScaleHAL):
 
 
 class TcpScaleHAL(ScaleHAL):
-    """Balanza TCP (simulador BSDD): envía ``get_state`` y parsea el JSON."""
+    """Balanza TCP.
+
+    Soporta dos protocolos:
+
+    - **JSON** (simulador BSDD): ``{"weight_kg":..., "status":...}``; se pide
+      el estado escribiendo ``{"action":"get_state"}``.
+    - **ASCII continuo** (indicadores reales): el equipo empuja líneas como
+      ``ST,GS,+00320.00kg``; se parsean con ``scale_parser`` y **no** se le
+      escribe nada.
+
+    Con ``formato_trama="auto"`` (default) se abre la conexión, se esperan
+    uno o varios frames no solicitados durante una ventana corta y se decide:
+    si es ASCII, modo ASCII (sin escribir); si es JSON, modo JSON; si no llega
+    nada concluyente, queda en modo mixto que intenta JSON y luego ASCII por
+    línea y emite ``get_state`` (comportamiento del simulador BSDD).
+    """
 
     def __init__(
         self,
@@ -223,6 +300,9 @@ class TcpScaleHAL(ScaleHAL):
         timeout: float = 5.0,
         tolerance_kg: float = 0.5,
         intervalo: float = 0.5,
+        formato_trama: str = "auto",
+        delimitador: str | None = None,
+        capacidad_max: float | None = None,
     ):
         self.host = host
         self.port = port
@@ -230,8 +310,41 @@ class TcpScaleHAL(ScaleHAL):
         self.tolerance_kg = tolerance_kg
         # Cada cuánto pedir el estado si la balanza no empuja datos sola.
         self.intervalo = intervalo
+        self.formato_trama = formato_trama
+        self.delimitador = _normalizar_delimitador(delimitador)
+        self.capacidad_max = capacidad_max
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._modo: str | None = None
+        self._buffer: list[bytes] = []
+
+    # -- lectura de frames ------------------------------------------------
+
+    async def _leer_frame(self, reader: asyncio.StreamReader) -> bytes:
+        """Lee un frame del stream según el delimitador configurado."""
+        sep = _DELIMITADORES[self.delimitador]
+        if sep == b"\n":
+            return await reader.readline()
+        try:
+            return await reader.readuntil(sep)
+        except asyncio.IncompleteReadError as exc:
+            return exc.partial
+        except asyncio.LimitOverrunError:
+            return b""
+
+    def _decodificar(self, data: bytes) -> str:
+        return data.decode(errors="ignore").strip()
+
+    def _peso_json(self, linea: str) -> tuple[float | None, str | None]:
+        return _parse_json_line(linea)
+
+    def _peso_ascii(self, linea: str) -> tuple[float | None, str | None]:
+        peso, status, _motivo = parse_weight_frame(
+            linea, capacidad_max=self.capacidad_max
+        )
+        return peso, status
+
+    # -- emparejamiento persistente --------------------------------------
 
     async def conectar(self) -> bool:
         """Abre y **mantiene** la conexión TCP con la balanza.
@@ -253,29 +366,85 @@ class TcpScaleHAL(ScaleHAL):
             )
             await self.cerrar()
             return False
-        await self._pedir_estado()
+        await self._resolver_modo()
         return True
 
-    async def leer_muestra(self) -> tuple[float | None, str | None]:
-        """Lee la siguiente muestra JSON de la conexión abierta.
+    async def _resolver_modo(self) -> None:
+        """Decide el modo (``json``/``ascii``/``auto``) según ``formato_trama``.
 
-        - ``TimeoutError`` (sin datos en ``intervalo``): pide el estado y
-          devuelve ``(None, None)``.
+        - ``ascii``/``json``: modo fijo.
+        - ``auto``: se inspeccionan hasta unos pocos frames no solicitados
+          (básculas que empujan) dentro de una ventana corta; si alguno es
+          ASCII → ``ascii``, si es JSON → ``json``. Si no llega nada
+          concluyente (indicador lento o un banner inicial sin peso) queda en
+          ``auto``: por cada línea intenta JSON y luego ASCII, y se pide el
+          estado como haría el simulador BSDD.
+        """
+        fmt = (self.formato_trama or "auto").strip().lower()
+        if fmt == "ascii":
+            self._modo = "ascii"
+            return
+        if fmt == "json":
+            self._modo = "json"
+            await self._pedir_estado()
+            return
+
+        # auto: esperar uno o varios frames no solicitados.
+        self._modo = None
+        if self._reader is not None:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + min(self.timeout, 0.6)
+            for _ in range(5):
+                restante = deadline - loop.time()
+                if restante <= 0:
+                    break
+                try:
+                    data = await asyncio.wait_for(
+                        self._leer_frame(self._reader), timeout=restante
+                    )
+                except (TimeoutError, OSError):
+                    break
+                if not data:
+                    break
+                self._buffer.append(data)
+                tipo = clasificar_trama(self._decodificar(data))
+                if tipo == "ascii":
+                    self._modo = "ascii"
+                    break
+                if tipo == "json":
+                    self._modo = "json"
+                    break
+        if self._modo is None:
+            # Nada concluyente: modo mixto (JSON o ASCII por línea) + get_state.
+            self._modo = "auto"
+            await self._pedir_estado()
+
+    async def leer_muestra(self) -> tuple[float | None, str | None]:
+        """Lee la siguiente muestra de la conexión abierta.
+
+        - ``TimeoutError`` (sin datos en ``intervalo``): en modo JSON pide el
+          estado y devuelve ``(None, None)``.
         - EOF/caída: levanta ``ConnectionError`` para que la sesión reconecte.
         """
         if self._reader is None:
             raise ConnectionError("conexión TCP no abierta")
         reader = self._reader
-        try:
-            data = await asyncio.wait_for(reader.readline(), timeout=self.intervalo)
-        except TimeoutError:
-            await self._pedir_estado()
-            return None, None
+        if self._buffer:
+            data = self._buffer.pop(0)
+        else:
+            try:
+                data = await asyncio.wait_for(
+                    self._leer_frame(reader), timeout=self.intervalo
+                )
+            except TimeoutError:
+                if self._modo in ("json", "auto"):
+                    await self._pedir_estado()
+                return None, None
         if not data:
             raise ConnectionError("la balanza cerró la conexión")
-        # El simulador emite una línea por cada cambio de peso; al manipular la
-        # báscula se acumulan. Drenar (acotado) las líneas ya disponibles evita
-        # quedarse mostrando estados viejos y entrega la muestra más reciente.
+        # Si la balanza emite ráfagas (o el peso se está manipulando), drenar
+        # (acotado) las tramas ya disponibles evita quedarse con estados viejos
+        # y entrega la muestra más reciente.
         loop = asyncio.get_running_loop()
         deadline = loop.time() + 0.15
         for _ in range(50):
@@ -284,29 +453,25 @@ class TcpScaleHAL(ScaleHAL):
                 break
             try:
                 extra = await asyncio.wait_for(
-                    reader.readline(), timeout=min(0.02, restante)
+                    self._leer_frame(reader), timeout=min(0.02, restante)
                 )
             except TimeoutError:
                 break
             if not extra:
                 break
             data = extra
-        linea = data.decode(errors="ignore").strip()
+        linea = self._decodificar(data)
         if not linea:
             return None, None
-        try:
-            payload = json.loads(linea)
-        except ValueError:
-            return None, None
-        if not isinstance(payload, dict):
-            return None, None
-        peso = payload.get("weight_kg")
-        if peso is None:
-            return None, None
-        try:
-            return float(peso), payload.get("status")
-        except (TypeError, ValueError):
-            return None, None
+        if self._modo == "ascii":
+            return self._peso_ascii(linea)
+        if self._modo == "auto":
+            # Modo mixto: intenta JSON (BSDD) y, si no, ASCII (indicador real).
+            peso, status = self._peso_json(linea)
+            if peso is not None:
+                return peso, status
+            return self._peso_ascii(linea)
+        return self._peso_json(linea)
 
     async def _pedir_estado(self) -> None:
         if self._writer is None:
@@ -320,50 +485,87 @@ class TcpScaleHAL(ScaleHAL):
     async def cerrar(self) -> None:
         writer, self._writer = self._writer, None
         self._reader = None
+        self._modo = None
+        self._buffer.clear()
         await _cerrar_writer(writer)
 
+    # -- lectura de un tiro ----------------------------------------------
+
     async def read_weight(self) -> float | None:
+        fmt = (self.formato_trama or "auto").strip().lower()
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(self.host, self.port), timeout=self.timeout
             )
             try:
-                writer.write(b'{"action":"get_state"}\n')
-                await writer.drain()
-                deadline = asyncio.get_running_loop().time() + self.timeout
-                # Lee líneas JSON descartando vacías/malformadas hasta obtener un
-                # `weight_kg` válido o agotar el timeout. Robusto ante el simulador
-                # BSDD, que emite una línea al conectarse el cliente y otra más al
-                # responder `get_state`.
-                while True:
-                    restante = deadline - asyncio.get_running_loop().time()
-                    if restante <= 0:
-                        return None
-                    data = await asyncio.wait_for(
-                        reader.readline(), timeout=restante
-                    )
-                    if not data:
-                        return None
-                    linea = data.decode(errors="ignore").strip()
-                    if not linea:
-                        continue
-                    try:
-                        payload = json.loads(linea)
-                    except ValueError:
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    peso = payload.get("weight_kg")
-                    if peso is None:
-                        continue
-                    try:
-                        return float(peso)
-                    except (TypeError, ValueError):
-                        continue
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + self.timeout
+                if fmt == "ascii":
+                    return await self._oneshot_ascii(reader, deadline)
+                if fmt == "json":
+                    return await self._oneshot_json(reader, writer, deadline)
+                # auto: primero flujo continuo (sin escribir) y, si nada, JSON.
+                peso = await self._oneshot_ascii(
+                    reader, min(deadline, loop.time() + 0.4)
+                )
+                if peso is not None:
+                    return peso
+                return await self._oneshot_json(reader, writer, deadline)
             finally:
                 await _cerrar_writer(writer)
-        except (TimeoutError, OSError, ValueError, TypeError, json.JSONDecodeError):
+        except (TimeoutError, OSError, ValueError, TypeError):
             return None
+
+    async def _oneshot_json(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        deadline: float,
+    ) -> float | None:
+        try:
+            writer.write(b'{"action":"get_state"}\n')
+            await writer.drain()
+        except OSError as exc:
+            raise ConnectionError(str(exc)) from exc
+        loop = asyncio.get_running_loop()
+        while True:
+            restante = deadline - loop.time()
+            if restante <= 0:
+                return None
+            data = await asyncio.wait_for(reader.readline(), timeout=restante)
+            if not data:
+                return None
+            linea = self._decodificar(data)
+            if not linea:
+                continue
+            peso, _status = _parse_json_line(linea)
+            if peso is not None:
+                return peso
+
+    async def _oneshot_ascii(
+        self, reader: asyncio.StreamReader, deadline: float
+    ) -> float | None:
+        loop = asyncio.get_running_loop()
+        while True:
+            restante = deadline - loop.time()
+            if restante <= 0:
+                return None
+            try:
+                data = await asyncio.wait_for(
+                    self._leer_frame(reader), timeout=restante
+                )
+            except TimeoutError:
+                return None
+            if not data:
+                return None
+            linea = self._decodificar(data)
+            if not linea:
+                continue
+            peso, _status, _motivo = parse_weight_frame(
+                linea, capacidad_max=self.capacidad_max
+            )
+            if peso is not None:
+                return peso
 
     async def is_stable(
         self, duration_seconds: int = 3, tolerance_kg: float = 0.5
@@ -383,16 +585,35 @@ def get_scale_hal(balanza) -> ScaleHAL:
     """Construye el HAL según la configuración de hardware de la balanza.
 
     Prioridad: TCP (``ip_address``/``puerto_tcp``) → serial (``puerto_com``).
-    Si no hay configuración, levanta ``ValueError`` (el endpoint responde 400).
+    Propaga ``formato_trama``, ``baudrate``, ``delimitador`` y ``capacidad_max``
+    cuando el modelo los expone. Si no hay configuración, levanta ``ValueError``
+    (el endpoint responde 400).
     """
     ip = getattr(balanza, "ip_address", None)
     puerto_tcp = getattr(balanza, "puerto_tcp", None)
     puerto_com = getattr(balanza, "puerto_com", None)
+    formato = getattr(balanza, "formato_trama", None) or "auto"
+    delimitador = getattr(balanza, "delimitador", None) or None
+    baudrate = getattr(balanza, "baudrate", None) or 9600
+    capacidad = getattr(balanza, "capacidad_max", None)
+    capacidad_max = float(capacidad) if capacidad is not None else None
 
     if ip:
-        return TcpScaleHAL(str(ip), int(puerto_tcp or 5555))
+        return TcpScaleHAL(
+            str(ip),
+            int(puerto_tcp or 5555),
+            formato_trama=str(formato),
+            delimitador=delimitador,
+            capacidad_max=capacidad_max,
+        )
     if puerto_com:
-        return SerialScaleHAL(str(puerto_com))
+        return SerialScaleHAL(
+            str(puerto_com),
+            baudrate=int(baudrate),
+            formato_trama=str(formato),
+            delimitador=delimitador,
+            capacidad_max=capacidad_max,
+        )
     raise ValueError(
         "La balanza no tiene configuración de hardware "
         "(ip_address/puerto_tcp o puerto_com)"

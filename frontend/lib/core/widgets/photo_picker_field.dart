@@ -20,6 +20,11 @@ class PhotoPickerField extends StatefulWidget {
   final ValueChanged<List<PhotoCaptured>> onChanged;
   final int maxFotos;
 
+  /// Imagen ya guardada en el servidor (URL **absoluta**). Se muestra mientras
+  /// el usuario no capture una nueva; al capturar una, la reemplaza en pantalla.
+  /// Sin esto, un logo guardado "desaparece" al reabrir el formulario.
+  final String? imagenUrl;
+
   const PhotoPickerField({
     super.key,
     this.label = 'Fotos',
@@ -27,6 +32,7 @@ class PhotoPickerField extends StatefulWidget {
     this.fotos = const [],
     required this.onChanged,
     this.maxFotos = 4,
+    this.imagenUrl,
   });
 
   @override
@@ -85,6 +91,9 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
   @override
   Widget build(BuildContext context) {
     final fotos = widget.fotos;
+    final url = widget.imagenUrl?.trim();
+    final hayRemota = fotos.isEmpty && url != null && url.isNotEmpty;
+    final total = fotos.length + (hayRemota ? 1 : 0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -92,19 +101,49 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
           children: [
             Icon(widget.icon, size: 18, color: SwsColors.gray500),
             const SizedBox(width: 6),
-            Text(
-              widget.label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            Expanded(
+              child: Text(
+                widget.label,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
             ),
-            const Spacer(),
             Text(
-              '${fotos.length}/${widget.maxFotos}',
+              '$total/${widget.maxFotos}',
               style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        if (fotos.isNotEmpty)
+        if (hayRemota)
+          SizedBox(
+            height: 90,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      url,
+                      width: 90,
+                      height: 90,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 90,
+                        height: 90,
+                        color: SwsColors.gray200,
+                        child: const Icon(Icons.broken_image_outlined,
+                            color: SwsColors.gray500),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (fotos.isNotEmpty)
           SizedBox(
             height: 90,
             child: ListView(
@@ -149,7 +188,7 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
               ],
             ),
           ),
-        if (fotos.isNotEmpty) const SizedBox(height: 6),
+        if (hayRemota || fotos.isNotEmpty) const SizedBox(height: 6),
         Row(
           children: [
             Expanded(

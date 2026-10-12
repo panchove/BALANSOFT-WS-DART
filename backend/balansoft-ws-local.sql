@@ -301,12 +301,52 @@ CREATE TABLE IF NOT EXISTS balanzas (
     ip_address    VARCHAR(45),
     puerto_tcp    INTEGER,
     protocolo     VARCHAR(20) DEFAULT 'tcp',
+    formato_trama VARCHAR(10) NOT NULL DEFAULT 'auto',
+    baudrate      INTEGER NOT NULL DEFAULT 9600,
+    delimitador   VARCHAR(10),
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS balanzas_empresa_codigo_uk
     ON balanzas (id_empresa, codigo)
     WHERE codigo IS NOT NULL;
+
+-- Alineación idempotente para BDs creadas antes del formato de trama (022).
+ALTER TABLE balanzas ADD COLUMN IF NOT EXISTS formato_trama VARCHAR(10);
+ALTER TABLE balanzas ADD COLUMN IF NOT EXISTS baudrate INTEGER;
+ALTER TABLE balanzas ADD COLUMN IF NOT EXISTS delimitador VARCHAR(10);
+UPDATE balanzas SET formato_trama = 'auto' WHERE formato_trama IS NULL;
+UPDATE balanzas SET baudrate = 9600 WHERE baudrate IS NULL;
+ALTER TABLE balanzas ALTER COLUMN formato_trama SET DEFAULT 'auto';
+ALTER TABLE balanzas ALTER COLUMN baudrate SET DEFAULT 9600;
+ALTER TABLE balanzas ALTER COLUMN formato_trama SET NOT NULL;
+ALTER TABLE balanzas ALTER COLUMN baudrate SET NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_balanzas_formato_trama'
+    ) THEN
+        ALTER TABLE balanzas
+            ADD CONSTRAINT ck_balanzas_formato_trama
+            CHECK (formato_trama IN ('auto', 'json', 'ascii'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_balanzas_baudrate'
+    ) THEN
+        ALTER TABLE balanzas
+            ADD CONSTRAINT ck_balanzas_baudrate
+            CHECK (baudrate IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_balanzas_delimitador'
+    ) THEN
+        ALTER TABLE balanzas
+            ADD CONSTRAINT ck_balanzas_delimitador
+            CHECK (delimitador IS NULL OR delimitador IN ('lf', 'cr', 'crlf', 'stx_etx'));
+    END IF;
+END
+$$;
 
 -- ============================================================
 -- 7. TRANSACCIONAL - BOLETOS DE PESAJE

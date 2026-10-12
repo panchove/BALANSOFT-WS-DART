@@ -100,13 +100,17 @@ class AuthRepository implements IAuthRepository {
     await _secureStorage.saveTokens(data['access_token'], data['refresh_token']);
     _apiClient.setToken(data['access_token']);
 
-    final user = UserModel.fromJson(data['user']);
+    // El backend manda `user` y `empresa` por separado. Le pasamos el mapa
+    // de empresa al UserModel para que extraiga nombre, RIF, dirección y logo.
+    final empresa = data['empresa'] is Map<String, dynamic>
+        ? data['empresa'] as Map<String, dynamic>
+        : null;
+    final user = UserModel.fromJson(data['user'], empresa: empresa);
     await _localStorage.saveUser(user);
     await AppConfig.setOffline(offline);
 
-    if (data['empresa'] is Map<String, dynamic>) {
-      final emp = data['empresa'] as Map<String, dynamic>;
-      final rutaExp = emp['ruta_exportacion_reportes'] as String?;
+    if (empresa != null) {
+      final rutaExp = empresa['ruta_exportacion_reportes'] as String?;
       if (rutaExp != null && rutaExp.trim().isNotEmpty) {
         await SaveFileUtils.setRutaPersonalizada(rutaExp);
       }
@@ -318,7 +322,10 @@ class AuthRepository implements IAuthRepository {
     await _secureStorage.saveTokens(data['access_token'], data['refresh_token']);
     _apiClient.setToken(data['access_token']);
 
-    final user = UserModel.fromJson(data['user']);
+    final empresa = data['empresa'] is Map<String, dynamic>
+        ? data['empresa'] as Map<String, dynamic>
+        : null;
+    final user = UserModel.fromJson(data['user'], empresa: empresa);
     await _localStorage.saveUser(user);
 
     return user;
@@ -396,13 +403,12 @@ class AuthRepository implements IAuthRepository {
     }
     try {
       await refreshToken(refresh);
-      try {
-        final perfil = await _apiClient.getEmpresaPerfil();
-        final rutaExp = perfil['ruta_exportacion_reportes'] as String?;
-        if (rutaExp != null && rutaExp.trim().isNotEmpty) {
-          await SaveFileUtils.setRutaPersonalizada(rutaExp);
-        }
-      } catch (_) {}
+
+      // Refrescar los datos de empresa (nombre, RIF, dirección, logo) en el
+      // User cacheado. Así, usuarios que ya tenían sesión guardada antes de
+      // añadir estos campos reciben la info sin tener que reloguearse.
+      await _refrescarEmpresaEnUserCacheado();
+
       return SesionRestaurada.ok;
     } on DioException catch (e) {
       if (_esErrorSinConexion(e)) {
@@ -410,6 +416,45 @@ class AuthRepository implements IAuthRepository {
       }
       await _limpiarSesionLocal();
       return SesionRestaurada.invalida;
+    }
+  }
+
+  /// Refresca nombre fiscal, RIF, dirección y logo de la empresa en el [User]
+  /// cacheado, leyéndolos de `GET /api/v1/empresa`. Se usa al restaurar
+  /// sesión para que sesiones antiguas reciban los campos nuevos sin relogin.
+  Future<void> _refrescarEmpresaEnUserCacheado() async {
+    try {
+      final userActual = await _localStorage.getCachedUser();
+      if (userActual == null) return;
+
+      final perfil = await _apiClient.getEmpresaPerfil();
+
+      final rutaExp = perfil['ruta_exportacion_reportes'] as String?;
+      if (rutaExp != null && rutaExp.trim().isNotEmpty) {
+        await SaveFileUtils.setRutaPersonalizada(rutaExp);
+      }
+
+      final nombreEmpresa =
+          (perfil['nombre_fiscal'] ?? perfil['nombre_comercial']) as String?;
+      final rif = perfil['rif_nit'] as String?;
+      final direccion = perfil['direccion'] as String?;
+      final logo = perfil['logo_url'] as String?;
+
+      // Solo re-guardamos si realmente hay cambios (evita escrituras inútiles).
+      final actualizado = UserModel(
+        idUsuario: userActual.idUsuario,
+        nombre: userActual.nombre,
+        email: userActual.email,
+        rol: userActual.rol,
+        idEmpresa: userActual.idEmpresa,
+        empresaNombre: nombreEmpresa ?? userActual.empresaNombre,
+        empresaRif: rif ?? userActual.empresaRif,
+        empresaDireccion: direccion ?? userActual.empresaDireccion,
+        logoUrl: logo ?? userActual.logoUrl,
+      );
+      await _localStorage.saveUser(actualizado);
+    } catch (_) {
+      // No crítico: si falla, el User cacheado conserva los datos anteriores.
     }
   }
 

@@ -192,13 +192,23 @@ class ScaleSession:
 
 
 def _clave_balanza(balanza) -> str:  # noqa: ANN001 - modelo ORM
-    """Identifica la config de hardware: (id, ip, puerto_tcp, puerto_com)."""
+    """Identifica la config de hardware: transporte + trama + baudrate.
+
+    Incluye ``formato_trama``/``delimitador``/``baudrate`` para que cambiarlos
+    recree la sesión (si no, seguiría viva con la configuración anterior).
+    ``delimitador`` se normaliza (NULL ≡ ``lf``) para que guardar la balanza
+    sin tocar ese campo no provoque una recreación espuria de la sesión.
+    """
+    delimitador = getattr(balanza, "delimitador", None) or "lf"
     return "|".join(
         [
             str(getattr(balanza, "id_balanza", "")),
             str(getattr(balanza, "ip_address", "") or ""),
             str(getattr(balanza, "puerto_tcp", "") or ""),
             str(getattr(balanza, "puerto_com", "") or ""),
+            str(getattr(balanza, "formato_trama", "") or ""),
+            str(delimitador),
+            str(getattr(balanza, "baudrate", "") or ""),
         ]
     )
 
@@ -213,11 +223,18 @@ class ScaleSessionManager:
     async def obtener(self, balanza) -> ScaleSession:  # noqa: ANN001 - modelo ORM
         """Devuelve la sesión de ``balanza``, creándola si hace falta.
 
+        Si la configuración de hardware cambió (misma ``id_balanza``, clave
+        distinta), **detiene** la sesión anterior antes de crear la nueva para
+        no dejar una conexión huérfana sondeando el equipo (y, en serial,
+        compitiendo por el mismo puerto).
+
         Levanta ``ValueError`` si la balanza no tiene hardware configurado
         (el endpoint lo traduce a HTTP 400).
         """
         clave = _clave_balanza(balanza)
+        id_balanza = str(getattr(balanza, "id_balanza", ""))
         creada = False
+        obsoletas: list[ScaleSession] = []
         async with self._lock:
             sesion = self._sesiones.get(clave)
             if sesion is None:
@@ -225,8 +242,16 @@ class ScaleSessionManager:
                 hardware = "tcp" if getattr(balanza, "ip_address", None) else "serial"
                 sesion = ScaleSession(clave, hal, hardware)
                 self._sesiones[clave] = sesion
+                # Sesiones previas de la misma balanza con otra config: caducan.
+                if id_balanza:
+                    prefijo = f"{id_balanza}|"
+                    for otra_clave in list(self._sesiones):
+                        if otra_clave != clave and otra_clave.startswith(prefijo):
+                            obsoletas.append(self._sesiones.pop(otra_clave))
                 sesion.iniciar()
                 creada = True
+        for obsoleta in obsoletas:
+            await obsoleta.detener()
         if creada:
             await sesion.esperar_primera()
         return sesion

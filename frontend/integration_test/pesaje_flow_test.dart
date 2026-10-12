@@ -119,6 +119,7 @@ void main() {
       // El rol del instalador se fija en memoria: la app arranca en el login.
       AppConfig.rol = StationRole.servidor;
       AppConfig.onboardingCompletado = true;
+      AppConfig.tutorialVisto = true;
       AppConfig.apiBaseUrl = baseUrl;
       AppConfig.offline = false;
       AppConfig.wserverAutostart = false;

@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'scale_frame_parser.dart';
+
 class PesoEnVivo {
   final double? pesoKg;
   final String? unidad;
@@ -43,6 +45,9 @@ class ScaleTcpClient extends ChangeNotifier {
   int _reintentos = 0;
   Timer? _reconnectTimer;
   Timer? _timeoutTimer;
+  Timer? _peticionTimer;
+  bool _recibioDatos = false;
+  String _buffer = '';
 
   static const String _protocoloPeticion =
       '{"action":"get_state"}\n';
@@ -103,7 +108,17 @@ class ScaleTcpClient extends ChangeNotifier {
       _conectando = false;
       _reintentos = 0;
       _ultimoPeso = null;
-      socket.write(_protocoloPeticion);
+      _buffer = '';
+      _recibioDatos = false;
+      // Contra un indicador real (ASCII) NO se escribe nada; solo si en una
+      // ventana corta no llegó ningún frame (simulador BSDD bajo demanda) se
+      // pide el estado por JSON.
+      _peticionTimer?.cancel();
+      _peticionTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (!_recibioDatos && _socket != null) {
+          _socket!.write(_protocoloPeticion);
+        }
+      });
       _sub = socket.listen(
         _onDatos,
         onError: _onError,
@@ -136,18 +151,49 @@ class ScaleTcpClient extends ChangeNotifier {
   }
 
   void _onDatos(Uint8List datos) {
-    final texto = utf8.decode(datos, allowMalformed: true);
-    for (final linea in texto.split('\n')) {
-      final trim = linea.trim();
+    _recibioDatos = true;
+    _peticionTimer?.cancel();
+    _peticionTimer = null;
+    _buffer += utf8.decode(datos, allowMalformed: true);
+    final partes = _buffer.split(RegExp(r'[\r\n]+'));
+    _buffer = partes.removeLast();
+    // Un flujo sin delimitadores no debe crecer sin límite.
+    if (_buffer.length > 4096) {
+      _buffer = _buffer.substring(_buffer.length - 1024);
+    }
+    for (final parte in partes) {
+      final trim = parte.trim();
       if (trim.isEmpty) continue;
-      try {
-        final json = jsonDecode(trim) as Map<String, dynamic>;
-        _ultimoPeso = PesoEnVivo.fromJson(json);
+      final peso = _parsearLinea(trim);
+      if (peso != null) {
+        _ultimoPeso = peso;
         notifyListeners();
-      } catch (_) {
-        // Línea no JSON, ignorar.
       }
     }
+  }
+
+  /// Interpreta una línea del equipo: JSON (simulador BSDD) o ASCII real.
+  ///
+  /// Una báscula real (Toledo/GSI, Rice Lake, etc.) emite tramas ASCII como
+  /// `ST,GS,+00320.00kg`; el simulador BSDD emite `{"weight_kg":...}`. Se
+  /// intenta JSON primero y, si no, el parser ASCII multi-marca.
+  PesoEnVivo? _parsearLinea(String linea) {
+    try {
+      final json = jsonDecode(linea);
+      if (json is Map<String, dynamic> && json['weight_kg'] != null) {
+        return PesoEnVivo.fromJson(json);
+      }
+    } on FormatException {
+      // No es JSON: sigue el parser ASCII.
+    }
+    final parseado = parseWeightFrame(linea);
+    if (parseado.peso == null) return null;
+    return PesoEnVivo(
+      pesoKg: parseado.peso,
+      estado: parseado.estado ?? 'stable',
+      timestamp: DateTime.now(),
+      origin: 'TCP',
+    );
   }
 
   void _onError(Object error) {
@@ -179,10 +225,14 @@ class ScaleTcpClient extends ChangeNotifier {
   Future<void> _desconectar({bool notificar = true}) async {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _peticionTimer?.cancel();
+    _peticionTimer = null;
     await _sub?.cancel();
     _sub = null;
     _socket?.destroy();
     _socket = null;
+    _buffer = '';
+    _recibioDatos = false;
     if (notificar) notifyListeners();
   }
 

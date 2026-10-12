@@ -60,8 +60,14 @@ IF OBJECT_ID(N'dbo.balanzas', N'U') IS NULL BEGIN
         [ip_address] NVARCHAR(45),
         [puerto_tcp] INT,
         [protocolo] NVARCHAR(20) DEFAULT N'tcp',
+        [formato_trama] NVARCHAR(10) DEFAULT N'auto' NOT NULL,
+        [baudrate] INT DEFAULT 9600 NOT NULL,
+        [delimitador] NVARCHAR(10),
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_balanzas_formato_trama] CHECK ((formato_trama) IN (N'auto', N'json', N'ascii')),
+        CONSTRAINT [ck_balanzas_baudrate] CHECK ((baudrate) IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200)),
+        CONSTRAINT [ck_balanzas_delimitador] CHECK ((delimitador) IS NULL OR (delimitador) IN (N'lf', N'cr', N'crlf', N'stx_etx')),
         CONSTRAINT [balanzas_pkey] PRIMARY KEY (id_balanza)
     );
 END

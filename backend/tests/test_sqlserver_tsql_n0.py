@@ -32,7 +32,7 @@ TABLAS_ESPERADAS_MSSQL = TABLAS_PG_Y_MSSQL | TABLAS_SOLO_MSSQL
 
 ESPERADAS_PK = 27
 ESPERADAS_FK = 37
-ESPERADAS_MIGRACIONES_PLEGADAS = 21
+ESPERADAS_MIGRACIONES_PLEGADAS = 22
 MAX_NVARCHAR_INDEXADA = 255
 
 
@@ -162,10 +162,10 @@ def test_paridad_tablas_pg_vs_mssql():
 
 
 def test_migraciones_plegadas_documentadas():
-    """Las 21 migraciones 001-021 existen como archivo (las pliega el WServer).
+    """Las 22 migraciones 001-022 existen como archivo (las pliega el WServer).
 
     ``wserver._sembrar_migraciones_sqlserver`` itera ``migrations/*.sql`` del
-    disco; si el directorio real no tuviera esos 21 archivos, la siembra en
+    disco; si el directorio real no tuviera esos 22 archivos, la siembra en
     SQL Server (N1) registraría menos versiones y el esquema quedaría
     desincronizado respecto a PostgreSQL. Verificar contra el directorio real
     (no contra una constante) evita un test tautológico.
@@ -175,6 +175,6 @@ def test_migraciones_plegadas_documentadas():
         f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
         f"hay {len(archivos)} en {MIGRACIONES_DIR}"
     )
-    # Numeración contigua 001..021 (sin huecos) para que la siembra sea determinista.
+    # Numeración contigua 001..022 (sin huecos) para que la siembra sea determinista.
     for i in range(1, ESPERADAS_MIGRACIONES_PLEGADAS + 1):
         assert any(p.startswith(f"{i:03d}_") for p in archivos), f"falta la migración {i:03d}_*.sql"

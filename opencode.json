@@ -26,9 +26,8 @@
         "balansoft-git": {
             "type": "local",
             "command": [
-                "npx",
-                "-y",
-                "@modelcontextprotocol/server-git",
+                "uvx",
+                "mcp-server-git",
                 "--repository",
                 "/home/yohander/Documentos/BALANSOFT-WS-DART"
             ],

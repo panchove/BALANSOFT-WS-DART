@@ -4,6 +4,12 @@ class User {
   final String email;
   final String rol;
   final String? idEmpresa;
+  final String? logoUrl; // URL del logo de la empresa (desde backend)
+
+  // ── Datos de la empresa (vienen en la respuesta del login) ──
+  final String? empresaNombre;
+  final String? empresaRif;
+  final String? empresaDireccion;
 
   const User({
     required this.idUsuario,
@@ -11,6 +17,10 @@ class User {
     required this.email,
     required this.rol,
     this.idEmpresa,
+    this.logoUrl,
+    this.empresaNombre,
+    this.empresaRif,
+    this.empresaDireccion,
   });
 
   bool get isAdmin => rol == 'ADMIN';
@@ -23,6 +33,10 @@ class User {
         email: json['email'],
         rol: json['rol'],
         idEmpresa: json['id_empresa'],
+        logoUrl: json['logo_url'],
+        empresaNombre: json['empresa_nombre'],
+        empresaRif: json['empresa_rif'],
+        empresaDireccion: json['empresa_direccion'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -31,5 +45,9 @@ class User {
         'email': email,
         'rol': rol,
         'id_empresa': idEmpresa,
+        'logo_url': logoUrl,
+        'empresa_nombre': empresaNombre,
+        'empresa_rif': empresaRif,
+        'empresa_direccion': empresaDireccion,
       };
 }

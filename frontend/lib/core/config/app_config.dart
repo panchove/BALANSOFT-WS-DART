@@ -41,7 +41,16 @@ class AppConfig {
   /// (primer ADMIN captura los datos de empresa con InitialSetupScreen).
   static bool onboardingCompletado = false;
 
+  /// El mini tutorial de bienvenida ya se mostró (se marca al finalizarlo o
+  /// saltarlo). Se repite manualmente desde Ayuda y Soporte.
+  static bool tutorialVisto = false;
+
   static late SharedPreferences _prefs;
+
+  /// true después de `init()`: en producción `_prefs` siempre está lista, pero
+  /// en tests de widget (donde no se puede llamar `init()` por el FakeAsync)
+  /// `setTutorialVisto` guarda solo en memoria.
+  static bool _prefsLista = false;
 
   /// Hay config de instalador cargada (rol + URL válida): sin esto la app
   /// no opera (error duro en `main()`).
@@ -62,6 +71,7 @@ class AppConfig {
 
   static Future<void> init({bool migrarLegado = false}) async {
     _prefs = await SharedPreferences.getInstance();
+    _prefsLista = true;
     // El servidor central SIEMPRE está presente (nube: cuenta y licencia).
     serverApiUrl = defaultServerApiUrl;
     licenseApiUrl = _prefs.getString('license_api_url') ?? 'http://localhost:8080';
@@ -70,6 +80,7 @@ class AppConfig {
     wserverAutostart = _prefs.getBool('wserver_autostart') ?? false;
     syncAutoEnabled = _prefs.getBool('sync_auto_enabled') ?? true;
     onboardingCompletado = _prefs.getBool('onboarding_completado') ?? false;
+    tutorialVisto = _prefs.getBool('tutorial_visto') ?? false;
 
     // Config de estación: archivo del instalador (override → sistema) o, en
     // el arranque real, migración única del legado. Sin archivo ni legado,
@@ -124,5 +135,16 @@ class AppConfig {
   static Future<void> setOnboardingCompletado([bool value = true]) async {
     onboardingCompletado = value;
     await _prefs.setBool('onboarding_completado', value);
+  }
+
+  /// Marca el mini tutorial de bienvenida como visto: no se vuelve a ofrecer
+  /// automáticamente (sigue disponible en Ayuda y Soporte). En producción
+  /// persiste en prefs (siempre inicializadas tras `init()`); sin prefs guarda
+  /// solo en memoria (caso de tests de widget, donde no se llama `init()`).
+  static Future<void> setTutorialVisto([bool value = true]) async {
+    tutorialVisto = value;
+    if (_prefsLista) {
+      await _prefs.setBool('tutorial_visto', value);
+    }
   }
 }

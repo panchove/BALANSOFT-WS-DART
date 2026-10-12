@@ -313,6 +313,9 @@ class BalanzaOut(CatalogItemOut):
     ip_address: str | None = None
     puerto_tcp: int | None = None
     protocolo: str | None = None
+    formato_trama: str | None = None
+    baudrate: int | None = None
+    delimitador: str | None = None
 
 
 class BalanzaCreate(BaseModel):
@@ -328,6 +331,22 @@ class BalanzaCreate(BaseModel):
     ip_address: str | None = None
     puerto_tcp: int | None = Field(None, gt=0, le=65535)
     protocolo: str | None = Field(None, pattern="^(tcp|serial)$")
+    formato_trama: str = Field("auto", pattern="^(auto|json|ascii)$")
+    baudrate: int = Field(9600)
+    delimitador: str | None = Field(None, pattern="^(lf|cr|crlf|stx_etx)$")
+
+    @field_validator("baudrate")
+    @classmethod
+    def _validar_baudrate(cls, v: int) -> int:
+        # Debe coincidir con el CHECK `ck_balanzas_baudrate` de la BD (evita
+        # que un valor intermedio pase Pydantic y reviente como IntegrityError).
+        permitidos = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
+        if v not in permitidos:
+            raise ValueError(
+                "baudrate debe ser uno de: 1200, 2400, 4800, 9600, 19200, "
+                "38400, 57600, 115200"
+            )
+        return v
 
 
 class BalanzaDescubiertaOut(BaseModel):
@@ -340,6 +359,9 @@ class BalanzaDescubiertaOut(BaseModel):
     puerto_com: str | None = None
     peso_kg: float | None = None
     is_simulada: bool = False
+    formato_trama: str | None = None
+    baudrate: int | None = None
+    delimitador: str | None = None
 
 
 class BalanzaPruebaOut(BaseModel):
@@ -352,6 +374,8 @@ class BalanzaPruebaOut(BaseModel):
     peso_kg: float | None = None
     estable: bool = False
     detalle: str | None = None
+    formato_trama: str | None = None
+    delimitador: str | None = None
 
 
 class TerceroOut(CatalogItemOut):

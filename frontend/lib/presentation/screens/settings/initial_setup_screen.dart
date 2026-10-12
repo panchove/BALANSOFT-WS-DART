@@ -34,6 +34,10 @@ class _InitialSetupScreenState extends State<InitialSetupScreen> {
   CompanySetupData? _inicial;
   bool _cargando = true;
 
+  /// URL **absoluta** del logo ya guardado; evita que al reabrir el wizard el
+  /// logo parezca "perdido" (PhotoPickerField muestra la imagen remota).
+  String? _logoUrlAbs;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +46,14 @@ class _InitialSetupScreenState extends State<InitialSetupScreen> {
 
   Future<void> _cargar() async {
     try {
-      final perfil = await di.sl<ApiClient>().getEmpresaPerfil();
+      final api = di.sl<ApiClient>();
+      final perfil = await api.getEmpresaPerfil();
       if (!mounted) return;
+      final rel = perfil['logo_url'] as String?;
       setState(() {
+        _logoUrlAbs = (rel != null && rel.trim().isNotEmpty)
+            ? api.mediaUrl(rel)
+            : null;
         _inicial = CompanySetupData(
           nombreFiscal: '${perfil['nombre_fiscal'] ?? ''}',
           nombreComercial: '${perfil['nombre_comercial'] ?? ''}',
@@ -104,6 +113,7 @@ class _InitialSetupScreenState extends State<InitialSetupScreen> {
             : CompanySetupForm(
                 localeController: widget.localeController,
                 initial: _inicial,
+                logoUrlExistente: _logoUrlAbs,
                 onSubmit: (data) async {
                   try {
                     await _guardar(data);

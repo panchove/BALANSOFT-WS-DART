@@ -179,6 +179,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
           'puerto_com': b['puerto_com'],
           // El backend devuelve `is_simulada` en snake_case.
           'is_simulada': b['is_simulada'] ?? false,
+          'formato_trama': b['formato_trama'] ?? 'auto',
         });
         agregadas++;
       } catch (_) {
@@ -808,6 +809,9 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
   late final ScaleApiClient _scaleClient = di.sl<ScaleApiClient>();
 
   late String _protocolo = widget.balanza.protocolo;
+  late String _formatoTrama = widget.balanza.formatoTrama;
+  late int _baudrate = widget.balanza.baudrate;
+  late String _delimitador = widget.balanza.delimitador ?? 'lf';
   late final TextEditingController _ipCtrl =
       TextEditingController(text: widget.balanza.ipAddress ?? '');
   late final TextEditingController _puertoCtrl = TextEditingController(
@@ -894,6 +898,9 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       'puerto_com': (puertoCom == null || puertoCom.isEmpty)
           ? null
           : puertoCom,
+      'formato_trama': _formatoTrama,
+      'baudrate': _protocolo == 'serial' ? _baudrate : 9600,
+      'delimitador': _delimitador,
     };
 
     setState(() {
@@ -1007,6 +1014,68 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                   ),
                 ),
               ],
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: _formatoTrama,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'frame_format'.tr(),
+                  prefixIcon: const Icon(Icons.code),
+                ),
+                items: [
+                  DropdownMenuItem(
+                      value: 'auto', child: Text('frame_auto'.tr())),
+                  DropdownMenuItem(
+                      value: 'json', child: Text('frame_json'.tr())),
+                  DropdownMenuItem(
+                      value: 'ascii', child: Text('frame_ascii'.tr())),
+                ],
+                onChanged: (val) =>
+                    setState(() => _formatoTrama = val ?? 'auto'),
+              ),
+              if (_protocolo == 'serial') ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  initialValue: _baudrate,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'baudrate'.tr(),
+                    prefixIcon: const Icon(Icons.speed),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 1200, child: Text('1200')),
+                    DropdownMenuItem(value: 4800, child: Text('4800')),
+                    DropdownMenuItem(value: 9600, child: Text('9600')),
+                    DropdownMenuItem(value: 19200, child: Text('19200')),
+                    DropdownMenuItem(value: 38400, child: Text('38400')),
+                    DropdownMenuItem(value: 57600, child: Text('57600')),
+                    DropdownMenuItem(value: 115200, child: Text('115200')),
+                  ],
+                  onChanged: (val) =>
+                      setState(() => _baudrate = val ?? 9600),
+                ),
+              ],
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _delimitador,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'frame_delimiter'.tr(),
+                  prefixIcon: const Icon(Icons.format_align_left),
+                ),
+                items: [
+                  DropdownMenuItem(
+                      value: 'lf', child: Text('delimiter_lf'.tr())),
+                  DropdownMenuItem(
+                      value: 'cr', child: Text('delimiter_cr'.tr())),
+                  DropdownMenuItem(
+                      value: 'crlf', child: Text('delimiter_crlf'.tr())),
+                  DropdownMenuItem(
+                      value: 'stx_etx', child: Text('delimiter_stx_etx'.tr())),
+                ],
+                onChanged: (val) =>
+                    setState(() => _delimitador = val ?? 'lf'),
+              ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _guardando ? null : _guardar,

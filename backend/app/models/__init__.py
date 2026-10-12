@@ -394,6 +394,16 @@ class Balanza(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     puerto_tcp: Mapped[int | None] = mapped_column(Integer, nullable=True)
     protocolo: Mapped[str | None] = mapped_column(String(20), default="tcp")
+    # Formato de la trama en el cable: auto|json|ascii (migración 022).
+    formato_trama: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="auto", server_default="auto"
+    )
+    # Solo aplica a serial.
+    baudrate: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=9600, server_default=text("9600")
+    )
+    # lf|cr|crlf|stx_etx; NULL = lf.
+    delimitador: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc()
     )

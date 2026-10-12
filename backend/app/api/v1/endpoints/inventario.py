@@ -313,7 +313,9 @@ async def descubrir_balanzas(
 ) -> list[BalanzaDescubiertaOut]:
     """Escanea las básculas conectadas/disponibles:
 
-    - TCP: prueba el simulador BSDD local y las IPs ya registradas de la empresa;
+    - TCP: prueba el simulador BSDD local y las IPs ya registradas de la
+      empresa, aceptando tanto JSON como flujo ASCII continuo (indicadores
+      reales);
     - Serial real: lista los puertos COM/RS-232 vía pyserial (excluye /dev/ttyS*);
     - Serial simulado: detecta ptys virtuales (simulador BSDD, socat, etc.)
       que el kernel NO reporta como tty real, pero que pyserial sí puede abrir.
@@ -363,6 +365,7 @@ async def descubrir_balanzas(
                     puerto_tcp=puerto,
                     peso_kg=peso,
                     is_simulada=False,
+                    formato_trama="auto",
                 )
             )
 
@@ -519,6 +522,8 @@ async def probar_balanza(
             conectado=False,
             protocolo=balanza.protocolo or "tcp",
             detalle="No se pudo establecer conexión con la balanza (sin lectura)",
+            formato_trama=balanza.formato_trama,
+            delimitador=balanza.delimitador,
         )
 
     return BalanzaPruebaOut(
@@ -528,6 +533,8 @@ async def probar_balanza(
         protocolo=balanza.protocolo or "tcp",
         peso_kg=sesion.peso_kg,
         estable=sesion.estable,
+        formato_trama=balanza.formato_trama,
+        delimitador=balanza.delimitador,
     )
 
 

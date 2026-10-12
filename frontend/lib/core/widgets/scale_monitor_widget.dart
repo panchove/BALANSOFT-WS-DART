@@ -17,10 +17,28 @@ enum ScaleStatus {
   desconectado,
 }
 
+/// Fuentes disponibles para el display del monitor.
+/// Se pueden cambiar en runtime desde el engranaje del display.
+class DisplayFont {
+  final String label;
+  final String? fontFamily;
+  const DisplayFont(this.label, this.fontFamily);
+}
+
+const List<DisplayFont> kDisplayFonts = [
+  DisplayFont('DSEG7 Classic Bold', 'DSEG7ClassicBold'),
+  DisplayFont('DSEG7 Classic Regular', 'DSEG7ClassicRegular'),
+  DisplayFont('DSEG7 Modern Bold', 'DSEG7ModernBold'),
+  DisplayFont('DSEG14 Classic Bold', 'DSEG14ClassicBold'),
+  DisplayFont('DSEG14 Classic Regular', 'DSEG14ClassicRegular'),
+  DisplayFont('DSEG14 Modern Bold', 'DSEG14ModernBold'),
+  DisplayFont('Monoespaciada (sistema)', null),
+];
+
 /// Widget que muestra el peso en tiempo real proveniente de la balanza (BSDD).
 /// Con `balanzaId` lee vía el HAL del backend (API); sin él cae a TCP directo.
 ///
-/// Presentación: indicador industrial (display 7-seg verde + LEDs + teclado).
+/// Presentación: indicador industrial (display DSEG + LEDs).
 class ScaleMonitorWidget extends StatefulWidget {
   final ScaleTcpClient client;
   final String label;
@@ -32,6 +50,9 @@ class ScaleMonitorWidget extends StatefulWidget {
   final String? balanzaId;
   final String? balanzaDescripcion;
 
+  /// Permite elegir la fuente del display desde el engranaje.
+  final bool permitirCambiarFuente;
+
   const ScaleMonitorWidget({
     super.key,
     required this.client,
@@ -41,6 +62,7 @@ class ScaleMonitorWidget extends StatefulWidget {
     this.mostrarBotones = true,
     this.balanzaId,
     this.balanzaDescripcion,
+    this.permitirCambiarFuente = true,
   });
 
   @override
@@ -50,6 +72,9 @@ class ScaleMonitorWidget extends StatefulWidget {
 class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
   late double _peso = widget.initialWeight;
   bool _neto = false;
+
+  /// Índice de la fuente seleccionada en [kDisplayFonts].
+  int _fontIndex = 0;
 
   @override
   void initState() {
@@ -99,9 +124,6 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     if (peso != null) {
       _peso = peso;
     }
-    // El notificador puede disparar durante la fase de build; tanto el
-    // setState local como el callback del padre deben diferirse para evitar
-    // "setState() called during build".
     if (WidgetsBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -115,29 +137,10 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     }
   }
 
-  // ─── Derivación de estado para pintar LEDs y colores ────────────────────
   ScaleStatus _statusActual({required bool conectado, required bool estable}) {
     if (!conectado) return ScaleStatus.desconectado;
     if (!estable) return ScaleStatus.inestable;
     return ScaleStatus.estable;
-  }
-
-  // ─── Handlers de los botones del indicador ──────────────────────────────
-  void _onCero() {
-    // Solo limpia el display local; el cero real lo maneja la balanza.
-    setState(() => _peso = 0);
-    widget.onPesoLeido?.call(0);
-  }
-
-  void _onTara() {
-    setState(() => _neto = !_neto);
-  }
-
-  void _onClear() {
-    setState(() {
-      _peso = widget.initialWeight;
-      _neto = false;
-    });
   }
 
   void _onCapturar() {
@@ -154,6 +157,54 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     );
   }
 
+  /// Abre un menú desplegable con las fuentes disponibles.
+  Future<void> _abrirMenuFuentes() async {
+    final seleccionado = await showMenu<int>(
+      context: context,
+      position: const RelativeRect.fromLTRB(0, 0, 0, 0),
+      items: [
+        const PopupMenuItem<int>(
+          enabled: false,
+          height: 32,
+          child: Text(
+            'Fuente del display',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+        ),
+        const PopupMenuDivider(),
+        for (var i = 0; i < kDisplayFonts.length; i++)
+          PopupMenuItem<int>(
+            value: i,
+            child: Row(
+              children: [
+                Icon(
+                  i == _fontIndex
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: i == _fontIndex ? SwsColors.success : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    kDisplayFonts[i].label,
+                    style: TextStyle(
+                      fontFamily: kDisplayFonts[i].fontFamily,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    if (seleccionado != null && mounted) {
+      setState(() => _fontIndex = seleccionado);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cliente = widget.client;
@@ -166,7 +217,6 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     final esVerde = status == ScaleStatus.estable;
     final esAmarillo = status == ScaleStatus.inestable || conectando;
 
-    // Estado textual mostrado bajo el nombre de la balanza.
     final estadoColor = esVerde
         ? SwsColors.success
         : esAmarillo
@@ -184,6 +234,8 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
         : esAmarillo
             ? Icons.sync
             : Icons.wifi_off;
+
+    final fuenteActual = kDisplayFonts[_fontIndex.clamp(0, kDisplayFonts.length - 1)];
 
     return Container(
       width: double.infinity,
@@ -254,13 +306,16 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
             ),
             const SizedBox(height: 10),
 
-            // ── Display tipo indicador (7-seg, verde/ámbar/rojo) ─────────
+            // ── Display tipo indicador ────────────────────────────────
             _DisplayIndicador(
               peso: peso,
               unidad: cliente.ultimoPeso?.unidad ?? 'kg',
               neto: _neto,
               conectado: conectado,
               status: status,
+              fontFamily: fuenteActual.fontFamily,
+              onAbrirFuentes:
+                  widget.permitirCambiarFuente ? _abrirMenuFuentes : null,
             ),
             const SizedBox(height: 8),
 
@@ -271,63 +326,9 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
               unidad: (cliente.ultimoPeso?.unidad ?? 'kg').toLowerCase(),
             ),
 
-            // ── Teclado de funciones (solo si hay conexión) ──────────────
+            // ── Botón "Tomar peso" ───────────────────────────────────
             if (widget.mostrarBotones && conectado) ...[
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _BtnIndicador(
-                      icon: Icons.power_settings_new,
-                      tooltip: 'Encendido',
-                      onTap: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BtnIndicador(
-                      icon: Icons.exposure_zero,
-                      tooltip: 'Cero (→0←)',
-                      onTap: _onCero,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BtnIndicador(
-                      label: 'T',
-                      tooltip: 'Tara (→T←)',
-                      activo: _neto,
-                      onTap: _onTara,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BtnIndicador(
-                      label: 'F',
-                      tooltip: 'Función',
-                      onTap: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BtnIndicador(
-                      label: 'C',
-                      tooltip: 'Clear',
-                      onTap: _onClear,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BtnIndicador(
-                      icon: Icons.print,
-                      tooltip: 'Imprimir',
-                      onTap: () {},
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Botón "Tomar peso" — captura estable
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -376,7 +377,7 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Display principal (negro + dígitos 7-seg con glow)
+// Display principal (negro + dígitos DSEG con glow)
 // ═══════════════════════════════════════════════════════════════════════════
 class _DisplayIndicador extends StatelessWidget {
   final double peso;
@@ -385,25 +386,33 @@ class _DisplayIndicador extends StatelessWidget {
   final bool conectado;
   final ScaleStatus status;
 
+  /// Familia de fuente DSEG a usar (null → monospace del sistema).
+  final String? fontFamily;
+
+  /// Callback del engranaje. Null → no se muestra el botón.
+  final VoidCallback? onAbrirFuentes;
+
   const _DisplayIndicador({
     required this.peso,
     required this.unidad,
     required this.neto,
     required this.conectado,
     required this.status,
+    this.fontFamily,
+    this.onAbrirFuentes,
   });
 
   Color _colorDigitos() {
-    if (!conectado) return const Color(0xFF3A3A3A); // apagado
+    if (!conectado) return const Color(0xFF3A3A3A);
     switch (status) {
       case ScaleStatus.estable:
       case ScaleStatus.aceptable:
-        return const Color(0xFF39FF14); // verde neón
+        return const Color(0xFF39FF14);
       case ScaleStatus.inestable:
-        return const Color(0xFFFFC107); // ámbar
+        return const Color(0xFFFFC107);
       case ScaleStatus.over:
       case ScaleStatus.under:
-        return const Color(0xFFFF3B30); // rojo
+        return const Color(0xFFFF3B30);
       default:
         return const Color(0xFF5A5A5A);
     }
@@ -413,77 +422,125 @@ class _DisplayIndicador extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _colorDigitos();
     final texto = peso.toStringAsFixed(2);
+    final apagado = color == const Color(0xFF3A3A3A);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2A2A2A), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+    List<Shadow>? glowShadows([double base = 1.0]) {
+      if (apagado) return null;
+      return [
+        Shadow(
+          color: color.withValues(alpha: 0.85 * base),
+          blurRadius: 12 * base,
+        ),
+        Shadow(
+          color: color.withValues(alpha: 0.55 * base),
+          blurRadius: 24 * base,
+        ),
+      ];
+    }
+
+    return Stack(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0D0D),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF2A2A2A), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (neto)
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: Text(
-                'NET',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.greenAccent.withValues(alpha: 0.9),
-                  letterSpacing: 1.2,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (neto)
+                Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: Text(
+                    'NET',
+                    style: TextStyle(
+                      fontFamily: fontFamily,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w400,
+                      height: 1.0,
+                      color: Colors.greenAccent.withValues(alpha: 0.9),
+                      shadows: [
+                        Shadow(
+                          color: Colors.greenAccent.withValues(alpha: 0.7),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      texto,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: fontFamily,
+                        fontSize: 68,
+                        fontWeight: FontWeight.w400,
+                        height: 1.0,
+                        letterSpacing: 2,
+                        color: color,
+                        shadows: glowShadows(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                texto,
+              const SizedBox(width: 14),
+              Text(
+                unidad.toUpperCase(),
                 style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 52,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 3,
+                  fontFamily: fontFamily,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w400,
                   height: 1.0,
-                  color: color,
-                  shadows: color == const Color(0xFF3A3A3A)
-                      ? null
-                      : [
-                          Shadow(
-                            color: color.withValues(alpha: 0.8),
-                            blurRadius: 10,
-                          ),
-                        ],
+                  letterSpacing: 1,
+                  color: apagado ? color : color.withValues(alpha: 0.9),
+                  shadows: glowShadows(0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Engranaje para cambiar la fuente (esquina superior derecha) ──
+        if (onAbrirFuentes != null)
+          Positioned(
+            top: 2,
+            right: 2,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onAbrirFuentes,
+                borderRadius: BorderRadius.circular(20),
+                child: Tooltip(
+                  message: 'Cambiar fuente del display',
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    child: const Icon(
+                      Icons.settings,
+                      size: 18,
+                      color: Color(0xFF6A6A6A),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            unidad,
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color == const Color(0xFF3A3A3A)
-                  ? color
-                  : color.withValues(alpha: 0.85),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -585,60 +642,4 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TrianglePainter old) => old.color != color;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Botón tipo teclado de indicador
-// ═══════════════════════════════════════════════════════════════════════════
-class _BtnIndicador extends StatelessWidget {
-  final IconData? icon;
-  final String? label;
-  final VoidCallback onTap;
-  final String tooltip;
-  final bool activo;
-
-  const _BtnIndicador({
-    this.icon,
-    this.label,
-    required this.onTap,
-    required this.tooltip,
-    this.activo = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: activo ? const Color(0xFF39FF14) : Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: onTap,
-          child: Container(
-            height: 42,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: const Color(0xFFB0B0B0),
-                width: 1.2,
-              ),
-            ),
-            child: Center(
-              child: icon != null
-                  ? Icon(icon, size: 20, color: Colors.black87)
-                  : Text(
-                      label ?? '',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

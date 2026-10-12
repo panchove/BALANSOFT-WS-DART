@@ -4,6 +4,8 @@ import '../../core/config/app_config.dart';
 import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_text.dart';
+import '../../data/datasources/remote/api_client.dart';
+import '../../injection.dart' as di;
 import '../providers/bloc/auth/auth_bloc.dart';
 import '../providers/bloc/sync/sync_bloc.dart' hide SyncWeighingsEvent;
 import '../providers/bloc/weighing/weighing_bloc.dart';
@@ -28,10 +30,20 @@ class TopNavBar extends StatelessWidget {
     String? nombre;
     String? email;
     String? rol;
+    String? empresaNombre;
+    String? empresaRif;
+    String? empresaDireccion;
+    String empresaLogoUrl = '';
+
     if (authState is AuthAuthenticated) {
       nombre = authState.user.nombre;
       email = authState.user.email;
       rol = authState.user.rol;
+      empresaNombre = authState.user.empresaNombre;
+      empresaRif = authState.user.empresaRif;
+      empresaDireccion = authState.user.empresaDireccion;
+      // URL del logo de empresa (puede venir vacía si no hay logo)
+      empresaLogoUrl = authState.user.logoUrl ?? '';
     }
 
     final compacto = MediaQuery.sizeOf(context).width < 600;
@@ -61,6 +73,10 @@ class TopNavBar extends StatelessWidget {
           nombre: nombre,
           email: email,
           rol: rol,
+          empresaNombre: empresaNombre,
+          empresaRif: empresaRif,
+          empresaDireccion: empresaDireccion,
+          empresaLogoUrl: empresaLogoUrl, // ← AGREGADO
           compacto: compacto,
           onToggleSidebar: onToggleSidebar,
           onLogout: onLogout,
@@ -75,6 +91,10 @@ class _TopRow extends StatelessWidget {
   final String? nombre;
   final String? email;
   final String? rol;
+  final String? empresaNombre;
+  final String? empresaRif;
+  final String? empresaDireccion;
+  final String empresaLogoUrl; // ← AGREGADO
   final bool compacto;
   final VoidCallback onToggleSidebar;
   final VoidCallback onLogout;
@@ -84,6 +104,10 @@ class _TopRow extends StatelessWidget {
     required this.nombre,
     required this.email,
     required this.rol,
+    required this.empresaNombre,
+    required this.empresaRif,
+    required this.empresaDireccion,
+    required this.empresaLogoUrl, // ← AGREGADO
     required this.compacto,
     required this.onToggleSidebar,
     required this.onLogout,
@@ -99,23 +123,31 @@ class _TopRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // En móvil abre el menú de navegación lateral (mismas opciones
-          // que el sidebar de desktop).
+          // ── ZONA IZQUIERDA: menú + logo ─────────────────────────
           IconButton(
             icon: const Icon(Icons.menu, color: Colors.white70),
             onPressed: onToggleSidebar,
-            tooltip: compacto ? 'Menú (Navegación)' : 'Toggle Sidebar (Ctrl+B / F10)',
+            tooltip: compacto
+                ? 'Menú (Navegación)'
+                : 'Toggle Sidebar (Ctrl+B / F10)',
           ),
 
           // BrandText SIEMPRE visible (tamaño reducido en móvil)
           BrandText(size: compacto ? 14 : 18),
 
-          const Spacer(),
+          // ── ZONA CENTRAL: información de la empresa ─────────────
+          // Ocupa todo el espacio flexible y centra su contenido.
+          Expanded(
+            child: (empresaNombre != null && empresaNombre!.isNotEmpty)
+                ? Center(
+                    child: _buildEmpresaInfo(compacto: compacto),
+                  )
+                : const SizedBox.shrink(),
+          ),
 
-          // Estado del backend
+          // ── ZONA DERECHA: estado + sync + usuario ───────────────
           const _HealthStatusBadge(),
 
-          // Botón de sincronizar
           IconButton(
             tooltip: AppTranslations.tr('sync_btn',
                 langCode: Localizations.localeOf(context).languageCode),
@@ -125,20 +157,94 @@ class _TopRow extends StatelessWidget {
             },
           ),
 
-
           const SizedBox(width: 4),
 
-          // Perfil de usuario
           if (nombre != null || email != null)
-            _buildUserProfile(context, compacto: compacto),
+            _buildUserProfile(context, compacto: compacto, logoUrl: empresaLogoUrl),
         ],
       ),
     );
   }
 
-  Widget _buildUserProfile(BuildContext context, {required bool compacto}) {
+  /// Bloque de la empresa:
+  ///   NOMBRE EMPRESA - RIF
+  ///        DIRECCION
+  Widget _buildEmpresaInfo({required bool compacto}) {
+    final tieneRif = empresaRif != null && empresaRif!.isNotEmpty;
+    final linea1 =
+        '${empresaNombre!}${tieneRif ? ' - $empresaRif' : ''}';
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          linea1,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: compacto ? 11.5 : 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+        if (!compacto &&
+            empresaDireccion != null &&
+            empresaDireccion!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              empresaDireccion!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10.5,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUserProfile(BuildContext context, {required bool compacto, required String logoUrl}) {
     final iniciales = _iniciales(nombre ?? email ?? '');
+    // Resuelve URL absoluta si es relativa
+    final resolvedLogoUrl = logoUrl.isNotEmpty ? di.sl<ApiClient>().mediaUrl(logoUrl) : '';
+
+    Widget inicialesAvatar(String txt) => CircleAvatar(
+      backgroundColor: Colors.white.withValues(alpha: 0.16),
+      child: Text(
+        txt,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+
+    // Widget que muestra o el logo de empresa o las iniciales
+    Widget avatarContent() {
+      if (resolvedLogoUrl.isNotEmpty) {
+        // Intenta mostrar el logo de la empresa NetworkImage
+        // Si falla, cae a iniciales en el errorBuilder
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(17),
+          child: Image.network(
+            resolvedLogoUrl,
+            width: 34,
+            height: 34,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                inicialesAvatar(iniciales),
+          ),
+        );
+      }
+      return inicialesAvatar(iniciales);
+    }
 
     // ── Móvil: solo avatar + logout ──────────────────────────────────
     if (compacto) {
@@ -148,18 +254,7 @@ class _TopRow extends StatelessWidget {
           InkWell(
             borderRadius: BorderRadius.circular(999),
             onTap: onOpenConfig,
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.white.withValues(alpha: 0.16),
-              child: Text(
-                iniciales,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+            child: avatarContent(),
           ),
           const SizedBox(width: 4),
           IconButton(
@@ -181,18 +276,7 @@ class _TopRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 17,
-              backgroundColor: Colors.white.withValues(alpha: 0.16),
-              child: Text(
-                iniciales,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+            avatarContent(),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,7 +341,10 @@ class _HealthStatusBadge extends StatelessWidget {
         final online = state.isOnline;
         final modoOffline = AppConfig.offline;
         final (mensaje, color) = modoOffline
-            ? (AppTranslations.tr('tooltip_no_network', langCode: lang), SwsColors.warning)
+            ? (
+                AppTranslations.tr('tooltip_no_network', langCode: lang),
+                SwsColors.warning
+              )
             : (
                 online
                     ? AppTranslations.tr('tooltip_online', langCode: lang)
@@ -281,7 +368,8 @@ class _HealthStatusBadge extends StatelessWidget {
                         ? AppTranslations.tr('status_no_network', langCode: lang)
                         : (online
                             ? AppTranslations.tr('status_online', langCode: lang)
-                            : AppTranslations.tr('status_offline', langCode: lang)),
+                            : AppTranslations.tr(
+                                'status_offline', langCode: lang)),
                     style: TextStyle(fontSize: 12, color: color),
                   ),
                 ],
