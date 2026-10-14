@@ -268,6 +268,7 @@ class _NotificacionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final noLeida = notificacion.estado == AppNotification.estadoNoLeida;
     final color = colorSeveridad(notificacion.severidad);
+    final colorTexto = colorDeEstadoLegible(context, color);
     final local = notificacion.createdAt.toLocal();
     final fecha = '${_dos(local.day)}/${_dos(local.month)}/${local.year} '
         '${_dos(local.hour)}:${_dos(local.minute)}';
@@ -276,7 +277,7 @@ class _NotificacionTile extends StatelessWidget {
       key: Key('notificacion_${notificacion.id}'),
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.15),
-        child: Icon(iconoSeveridad(notificacion.severidad), color: color),
+        child: Icon(iconoSeveridad(notificacion.severidad), color: colorTexto),
       ),
       title: Text(
         notificacion.titulo,

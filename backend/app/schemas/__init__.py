@@ -507,6 +507,28 @@ class WeighingUpdate(BaseModel):
     densidad: Decimal | None = None
     litros: Decimal | None = None
     unidades: Decimal | None = None
+    # Justificación obligatoria de la edición (RB: editar exige motivo y queda
+    # registrado por edición en `boletos_ediciones`).
+    justificacion: str = Field(..., min_length=10, max_length=500)
+
+
+class BoletoEdicionOut(BaseModel):
+    """Una edición registrada de un boleto (historial inmutable)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id_edicion: uuid.UUID
+    boleto: uuid.UUID
+    numero_boleto: str | None = None
+    id_usuario: uuid.UUID | None = None
+    usuario_nombre: str | None = None
+    rol_usuario: str | None = None
+    fecha_edicion: datetime
+    ip: str | None = None
+    justificacion: str
+    estado_anterior: str
+    estado_nuevo: str
+    campos_modificados: dict | None = None
+    edicion_numero: int
 
 
 class WeighingOut(BaseModel):
@@ -559,6 +581,9 @@ class WeighingOut(BaseModel):
     anulado_por: str | None = None
     estado_boleto: str
     sincronizado: bool = False
+    ediciones_count: int = 0
+    motivo_modificacion_ultima: str | None = None
+    ultimo_editor_nombre: str | None = None
     advertencia_tolerancia: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -734,6 +759,13 @@ class EmpresaPerfilOut(BaseModel):
     ruta_exportacion_reportes: str | None = None
     tamano_ticket_pdf: Literal["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"] = "AUTOMATICO"
     fuente_ticket_pdf: Literal["DejaVu"] = "DejaVu"
+    # Edición de boletos + impresión automática (config por empresa)
+    max_ediciones_boleto: int | None = None
+    impresion_automatica: bool = False
+    protocolo_impresion: str | None = None
+    impresora_nombre: str | None = None
+    impresora_host: str | None = None
+    impresora_puerto: int | None = None
     updated_at: datetime
 
     @field_validator("tamano_ticket_pdf", "fuente_ticket_pdf", mode="before")
@@ -763,6 +795,15 @@ class EmpresaPerfilUpdate(BaseModel):
     ruta_exportacion_reportes: str | None = Field(None, max_length=500)
     tamano_ticket_pdf: Literal["AUTOMATICO", "GRANDE", "MEDIANO", "PEQUENO"] | None = Field(None)
     fuente_ticket_pdf: Literal["DejaVu"] | None = Field(None)
+    # Edición de boletos + impresión automática
+    max_ediciones_boleto: int | None = Field(None, ge=0, le=1000)
+    impresion_automatica: bool | None = Field(None)
+    protocolo_impresion: (
+        Literal["predeterminada_so", "raw_9100", "lpd_cups", "nombre_impresora"] | None
+    ) = Field(None)
+    impresora_nombre: str | None = Field(None, max_length=255)
+    impresora_host: str | None = Field(None, max_length=100)
+    impresora_puerto: int | None = Field(None, ge=1, le=65535)
 
 
 # ---------------------------------------------------------------------------

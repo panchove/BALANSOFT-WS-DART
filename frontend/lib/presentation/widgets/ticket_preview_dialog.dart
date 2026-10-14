@@ -11,7 +11,7 @@ import '../../domain/entities/printer_preset.dart';
 import '../../domain/entities/weighing.dart';
 import '../../injection.dart' as di;
 
-/// Modal para previsualizar el comprobante/boleto con distribución de cantidad por hoja antes de confirmar la impresión.
+/// Modal para previsualizar el comprobante/boleto y elegir la cantidad de tickets («copias») antes de confirmar la impresión.
 class TicketPreviewDialog extends StatefulWidget {
   final Weighing weighing;
   final PrinterPreset? initialPreset;
@@ -201,11 +201,12 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           ? await repo.getTicketTxt(widget.weighing.boleto, tipoTicket: _preset.tipoTicket)
           : await repo.getTicketPdf(
               widget.weighing.boleto,
-              boletosPorHoja: _preset.boletosPorHoja,
+              copias: _preset.copias,
               tamanoPapel: _preset.tamanoPapel,
               orientacion: _preset.orientacion,
               mostrarEncabezado: _preset.mostrarEncabezado,
               mostrarDetalles: _preset.mostrarDetalles,
+              mostrarQr: _preset.mostrarQr,
               tipoTicket: _preset.tipoTicket,
             );
       final bytes = response.data;
@@ -223,7 +224,10 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Ticket ($_formato) guardado en: $ruta (${_preset.boletosPorHoja} por hoja, ${_preset.copias} copias)',
+              AppTranslations.tr(
+                'ticket_guardado_en',
+                args: [_formato, ruta, '${_preset.copias}'],
+              ),
             ),
             backgroundColor: SwsColors.success,
           ),
@@ -273,8 +277,8 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     final isLandscape = _preset.orientacion == 'landscape';
 
     // Espejo de _build_pdf (backend): en papel normal el boleto SIEMPRE es
-    // estrecho y centrado (140mm de ~196mm útiles), sin importar cuántos se
-    // apilen por hoja (1..4). En térmico el ancho es el del rollo.
+    // estrecho y centrado (140mm de ~196mm útiles). En térmico el ancho es el
+    // del rollo. El «copias» solo multiplica los tickets, no el ancho.
     final anchoBase = isLandscape ? 720.0 : 520.0;
     final anchoPreview = isTermico ? 340.0 : anchoBase * (140 / 195.9);
 
@@ -330,24 +334,21 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                       if (val != null) setState(() => _preset = _preset.copyWith(tamanoPapel: val));
                     },
                   ),
-                  // Cantidad por Hoja
+                  // Cantidad de tickets a imprimir
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('ticket_per_sheet'.tr(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text('tickets_to_print'.tr(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                       DropdownButton<int>(
-                        value: _preset.boletosPorHoja,
+                        value: _preset.copias,
                         isDense: true,
                         underline: const SizedBox(),
                         style: const TextStyle(fontSize: 12),
-                        items:[
-                          DropdownMenuItem(value: 1, child: Text('sheet_1_short'.tr())),
-                          DropdownMenuItem(value: 2, child: Text('sheet_2_short'.tr())),
-                          DropdownMenuItem(value: 3, child: Text('sheet_3_short'.tr())),
-                          DropdownMenuItem(value: 4, child: Text('sheet_4_short'.tr())),
-                        ],
+                        items: [1, 2, 3, 4, 5]
+                            .map((c) => DropdownMenuItem(value: c, child: Text('$c')))
+                            .toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _preset = _preset.copyWith(boletosPorHoja: val));
+                          if (val != null) setState(() => _preset = _preset.copyWith(copias: val));
                         },
                       ),
                     ],
@@ -388,25 +389,6 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                     },
                     style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                   ),
-                  // Copias
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('ticket_copies'.tr(), style: const TextStyle(fontSize: 11)),
-                      DropdownButton<int>(
-                        value: _preset.copias,
-                        isDense: true,
-                        underline: const SizedBox(),
-                        style: const TextStyle(fontSize: 12),
-                        items: [1, 2, 3, 4, 5]
-                            .map((c) => DropdownMenuItem(value: c, child: Text('$c')))
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _preset = _preset.copyWith(copias: val));
-                        },
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -434,31 +416,13 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (int i = 0; i < (isTermico ? 1 : _preset.boletosPorHoja); i++) ...[
-                          if (i > 0) ...[
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                const Icon(Icons.content_cut, size: 12, color: Colors.grey),
-                                Expanded(
-                                  child: Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    height: 1,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                Text('ticket_cut_i'.tr(null, ['$i']),
-                                    style: const TextStyle(fontSize: 9, color: Colors.grey)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          _buildSingleTicketBlock(w, isTermico, _formato),
-                        ],
+                        // Un único ticket: «Cantidad de tickets» es cuántas
+                        // copias completas se imprimen, no un apilado en hoja.
+                        _buildSingleTicketBlock(w, isTermico, _formato),
                         const SizedBox(height: 8),
                         Center(
                           child: Text(
-                            'Preset: ${_preset.tamanoPapel} | ${_preset.orientacion.toUpperCase()} | ${_preset.boletosPorHoja} por hoja | ${_preset.copias} copias',
+                            'Preset: ${_preset.tamanoPapel} | ${_preset.orientacion.toUpperCase()} | ${_preset.copias} ticket(s)',
                             style: const TextStyle(fontSize: 9, color: Colors.grey),
                           ),
                         ),
@@ -514,18 +478,6 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     final numBoleto = w.numeroBoleto ?? w.boleto;
     if (isTermico) return _buildTicketTermico(w, numBoleto, formato);
 
-    final double rawNeto = w.pesoNeto ?? 0.0;
-    final String justificacion =
-        rawNeto < 0 ? ' (DESPACHO)' : (rawNeto > 0 ? ' (INGRESO)' : '');
-
-    final double peCam = w.pesoEntradaVehiculo;
-    final double peRem = w.pesoEntradaRemolque ?? 0.0;
-    final double? psCam = w.pesoSalidaVehiculo;
-    final double? psRem = w.pesoSalidaRemolque;
-    final bool haySalida = w.fechaHoraSalida != null && psCam != null;
-    final double netoCam = peCam - (psCam ?? 0.0);
-    final double netoRem = peRem - (psRem ?? 0.0);
-
     final bool tieneDatAdic = (w.documento?.isNotEmpty ?? false) ||
         (w.unidades ?? w.litros) != null ||
         w.densidad != null ||
@@ -535,7 +487,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
       style: TextStyle(
         fontFamily: formato == 'TXT' ? 'monospace' : 'Roboto',
         color: Colors.black,
-        fontSize: widget.initialPreset?.boletosPorHoja == 3 ? 10.5 : 11.5,
+        fontSize: 11.5,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -545,7 +497,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           if (_preset.mostrarEncabezado) ...[
             _encabezadoEmpresa(
               conLogo: true,
-              escala: widget.initialPreset?.boletosPorHoja == 3 ? 0.9 : 1.0,
+              escala: 1.0,
             ),
             const Divider(color: Colors.black, thickness: 1, height: 8),
           ],
@@ -586,50 +538,8 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           ),
           const Divider(color: Colors.black45, height: 6),
 
-          // ── Tabla: Balanza | Fecha/Hora | Peso Camión | Peso Remolque | Peso Total ──
-          _filaLectura(
-              'ticket_scale'.tr(),
-              'ticket_datetime'.tr(),
-              'ticket_truck_weight'.tr(),
-              'ticket_trailer_weight'.tr(),
-              'ticket_total_weight'.tr(),
-              bold: true),
-          _filaLectura(
-            'Balanza Entrada: ${w.balanzaNombre ?? ''}'.trimRight(),
-            _formatDate(w.fechaHoraEntrada),
-            _fmtNumero(peCam),
-            _fmtNumero(peRem),
-            _fmtNumero(peCam + peRem),
-          ),
-          if (haySalida)
-            _filaLectura(
-              'Balanza Salida: ${w.balanzaNombre ?? ''}'.trimRight(),
-              _formatDate(w.fechaHoraSalida!),
-              _fmtNumero(psCam),
-              _fmtNumero(psRem),
-              _fmtNumero(w.pesoTotalSalida!),
-            ),
-          const Divider(color: Colors.black45, height: 6),
-          _filaLectura(
-            'PESO NETO$justificacion:',
-            '',
-            _fmtNumero(netoCam),
-            _fmtNumero(netoRem),
-            _fmtNumero(rawNeto),
-            bold: true,
-          ),
-          if (w.pesoNetoDeclarado != null) ...[
-            _filaLectura(
-              'PESO DECLARADO / DIFERENCIA:',
-              '',
-              '',
-              _fmtNumero(w.pesoNetoDeclarado),
-              _fmtConSigno(w.pesoDiferencia),
-              bold: true,
-            ),
-            if (w.porcentajeDesviacion != null)
-              _filaLectura('DESVIACIÓN:', '', '', '', '${w.porcentajeDesviacion!.toStringAsFixed(2)} %', bold: true),
-          ],
+          // ── Tabla de lecturas de peso (la MISMA rejilla que el PDF y el TXT) ──
+          ..._bloquePesos(w, conControl: true),
           const Divider(color: Colors.black, thickness: 1, height: 6),
 
           // ── DATOS ADICIONALES ──
@@ -677,14 +587,10 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     );
   }
 
-  /// Variante compacta para papel térmico (80mm/58mm): sin columnas
-  /// de camión/remolque/total porque no caben en el ancho del rollo.
+  /// Variante compacta para papel térmico (80mm/58mm): los campos van apilados
+  /// "Etiqueta: valor", pero la LECTURA DE PESOS sale con la MISMA rejilla que
+  /// la hoja —``_bloquePesos``—, igual que el PDF térmico.
   Widget _buildTicketTermico(Weighing w, String numBoleto, String formato) {
-    final double rawNeto = w.pesoNeto ?? 0.0;
-    final String justificacion =
-        rawNeto < 0 ? ' (DESPACHO)' : (rawNeto > 0 ? ' (INGRESO)' : '');
-    final String pesoNetoFormateado = '${NumberUtils.formatKg(rawNeto.abs())}$justificacion';
-
     return DefaultTextStyle(
       style: TextStyle(
         fontFamily: formato == 'TXT' ? 'monospace' : 'Roboto',
@@ -707,15 +613,15 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
             ),
           ),
           const Divider(color: Colors.black45, height: 6),
-          _filaPreview('Serie - Boleto:', numBoleto, bold: true),
-          _filaPreview('Fecha/Hora:', _formatDate(w.createdAt)),
-          _filaPreview('Camión:', w.idVehiculo ?? 'Sin Placa'),
-          _filaPreview('Remolque:', w.remolque ? (w.remolquePlaca ?? 'Sí') : 'No'),
-          _filaPreview('Transporte:', w.transporteNombre ?? 'N/A'),
-          _filaPreview('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
-          _filaPreview('ticket_product'.tr(), w.productoNombre ?? 'N/A'),
-          _filaPreview('ticket_warehouse'.tr(), w.almacenNombre ?? 'N/A'),
-          _filaPreview('ticket_customer_supplier'.tr(),
+          _filaTermico('Serie - Boleto:', numBoleto, bold: true),
+          _filaTermico('Fecha/Hora:', _formatDate(w.createdAt)),
+          _filaTermico('Camión:', w.idVehiculo ?? 'Sin Placa'),
+          _filaTermico('Remolque:', w.remolque ? (w.remolquePlaca ?? 'Sí') : 'No'),
+          _filaTermico('Transporte:', w.transporteNombre ?? 'N/A'),
+          _filaTermico('ticket_driver'.tr(), w.conductorNombre ?? w.idConductor ?? 'N/A'),
+          _filaTermico('ticket_product'.tr(), w.productoNombre ?? 'N/A'),
+          _filaTermico('ticket_warehouse'.tr(), w.almacenNombre ?? 'N/A'),
+          _filaTermico('ticket_customer_supplier'.tr(),
               w.terceroNombre ?? 'N/A'),
           const SizedBox(height: 4),
           const Divider(color: Colors.black, thickness: 1, height: 4),
@@ -724,13 +630,11 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
           ),
           const Divider(color: Colors.black45, height: 4),
-          _filaPreview('ticket_entry'.tr(),
-              '${_formatDate(w.fechaHoraEntrada)}   ${NumberUtils.formatKg(w.pesoTotalEntrada)}'),
-          if (w.fechaHoraSalida != null)
-            _filaPreview('ticket_exit'.tr(),
-                '${_formatDate(w.fechaHoraSalida)}   ${NumberUtils.formatKg(w.pesoTotalSalida ?? 0)}'),
           const Divider(color: Colors.black45, height: 4),
-          _filaPreview('ticket_net_weight'.tr(), pesoNetoFormateado, bold: true),
+          // Tabla de lecturas (espejo del PDF térmico): la MISMA rejilla que la
+          // hoja —(etiqueta) | Fec, Hrs | CAMIÓN | REMOLQUE | TOTAL—, con una
+          // fila por pesada, la de TOTALES (netos por vehículo) y el PESO NETO.
+          ..._bloquePesos(w, conControl: false, separador: 4),
           const Divider(color: Colors.black, thickness: 1, height: 4),
           if ((w.documento?.isNotEmpty ?? false) || (w.unidades ?? w.litros) != null || w.densidad != null || (_preset.tipoTicket == 'avanzado' && ((w.guiaSunagro?.isNotEmpty ?? false) || (w.medida?.isNotEmpty ?? false)))) ...[
             Center(
@@ -738,16 +642,16 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
             ),
             const Divider(color: Colors.black45, height: 4),
-            if (w.documento?.isNotEmpty ?? false) _filaPreview('Documento:', w.documento!),
+            if (w.documento?.isNotEmpty ?? false) _filaTermico('Documento:', w.documento!),
             if (_preset.tipoTicket == 'avanzado' && (w.guiaSunagro?.isNotEmpty ?? false))
-              _filaPreview('Guía SUNAGRO:', w.guiaSunagro!),
+              _filaTermico('Guía SUNAGRO:', w.guiaSunagro!),
             if (_preset.tipoTicket == 'avanzado' && (w.medida?.isNotEmpty ?? false))
-              _filaPreview('Medida:', w.medida!),
+              _filaTermico('Medida:', w.medida!),
             if ((w.unidades ?? w.litros) != null)
-              _filaPreview('Unidades:', _fmtNumero(w.unidades ?? w.litros)),
-            if (w.densidad != null) _filaPreview('Densidad:', _fmtDensidad(w.densidad)),
+              _filaTermico('Unidades:', _fmtNumero(w.unidades ?? w.litros)),
+            if (w.densidad != null) _filaTermico('Densidad:', _fmtDensidad(w.densidad)),
             if (_preset.tipoTicket == 'avanzado' && (w.unidades ?? w.litros) != null && w.densidad != null)
-              _filaPreview('Resultado:', _fmtNumero((w.unidades ?? w.litros)! * w.densidad!)),
+              _filaTermico('Resultado:', _fmtNumero((w.unidades ?? w.litros)! * w.densidad!)),
             const Divider(color: Colors.black, thickness: 1, height: 4),
           ],
           if (_preset.mostrarDetalles && w.observaciones != null && w.observaciones!.isNotEmpty) ...[
@@ -788,17 +692,113 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     return s.replaceAll('.', ',');
   }
 
-  /// Una fila de la tabla de lecturas (Balanza | Fecha/Hora | Camión | Remolque | Total).
-  Widget _filaLectura(
-    String label,
-    String fecha,
-    String camion,
-    String remolque,
-    String total, {
-    bool bold = false,
+  /// La tabla LECTURA DE PESOS del preview, con la MISMA rejilla que el PDF y el
+  /// TXT (espejo de ``_filas_lectura_pesos`` en el backend)::
+  ///
+  ///     (vacío)     Fec, Hrs            CAMIÓN       REMOLQUE     TOTAL
+  ///     ENTRADA:    08/09/2026 – 08:30  50.000,00 kg 12.500,00 kg 62.500,00 kg
+  ///     SALIDA:     …                   (solo si el boleto ya tiene salida)
+  ///     (vacío)     TOTALES:            (los NETOS por vehículo)
+  ///     PESO NETO:  7.500,00 kg         (INGRESO / DESPACHO)
+  ///
+  /// ``conControl`` añade las dos filas de la HOJA (declarado / desviación), que
+  /// el rollo no lleva.
+  List<Widget> _bloquePesos(
+    Weighing w, {
+    required bool conControl,
+    double separador = 6,
   }) {
-    final s = TextStyle(
-      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+    final double peCam = w.pesoEntradaVehiculo;
+    final double peRem = w.pesoEntradaRemolque ?? 0.0;
+    final double? psCam = w.pesoSalidaVehiculo;
+    final double? psRem = w.pesoSalidaRemolque;
+    final double neto = w.pesoNeto ?? 0.0;
+
+    return [
+      _filaPesos([
+        '',
+        'ticket_col_datetime'.tr(),
+        'ticket_col_camion'.tr(),
+        'ticket_col_remolque'.tr(),
+        'ticket_col_total'.tr(),
+      ], cabecera: true),
+      _filaPesos([
+        '${'ticket_col_entry'.tr()}:',
+        _fechaTabla(w.fechaHoraEntrada),
+        NumberUtils.formatKg(peCam),
+        NumberUtils.formatKg(peRem),
+        NumberUtils.formatKg(peCam + peRem),
+      ]),
+      if (w.fechaHoraSalida != null)
+        _filaPesos([
+          '${'ticket_col_exit'.tr()}:',
+          _fechaTabla(w.fechaHoraSalida),
+          _kg(psCam),
+          _kg(psRem),
+          NumberUtils.formatKg((psCam ?? 0) + (psRem ?? 0)),
+        ]),
+      _filaPesos([
+        '',
+        '${'ticket_col_totales'.tr()}:',
+        NumberUtils.formatKg(peCam - (psCam ?? 0)),
+        NumberUtils.formatKg(peRem - (psRem ?? 0)),
+        NumberUtils.formatKg(neto),
+      ]),
+      Divider(color: Colors.black45, height: separador),
+      _filaPesos([
+        'ticket_net_weight'.tr(),
+        NumberUtils.formatKg(neto.abs()),
+        neto < 0 ? '(DESPACHO)' : (neto > 0 ? '(INGRESO)' : ''),
+        '',
+        '',
+      ], bold: true),
+      if (conControl && w.pesoNetoDeclarado != null) ...[
+        _filaPesos([
+          'PESO DECLARADO / DIFERENCIA:',
+          '',
+          '',
+          _fmtNumero(w.pesoNetoDeclarado),
+          _fmtConSigno(w.pesoDiferencia),
+        ], bold: true),
+        if (w.porcentajeDesviacion != null)
+          _filaPesos([
+            'DESVIACIÓN:',
+            '',
+            '',
+            '',
+            '${w.porcentajeDesviacion!.toStringAsFixed(2)} %',
+          ], bold: true),
+      ],
+    ];
+  }
+
+  /// Celda de peso: los kilos, o vacío si no hay dato (como el backend).
+  String _kg(double? valor) => valor == null ? '' : NumberUtils.formatKg(valor);
+
+  /// Fecha y hora de la columna ``Fec, Hrs`` de la tabla: ``dd/mm/aaaa – HH:MM``
+  /// (guion medio, igual que el backend). El bloque de DATOS sigue con
+  /// ``_formatDate`` (espacio).
+  String _fechaTabla(DateTime? fecha) {
+    if (fecha == null) return '—';
+    final String dia = fecha.day.toString().padLeft(2, '0');
+    final String mes = fecha.month.toString().padLeft(2, '0');
+    final String hora = fecha.hour.toString().padLeft(2, '0');
+    final String minuto = fecha.minute.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year} – $hora:$minuto';
+  }
+
+  /// Una fila de la tabla de lecturas: 5 columnas con el reparto de anchos del
+  /// PDF (``_REQUIERE_TABLA_PESOS``: camión, remolque y total son las columnas
+  /// de kilos). La etiqueta va a la izquierda, los valores a la derecha y la
+  /// cabecera centrada, como en el PDF.
+  Widget _filaPesos(
+    List<String> celdas, {
+    bool bold = false,
+    bool cabecera = false,
+  }) {
+    const List<int> anchos = [75, 58, 74, 63, 57];
+    final TextStyle estilo = TextStyle(
+      fontWeight: (bold || cabecera) ? FontWeight.bold : FontWeight.normal,
       fontSize: 9.5,
     );
     return Padding(
@@ -806,39 +806,74 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 34, child: Text(label, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 22, child: Text(fecha, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(camion, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(remolque, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(total, textAlign: TextAlign.right, style: s)),
+          for (int i = 0; i < anchos.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              flex: anchos[i],
+              child: Text(
+                i < celdas.length ? celdas[i] : '',
+                textAlign: cabecera
+                    ? TextAlign.center
+                    : (i == 0 ? TextAlign.left : TextAlign.right),
+                style: estilo,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _filaPreview(String label, String valor, {bool bold = false}) {
+  /// Fila "Etiqueta | valor" del bloque de DATOS, en DOS columnas con
+  /// alineación PROPIA: la etiqueta pegada a la DERECHA de su columna y el
+  /// valor a la IZQUIERDA de la siguiente (espejo de la tabla de 2 celdas del
+  /// PDF). La usan los DOS formatos —la hoja (media carta/carta/A4) y el rollo
+  /// térmico (80/58 mm)— porque el PDF imprime esa parte igual en todos; solo
+  /// cambian el tamaño de la letra y el aire de cada fila.
+  ///
+  /// El reparto 47/53 sale del propio PDF: a 80 mm, la etiqueta más larga que
+  /// puede ver el preview (`Cliente/Proveedor:`) ocupa el 46,7 % del ancho útil
+  /// (`_ancho_etiqueta_termica`, que es lo que se le deja a su columna). El
+  /// catálogo del ticket AVANZADO no se pinta aquí. Es una APROXIMACIÓN: el PDF
+  /// mide la etiqueta de cada grupo con la fuente real (y el rollo de 58 mm
+  /// recorta con su tope); el preview no puede reproducir esa medida.
+  Widget _filaDatos(
+    String label,
+    String valor, {
+    bool bold = false,
+    double fontSize = 10.5,
+    double padding = 1.2,
+  }) {
+    final TextStyle estilo = TextStyle(
+      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+      fontSize: fontSize,
+    );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.2),
+      padding: EdgeInsets.symmetric(vertical: padding),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 10.5)),
-          const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              valor,
-              textAlign: TextAlign.right,
-              style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 10.5),
-            ),
+            flex: 47,
+            child: Text(label, textAlign: TextAlign.right, style: estilo),
+          ),
+          const SizedBox(width: 3),
+          Expanded(
+            flex: 53,
+            child: Text(valor, textAlign: TextAlign.left, style: estilo),
           ),
         ],
       ),
     );
   }
+
+  /// Fila de datos de la HOJA (media carta, carta y A4).
+  Widget _filaPreview(String label, String valor, {bool bold = false}) =>
+      _filaDatos(label, valor, bold: bold);
+
+  /// Fila de datos del rollo TÉRMICO (80/58 mm): letra algo menor.
+  Widget _filaTermico(String label, String valor, {bool bold = false}) =>
+      _filaDatos(label, valor, bold: bold, fontSize: 9.5, padding: 1.0);
 }
 
 class _LineaFirma extends StatelessWidget {

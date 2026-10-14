@@ -457,21 +457,23 @@ class ApiClient {
 
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletosPorHoja = 1,
+    int copias = 1,
     String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
     bool mostrarEncabezado = true,
     bool mostrarDetalles = true,
+    bool mostrarQr = true,
     String tipoTicket = 'simple',
   }) async {
     final response = await _dio.get(
       '$_baseUrl${ApiConstants.weighingPdf(boleto)}',
       queryParameters: {
-        'boletos_por_hoja': boletosPorHoja,
+        'copias': copias,
         'tamano_papel': tamanoPapel,
         'orientacion': orientacion,
         'mostrar_encabezado': mostrarEncabezado,
         'mostrar_detalles': mostrarDetalles,
+        'mostrar_qr': mostrarQr,
         'tipo_ticket': tipoTicket,
       },
       options: Options(responseType: ResponseType.bytes),
@@ -517,6 +519,14 @@ class ApiClient {
     final response = await _dio.put(
       '$_baseUrl${ApiConstants.weighingUpdate(boleto)}',
       data: body,
+    );
+    return response;
+  }
+
+  /// Historial de ediciones del boleto (GET /api/v1/weighing/{boleto}/ediciones).
+  Future<Response> getEdiciones(String boleto) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.weighingEdiciones(boleto)}',
     );
     return response;
   }

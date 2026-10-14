@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../core/constants/app_constants.dart';
+import '../../domain/entities/boleto_edicion.dart';
 import '../../domain/entities/weighing.dart';
 import '../../domain/repositories/i_weighing_repository.dart';
 import '../datasources/remote/api_client.dart';
@@ -27,8 +28,8 @@ class WeighingRepository implements IWeighingRepository {
     if (isLocal) return true;
 
     try {
-      final result = await _connectivity.checkConnectivity();
-      if (result != ConnectivityResult.none) return true;
+      final results = await _connectivity.checkConnectivity();
+      if (results.any((r) => r != ConnectivityResult.none)) return true;
     } catch (_) {}
 
     return await _apiClient.health();
@@ -161,21 +162,39 @@ class WeighingRepository implements IWeighingRepository {
   @override
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data) async {
     if (await _isConnected) {
-      final response = await _apiClient.updateWeighing(boleto, data);
-      final updated = Weighing.fromJson(response.data);
-      await _saveLocal(updated, synced: true);
-      return updated;
-    } else {
-      final local = await getWeighingByBoleto(boleto);
-      if (local == null) throw Exception('Pesaje no encontrado');
-      final updated = local.copyWith(
-        documento: data['documento'],
-        flete: data['flete'],
-        costoFlete: data['costo_flete'],
-        observaciones: data['observaciones'],
-      );
-      await _saveLocal(updated, synced: false, pending: true);
-      return updated;
+      try {
+        final response = await _apiClient.updateWeighing(boleto, data);
+        final updated = Weighing.fromJson(response.data);
+        await _saveLocal(updated, synced: true);
+        return updated;
+      } on DioException catch (e) {
+        // El backend responde 409 (tope de ediciones) o 422 (justificación) con
+        // un `detail` legible: se propaga tal cual al usuario.
+        throw Exception(_extractDioError(e, 'Error al editar el boleto'));
+      }
+    }
+    final local = await getWeighingByBoleto(boleto);
+    if (local == null) throw Exception('Pesaje no encontrado');
+    // Sin conexión NO se edita: la justificación obligatoria, el tope por boleto
+    // y el historial inmutable (usuario/fecha/IP) solo los aplica el backend.
+    // Persistir aquí un subconjunto de campos se saltaría la regla de negocio y
+    // la auditoría sin que nadie lo vea.
+    throw const EdicionRequiereConexionException();
+  }
+
+  @override
+  Future<List<BoletoEdicion>> getEdiciones(String boleto) async {
+    try {
+      final response = await _apiClient.getEdiciones(boleto);
+      final data = response.data;
+      if (data is! List) return const [];
+      return data
+          .whereType<Map>()
+          .map((e) => BoletoEdicion.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {
+      // El historial es informativo: si no hay red, se muestra vacío.
+      return const [];
     }
   }
 
@@ -210,20 +229,22 @@ class WeighingRepository implements IWeighingRepository {
   @override
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletosPorHoja = 1,
+    int copias = 1,
     String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
     bool mostrarEncabezado = true,
     bool mostrarDetalles = true,
+    bool mostrarQr = true,
     String tipoTicket = 'simple',
   }) async {
     return _apiClient.getTicketPdf(
       boleto,
-      boletosPorHoja: boletosPorHoja,
+      copias: copias,
       tamanoPapel: tamanoPapel,
       orientacion: orientacion,
       mostrarEncabezado: mostrarEncabezado,
       mostrarDetalles: mostrarDetalles,
+      mostrarQr: mostrarQr,
       tipoTicket: tipoTicket,
     );
   }

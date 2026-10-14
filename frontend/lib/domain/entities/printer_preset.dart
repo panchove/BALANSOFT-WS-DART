@@ -4,11 +4,11 @@ class PrinterPreset {
   final String tamanoPapel; // 80mm, 58mm, HalfLetter, Letter, A4, Custom
   final String orientacion; // portrait, landscape
   final String formatoPredeterminado; // PDF, TXT
-  final int copias;
-  final int boletosPorHoja; // 1, 2, 3, 4
+  final int copias; // cantidad de tickets a imprimir (1..N)
   final double altoBoletoMm; // 0 = Auto / proporcional
   final bool mostrarEncabezado;
   final bool mostrarDetalles;
+  final bool mostrarQr; // solo afecta al PDF: el preview no dibuja QR
   final double margenMm;
   final double? anchoCustomMm;
   final double? altoCustomMm;
@@ -21,10 +21,10 @@ class PrinterPreset {
     this.orientacion = 'portrait',
     this.formatoPredeterminado = 'PDF',
     this.copias = 1,
-    this.boletosPorHoja = 1,
     this.altoBoletoMm = 0.0,
     this.mostrarEncabezado = true,
     this.mostrarDetalles = true,
+    this.mostrarQr = true,
     this.margenMm = 5.0,
     this.anchoCustomMm,
     this.altoCustomMm,
@@ -38,10 +38,10 @@ class PrinterPreset {
         'orientacion': orientacion,
         'formatoPredeterminado': formatoPredeterminado,
         'copias': copias,
-        'boletosPorHoja': boletosPorHoja,
         'altoBoletoMm': altoBoletoMm,
         'mostrarEncabezado': mostrarEncabezado,
         'mostrarDetalles': mostrarDetalles,
+        'mostrarQr': mostrarQr,
         'margenMm': margenMm,
         'anchoCustomMm': anchoCustomMm,
         'altoCustomMm': altoCustomMm,
@@ -55,10 +55,10 @@ class PrinterPreset {
         orientacion: json['orientacion'] as String? ?? 'portrait',
         formatoPredeterminado: json['formatoPredeterminado'] as String? ?? 'PDF',
         copias: json['copias'] as int? ?? 1,
-        boletosPorHoja: json['boletosPorHoja'] as int? ?? 1,
         altoBoletoMm: (json['altoBoletoMm'] as num?)?.toDouble() ?? 0.0,
         mostrarEncabezado: json['mostrarEncabezado'] as bool? ?? true,
         mostrarDetalles: json['mostrarDetalles'] as bool? ?? true,
+        mostrarQr: json['mostrarQr'] as bool? ?? true,
         margenMm: (json['margenMm'] as num?)?.toDouble() ?? 5.0,
         anchoCustomMm: (json['anchoCustomMm'] as num?)?.toDouble(),
         altoCustomMm: (json['altoCustomMm'] as num?)?.toDouble(),
@@ -71,10 +71,10 @@ class PrinterPreset {
     String? orientacion,
     String? formatoPredeterminado,
     int? copias,
-    int? boletosPorHoja,
     double? altoBoletoMm,
     bool? mostrarEncabezado,
     bool? mostrarDetalles,
+    bool? mostrarQr,
     double? margenMm,
     double? anchoCustomMm,
     double? altoCustomMm,
@@ -87,10 +87,10 @@ class PrinterPreset {
       orientacion: orientacion ?? this.orientacion,
       formatoPredeterminado: formatoPredeterminado ?? this.formatoPredeterminado,
       copias: copias ?? this.copias,
-      boletosPorHoja: boletosPorHoja ?? this.boletosPorHoja,
       altoBoletoMm: altoBoletoMm ?? this.altoBoletoMm,
       mostrarEncabezado: mostrarEncabezado ?? this.mostrarEncabezado,
       mostrarDetalles: mostrarDetalles ?? this.mostrarDetalles,
+      mostrarQr: mostrarQr ?? this.mostrarQr,
       margenMm: margenMm ?? this.margenMm,
       anchoCustomMm: anchoCustomMm ?? this.anchoCustomMm,
       altoCustomMm: altoCustomMm ?? this.altoCustomMm,

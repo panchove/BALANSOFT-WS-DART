@@ -10,7 +10,7 @@ IDIOMA_DEFAULT = "es"
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "es": {
         # Ticket
-        "titulo_boleto": "BOLETO DE PESAJE DE BALANSOFT",
+        "titulo_boleto": "BOLETO DE PESAJE",
         "doc_anulado": "DOCUMENTO ANULADO",
         "doc_anulado_banner": "*** DOCUMENTO ANULADO ***",
         "motivo": "Motivo",
@@ -108,8 +108,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_estado": "Estado",
         "col_documento": "Documento",
         "col_movimiento": "Movimiento",
-        "col_entrada": "Entrada",
-        "col_salida": "Salida",
+        "col_entrada": "ENTRADA",
+        "col_salida": "SALIDA",
+        "col_fecha_hora": "Fec, Hrs",
+        "col_camion": "CAMIÓN",
+        "col_remolque": "REMOLQUE",
+        "col_total": "TOTAL",
+        "col_totales": "TOTALES",
         "col_saldo": "Saldo",
         # Rótulos institucionales y valores por defecto
         "etiqueta_rif": "RIF",
@@ -131,11 +136,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "estado_cerrado": "CERRADO",
         "estado_modificado": "MODIFICADO",
         "estado_anulado": "ANULADO",
-    },
-    "en": {
-        # Ticket
-        "titulo_boleto": "BALANSOFT WEIGHING TICKET",
-        "doc_anulado": "VOIDED DOCUMENT",
         # Notificaciones (centro de avisos del backend local)
         "notif_licencia_vencida_titulo": "Licencia vencida",
         "notif_licencia_vencida_mensaje": (
@@ -161,6 +161,26 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "notif_serie_por_agotar_mensaje": (
             "La serie {serie} está por agotar su numeración (límite {limite})."
         ),
+        # Edición de boletos (justificación obligatoria y tope por boleto)
+        "edicion_justificacion_requerida": (
+            "La justificación de la edición es obligatoria (mínimo 10 caracteres)."
+        ),
+        "edicion_justificacion_larga": (
+            "La justificación de la edición no puede superar los 500 caracteres."
+        ),
+        "edicion_tope_alcanzado": (
+            "Se alcanzó el máximo de ediciones permitidas para este boleto ({max}). "
+            "Solicite al administrador de la cuenta."
+        ),
+        "edicion_peso_neto_bloqueado": (
+            "La edición no puede alterar el peso neto de un boleto con movimientos "
+            "de inventario (Kardex)."
+        ),
+    },
+    "en": {
+        # Ticket
+        "titulo_boleto": "WEIGHING TICKET",
+        "doc_anulado": "VOIDED DOCUMENT",
         "doc_anulado_banner": "*** VOIDED DOCUMENT ***",
         "motivo": "Reason",
         "no_especificado": "Not specified",
@@ -256,8 +276,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_estado": "Status",
         "col_documento": "Document",
         "col_movimiento": "Movement",
-        "col_entrada": "Inbound",
-        "col_salida": "Outbound",
+        "col_entrada": "INBOUND",
+        "col_salida": "OUTBOUND",
+        "col_fecha_hora": "Date, Time",
+        "col_camion": "TRUCK",
+        "col_remolque": "TRAILER",
+        "col_total": "TOTAL",
+        "col_totales": "TOTALS",
         "col_saldo": "Balance",
         # Rótulos institucionales y valores por defecto
         "etiqueta_rif": "Tax ID",
@@ -279,16 +304,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "estado_cerrado": "CLOSED",
         "estado_modificado": "MODIFIED",
         "estado_anulado": "VOIDED",
-    },
-    "pt": {
-        # Ticket
-        "titulo_boleto": "BILHETE DE PESAGEM BALANSOFT",
-        "doc_anulado": "DOCUMENTO ANULADO",
-        "doc_anulado_banner": "*** DOCUMENTO ANULADO ***",
-        "motivo": "Motivo",
-        "no_especificado": "Não especificado",
-        "lectura_pesos": "LEITURA DE PESOS",
-        "datos_adicionales": "DADOS ADICIONAIS",
         # Notifications (local backend notification center)
         "notif_licencia_vencida_titulo": "License expired",
         "notif_licencia_vencida_mensaje": (
@@ -312,6 +327,31 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "notif_serie_por_agotar_mensaje": (
             "Series {serie} is running out of numbers (limit {limite})."
         ),
+        # Ticket editing (mandatory justification and per-ticket cap)
+        "edicion_justificacion_requerida": (
+            "The edit justification is required (at least 10 characters)."
+        ),
+        "edicion_justificacion_larga": (
+            "The edit justification cannot exceed 500 characters."
+        ),
+        "edicion_tope_alcanzado": (
+            "The maximum number of edits allowed for this ticket has been reached "
+            "({max}). Ask your account administrator."
+        ),
+        "edicion_peso_neto_bloqueado": (
+            "The edit cannot change the net weight of a ticket with inventory "
+            "movements (Kardex)."
+        ),
+    },
+    "pt": {
+        # Ticket
+        "titulo_boleto": "BILHETE DE PESAGEM",
+        "doc_anulado": "DOCUMENTO ANULADO",
+        "doc_anulado_banner": "*** DOCUMENTO ANULADO ***",
+        "motivo": "Motivo",
+        "no_especificado": "Não especificado",
+        "lectura_pesos": "LEITURA DE PESOS",
+        "datos_adicionales": "DADOS ADICIONAIS",
         "observaciones": "OBSERVAÇÕES",
         "peso_neto": "PESO LÍQUIDO",
         "peso_declarado": "PESO DECLARADO",
@@ -402,8 +442,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_estado": "Status",
         "col_documento": "Documento",
         "col_movimiento": "Movimento",
-        "col_entrada": "Entrada",
-        "col_salida": "Saída",
+        "col_entrada": "ENTRADA",
+        "col_salida": "SAÍDA",
+        "col_fecha_hora": "Data, Hora",
+        "col_camion": "CAMINHÃO",
+        "col_remolque": "REBOLQUE",
+        "col_total": "TOTAL",
+        "col_totales": "TOTAIS",
         "col_saldo": "Saldo",
         # Rótulos institucionais e valores padrão
         "etiqueta_rif": "RIF",
@@ -425,21 +470,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "estado_cerrado": "FECHADO",
         "estado_modificado": "MODIFICADO",
         "estado_anulado": "ANULADO",
-    },
-}
-
-
-def t(key: str, lang: str = IDIOMA_DEFAULT) -> str:
-    """Devuelve la traducción para una clave dada según el idioma (es, en, pt)."""
-    normalized = normalizar_idioma(lang) or IDIOMA_DEFAULT
-    lang_dict = TRANSLATIONS.get(normalized, TRANSLATIONS[IDIOMA_DEFAULT])
-    return lang_dict.get(key, TRANSLATIONS[IDIOMA_DEFAULT].get(key, key))
-
-
-def normalizar_idioma(valor: str | None) -> str | None:
-    """Normaliza un tag de idioma ('pt-BR', 'en_US', 'ES') a 'es'|'en'|'pt'.
-
-    Devuelve ``None`` si no corresponde a un idioma soportado.
         # Notificações (centro de avisos do backend local)
         "notif_licencia_vencida_titulo": "Licença vencida",
         "notif_licencia_vencida_mensaje": (
@@ -465,6 +495,36 @@ def normalizar_idioma(valor: str | None) -> str | None:
         "notif_serie_por_agotar_mensaje": (
             "A série {serie} está a esgotar a numeração (limite {limite})."
         ),
+        # Edição de bilhetes (justificativa obrigatória e limite por bilhete)
+        "edicion_justificacion_requerida": (
+            "A justificativa da edição é obrigatória (mínimo 10 caracteres)."
+        ),
+        "edicion_justificacion_larga": (
+            "A justificativa da edição não pode exceder 500 caracteres."
+        ),
+        "edicion_tope_alcanzado": (
+            "Foi atingido o máximo de edições permitidas para este bilhete ({max}). "
+            "Solicite ao administrador da conta."
+        ),
+        "edicion_peso_neto_bloqueado": (
+            "A edição não pode alterar o peso líquido de um bilhete com movimentos "
+            "de estoque (Kardex)."
+        ),
+    },
+}
+
+
+def t(key: str, lang: str = IDIOMA_DEFAULT) -> str:
+    """Devuelve la traducción para una clave dada según el idioma (es, en, pt)."""
+    normalized = normalizar_idioma(lang) or IDIOMA_DEFAULT
+    lang_dict = TRANSLATIONS.get(normalized, TRANSLATIONS[IDIOMA_DEFAULT])
+    return lang_dict.get(key, TRANSLATIONS[IDIOMA_DEFAULT].get(key, key))
+
+
+def normalizar_idioma(valor: str | None) -> str | None:
+    """Normaliza un tag de idioma ('pt-BR', 'en_US', 'ES') a 'es'|'en'|'pt'.
+
+    Devuelve ``None`` si no corresponde a un idioma soportado.
     """
     if not valor:
         return None

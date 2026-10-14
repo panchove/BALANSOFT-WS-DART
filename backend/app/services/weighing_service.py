@@ -25,10 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.datetime_utils import naive_utc
+from app.core.i18n import t
 from app.core.license_client import LicenseInfo
 from app.models import (
     Almacen,
     Balanza,
+    BoletoEdicion,
     BoletoPesaje,
     Camion,
     Categoria,
@@ -80,6 +82,42 @@ def _s(v: str | None) -> str | None:
         return None
     v = v.strip()
     return v or None
+
+
+def _valor_json(v: Any) -> Any:
+    """Serializa un valor de modelo a algo apto para una columna JSON."""
+    if v is None or isinstance(v, (str, bool, int)):
+        return v
+    if isinstance(v, Decimal):
+        return str(v)
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, uuid.UUID):
+        return str(v)
+    return str(v)
+
+
+def _mismo_valor(actual: Any, entrante: Any) -> bool:
+    """¿El valor entrante es igual al que ya tiene el boleto?
+
+    Se usa para no registrar como "edición" los campos que el cliente reenvía
+    con su valor actual (el formulario manda siempre los diez campos) y para
+    comparar un `Decimal` de la BD con el número que llega por JSON.
+    """
+    if actual is None or entrante is None:
+        return actual is None and entrante is None
+    if isinstance(actual, bool) or isinstance(entrante, bool):
+        return bool(actual) == bool(entrante)
+    if isinstance(actual, (int, float, Decimal)) and isinstance(
+        entrante, (int, float, Decimal)
+    ):
+        try:
+            return Decimal(str(actual)) == Decimal(str(entrante))
+        except Exception:  # noqa: BLE001 — un decimal inválido no es "igual"
+            return False
+    if isinstance(actual, datetime) and isinstance(entrante, datetime):
+        return actual == entrante
+    return str(actual) == str(entrante)
 
 
 class WeighingService:
@@ -782,21 +820,77 @@ class WeighingService:
         *,
         id_usuario: uuid.UUID | None = None,
         ip: str | None = None,
+        es_admin: bool = False,
+        rol_usuario: str | None = None,
+        justificacion: str | None = None,
+        sync_operation_id: uuid.UUID | None = None,
+        idioma: str = "es",
     ) -> BoletoPesaje:
+        """Edita un boleto existente exigiendo justificación.
+
+        Reglas de negocio (RB edición de boletos):
+        - La justificación es **obligatoria** (10..500 caracteres) y se guarda
+          **por edición** en `boletos_ediciones` (historial inmutable).
+        - El tope `max_ediciones_boleto` de la empresa aplica **solo a las
+          sesiones que no son ADMIN**; el ADMIN nunca está sujeto al tope.
+        - Los pesos capturados por la báscula **no** son editables por esta vía:
+          `peso_neto` solo depende de ellos, así que la edición no puede
+          desincronizar el Kardex (guarda defensiva más abajo).
+        """
         result = await db.execute(
-            select(BoletoPesaje).where(
+            select(BoletoPesaje)
+            .where(
                 BoletoPesaje.id_empresa == empresa.id_empresa, BoletoPesaje.boleto == boleto
             )
+            # Serializa ediciones concurrentes del MISMO boleto: sin el bloqueo,
+            # dos ediciones simultáneas leen el mismo `ediciones_count` y ambas
+            # pasan el tope (el contador se calcula en Python).
+            .with_for_update()
         )
         pesaje = result.scalar_one_or_none()
         if pesaje is None:
             raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
-        if normalizar_estado(pesaje.estado_boleto) == BoletoPesaje.ESTADO_ANULADO:
+        estado_previo = normalizar_estado(pesaje.estado_boleto)
+        if estado_previo == BoletoPesaje.ESTADO_ANULADO:
             raise HTTPException(status_code=400, detail="No se puede modificar un boleto anulado.")
+        texto = (justificacion if justificacion is not None else data.justificacion) or ""
+        texto = texto.strip()
+        if len(texto) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail=t("edicion_justificacion_requerida", idioma),
+            )
+        if len(texto) > 500:
+            raise HTTPException(
+                status_code=422,
+                detail=t("edicion_justificacion_larga", idioma),
+            )
 
-        campos = data.model_dump(exclude_unset=True, exclude_none=True)
+        ediciones_previas = pesaje.ediciones_count or 0
+        tope = empresa.max_ediciones_boleto
+        if not es_admin and tope is not None and tope > 0 and ediciones_previas >= tope:
+            raise HTTPException(
+                status_code=409,
+                detail=t("edicion_tope_alcanzado", idioma).format(max=tope),
+            )
+
+        campos = data.model_dump(exclude_unset=True, exclude_none=False, exclude={"justificacion"})
+        # Solo cuenta como edición lo que **cambia** de verdad:
+        # - `exclude_unset` respeta lo que el cliente envió; NO se usa
+        #   `exclude_none` para que vaciar un campo (null explícito) se persista
+        #   en vez de descartarse en silencio.
+        # - el formulario manda siempre los diez campos, así que los que llegan
+        #   con su valor actual no deben crear historial ni sumar al contador.
+        campos = {
+            k: v for k, v in campos.items() if not _mismo_valor(getattr(pesaje, k, None), v)
+        }
         if not campos:
             return pesaje
+
+        # Snapshot antes/después para el historial (valores serializables a JSON).
+        valores_previos = {k: _valor_json(getattr(pesaje, k, None)) for k in campos}
+        peso_neto_previo = pesaje.peso_neto
+
         for k, v in campos.items():
             setattr(pesaje, k, v)
         # Recalcular si cambió el peso declarado
@@ -810,13 +904,65 @@ class WeighingService:
             )
             for campo, valor in calculos.items():
                 setattr(pesaje, campo, valor)
-        estado_previo = normalizar_estado(pesaje.estado_boleto)
-        if estado_previo == BoletoPesaje.ESTADO_CERRADO:
+
+        # Guarda de integridad: si el peso neto cambiara y el boleto ya movió
+        # inventario, la edición dejaría el Kardex desincronizado. No debe
+        # ocurrir (el neto solo sale de pesos de báscula, no editables aquí).
+        if pesaje.peso_neto != peso_neto_previo:
+            tiene_kardex = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Kardex)
+                    .where(
+                        Kardex.id_empresa == empresa.id_empresa,
+                        Kardex.boleto == pesaje.boleto,
+                    )
+                )
+            ).scalar_one()
+            if tiene_kardex:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail=t("edicion_peso_neto_bloqueado", idioma),
+                )
+
+        if estado_previo in (BoletoPesaje.ESTADO_CERRADO, BoletoPesaje.ESTADO_PENDIENTE):
             pesaje.estado_boleto = BoletoPesaje.ESTADO_MODIFICADO
-        elif estado_previo == BoletoPesaje.ESTADO_PENDIENTE:
-            pesaje.estado_boleto = BoletoPesaje.ESTADO_MODIFICADO
+        estado_nuevo = normalizar_estado(pesaje.estado_boleto)
+
         pesaje.modificado_por = modificado_por
+        pesaje.ultimo_editor_nombre = modificado_por
+        pesaje.motivo_modificacion_ultima = texto
+        pesaje.ediciones_count = ediciones_previas + 1
+        pesaje.max_ediciones_boleto_aplicado = tope
         pesaje.updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+        campos_modificados: dict[str, Any] = {}
+        for k in campos:
+            campos_modificados[k] = {
+                "antes": valores_previos.get(k),
+                "despues": _valor_json(getattr(pesaje, k, None)),
+            }
+
+        db.add(
+            BoletoEdicion(
+                id_empresa=empresa.id_empresa,
+                boleto=pesaje.boleto,
+                numero_boleto=pesaje.numero_boleto,
+                id_usuario=id_usuario,
+                usuario_nombre=modificado_por,
+                rol_usuario=rol_usuario,
+                fecha_edicion=datetime.now(UTC).replace(tzinfo=None),
+                ip=ip,
+                justificacion=texto,
+                estado_anterior=estado_previo,
+                estado_nuevo=estado_nuevo,
+                campos_modificados=campos_modificados,
+                edicion_numero=ediciones_previas + 1,
+                sync_operation_id=sync_operation_id,
+            )
+        )
+
         await self._auditar(
             db,
             id_usuario=id_usuario,
@@ -824,12 +970,34 @@ class WeighingService:
             accion="UPDATE",
             entidad="boletos_pesaje",
             entidad_id=str(pesaje.boleto),
-            detalle={"campos_modificados": sorted(campos.keys())},
+            detalle={
+                "campos_modificados": sorted(campos.keys()),
+                "justificacion": texto,
+                "edicion_numero": ediciones_previas + 1,
+                "es_admin": es_admin,
+            },
             ip=ip,
         )
         await db.commit()
         await db.refresh(pesaje)
         return pesaje
+
+    async def listar_ediciones(
+        self,
+        db: AsyncSession,
+        empresa: Empresa,
+        boleto: uuid.UUID,
+    ) -> list[BoletoEdicion]:
+        """Historial de ediciones de un boleto (más reciente primero)."""
+        result = await db.execute(
+            select(BoletoEdicion)
+            .where(
+                BoletoEdicion.id_empresa == empresa.id_empresa,
+                BoletoEdicion.boleto == boleto,
+            )
+            .order_by(BoletoEdicion.edicion_numero.desc())
+        )
+        return list(result.scalars().all())
 
     async def anular(
         self,

@@ -29,8 +29,7 @@ class SecureStorageService {
   final Map<String, String> _memoria = {};
 
   SecureStorageService({FlutterSecureStorage? storage})
-      : _storage =
-            storage ?? const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
+      : _storage = storage ?? const FlutterSecureStorage(aOptions: AndroidOptions());
 
   Future<void> saveTokens(String accessToken, String refreshToken) async {
     await saveAccessToken(accessToken);

@@ -322,6 +322,9 @@ class _EquipoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = colorEstado(equipo.estado);
+    // Texto/icono legibles sobre el tinte al 15 % del propio color de estado
+    // (en tema claro el color puro no alcanza WCAG AA).
+    final colorTexto = colorDeEstadoLegible(context, color);
     final subsistema = <String>[
       if (equipo.sistemaOperativo != null && equipo.sistemaOperativo!.isNotEmpty)
         equipo.sistemaOperativo!,
@@ -336,7 +339,7 @@ class _EquipoTile extends StatelessWidget {
         backgroundColor: color.withValues(alpha: 0.15),
         child: Icon(
           equipo.esDueno ? Icons.verified_user_outlined : Icons.computer_outlined,
-          color: color,
+          color: colorTexto,
         ),
       ),
       title: Row(
@@ -372,7 +375,7 @@ class _EquipoTile extends StatelessWidget {
                 ),
                 child: Text(
                   tr(_claveEstado(equipo.estado)),
-                  style: TextStyle(color: color, fontSize: 12),
+                  style: TextStyle(color: colorTexto, fontSize: 12),
                 ),
               ),
               if (equipo.rolSesion != null) ...[

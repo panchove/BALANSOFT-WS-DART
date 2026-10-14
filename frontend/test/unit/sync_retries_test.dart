@@ -7,6 +7,7 @@ library;
 import 'package:balansoft_ws/data/datasources/local/database_helper.dart';
 import 'package:balansoft_ws/data/datasources/remote/api_client.dart';
 import 'package:balansoft_ws/data/repositories/weighing_repository.dart';
+import 'package:balansoft_ws/domain/entities/boleto_edicion.dart';
 import 'package:balansoft_ws/domain/entities/weighing.dart';
 import 'package:balansoft_ws/domain/repositories/i_weighing_repository.dart';
 import 'package:balansoft_ws/domain/usecases/weighing_usecases.dart';
@@ -17,14 +18,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+// ✅ Después
 class _WifiConnectivityPlatform extends ConnectivityPlatform {
   @override
-  Future<ConnectivityResult> checkConnectivity() async =>
-      ConnectivityResult.wifi;
+  Future<List<ConnectivityResult>> checkConnectivity() async =>
+      [ConnectivityResult.wifi];
 
   @override
-  Stream<ConnectivityResult> get onConnectivityChanged =>
-      const Stream<ConnectivityResult>.empty();
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      const Stream<List<ConnectivityResult>>.empty();
 }
 
 class _FailingApiClient extends ApiClient {
@@ -104,6 +106,9 @@ class _CountingRepo implements IWeighingRepository {
       throw UnimplementedError();
 
   @override
+  Future<List<BoletoEdicion>> getEdiciones(String boleto) async => const [];
+
+  @override
   Future<Weighing> anularWeighing(String boleto, String motivo) async =>
       throw UnimplementedError();
 
@@ -113,7 +118,7 @@ class _CountingRepo implements IWeighingRepository {
   @override
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletosPorHoja = 1,
+    int copias = 1,
     String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
     bool mostrarEncabezado = true,

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/local/local_storage.dart';
+import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/printer_preset.dart';
 import '../../../domain/entities/weighing.dart';
 import '../../../injection.dart' as di;
+import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../widgets/ticket_preview_dialog.dart';
 
 /// Módulo dedicado a la configuración, estilización y diseño del ticket o boleto de pesaje.
@@ -20,10 +24,54 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
   bool _cargando = true;
   bool _guardando = false;
 
+  // ── Configuración de la empresa (solo ADMIN) ─────────────────────────────
+  // El tope de ediciones y la impresión automática pertenecen a `empresas`
+  // (van al backend), no a la preferencia local de este dispositivo.
+  bool _esAdmin = false;
+  bool _cargandoEmpresa = false;
+  bool _guardandoEmpresa = false;
+  final _maxEdicionesCtrl = TextEditingController();
+  bool _impresionAutomatica = false;
+  String? _protocoloImpresion;
+  final _impresoraNombreCtrl = TextEditingController();
+  final _impresoraHostCtrl = TextEditingController();
+  final _impresoraPuertoCtrl = TextEditingController();
+
+  /// Valores del `Literal` del backend (`ck_empresas_protocolo_impresion`).
+  static const List<String> _protocolos = [
+    'predeterminada_so',
+    'raw_9100',
+    'lpd_cups',
+    'nombre_impresora',
+  ];
+
   @override
   void initState() {
     super.initState();
     _cargarPreset();
+    // El `AuthBloc` no está resuelto durante `initState`, así que la lectura de
+    // la empresa va después del primer frame (mismo patrón que Tipografía).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _esAdmin = _rolActual() == 'ADMIN';
+        setState(() {});
+        _cargarEmpresa();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _maxEdicionesCtrl.dispose();
+    _impresoraNombreCtrl.dispose();
+    _impresoraHostCtrl.dispose();
+    _impresoraPuertoCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _rolActual() {
+    final state = context.read<AuthBloc>().state;
+    return state is AuthAuthenticated ? state.user.rol : null;
   }
 
   Future<void> _cargarPreset() async {
@@ -37,6 +85,89 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  /// Lee de la empresa el tope de ediciones y la configuración de impresión.
+  /// Solo ADMIN (los demás no pueden cambiarla y no se les muestra).
+  Future<void> _cargarEmpresa() async {
+    if (!_esAdmin) return;
+    setState(() => _cargandoEmpresa = true);
+    try {
+      final p = await di.sl<ApiClient>().getEmpresaPerfil();
+      if (!mounted) return;
+      final max = p['max_ediciones_boleto'];
+      final proto = p['protocolo_impresion'];
+      setState(() {
+        _maxEdicionesCtrl.text =
+            (max is num && max > 0) ? max.toInt().toString() : '';
+        _impresionAutomatica = p['impresion_automatica'] == true;
+        _protocoloImpresion = (proto is String && _protocolos.contains(proto))
+            ? proto
+            : null;
+        _impresoraNombreCtrl.text = '${p['impresora_nombre'] ?? ''}';
+        _impresoraHostCtrl.text = '${p['impresora_host'] ?? ''}';
+        _impresoraPuertoCtrl.text = (p['impresora_puerto'] is num)
+            ? (p['impresora_puerto'] as num).toInt().toString()
+            : '';
+        _cargandoEmpresa = false;
+      });
+    } catch (e) {
+      debugPrint('Diseño de ticket: no se pudo leer la empresa: $e');
+      if (mounted) setState(() => _cargandoEmpresa = false);
+    }
+  }
+
+  void _avisar(String mensaje, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(mensaje), backgroundColor: color),
+      );
+  }
+
+  /// Guarda en `empresas` el tope de ediciones y la impresión automática
+  /// (`PUT /api/v1/empresa`, solo ADMIN). Un `null` explícito limpia el campo.
+  Future<void> _guardarEmpresa() async {
+    if (!_esAdmin) {
+      _avisar('cfg_solo_admin'.tr(), SwsColors.warning);
+      return;
+    }
+    final maxTxt = _maxEdicionesCtrl.text.trim();
+    final max = maxTxt.isEmpty ? null : int.tryParse(maxTxt);
+    if (maxTxt.isNotEmpty && (max == null || max < 0)) {
+      _avisar('cfg_error_guardar'.tr(), SwsColors.danger);
+      return;
+    }
+    final puertoTxt = _impresoraPuertoCtrl.text.trim();
+    final puerto = puertoTxt.isEmpty ? null : int.tryParse(puertoTxt);
+    if (puertoTxt.isNotEmpty && (puerto == null || puerto < 1 || puerto > 65535)) {
+      _avisar('cfg_error_guardar'.tr(), SwsColors.danger);
+      return;
+    }
+
+    setState(() => _guardandoEmpresa = true);
+    try {
+      await di.sl<ApiClient>().updateEmpresaPerfil({
+        'max_ediciones_boleto': max,
+        'impresion_automatica': _impresionAutomatica,
+        'protocolo_impresion': _protocoloImpresion,
+        'impresora_nombre': _impresoraNombreCtrl.text.trim().isEmpty
+            ? null
+            : _impresoraNombreCtrl.text.trim(),
+        'impresora_host': _impresoraHostCtrl.text.trim().isEmpty
+            ? null
+            : _impresoraHostCtrl.text.trim(),
+        'impresora_puerto': puerto,
+      });
+      await _cargarEmpresa();
+      _avisar('cfg_edicion_guardada'.tr(), SwsColors.success);
+    } catch (e) {
+      debugPrint('Diseño de ticket: no se pudo guardar la empresa: $e');
+      _avisar('cfg_error_guardar'.tr(), SwsColors.danger);
+    } finally {
+      if (mounted) setState(() => _guardandoEmpresa = false);
     }
   }
 
@@ -112,8 +243,8 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
     final isTermico = _preset.tamanoPapel == '80mm' || _preset.tamanoPapel == '58mm';
 
     // Espejo de _build_pdf (backend): en papel normal el boleto SIEMPRE es
-    // estrecho y centrado (140mm de ~196mm útiles), sin importar cuántos se
-    // apilen por hoja (1..4). En térmico el ancho es el del rollo.
+    // estrecho y centrado (140mm de ~196mm útiles). En térmico el ancho es el
+    // del rollo. El «copias» solo multiplica los tickets, no el ancho.
     final anchoBaseHoja = _preset.orientacion == 'landscape' ? 620.0 : 480.0;
     final anchoHojaNormal = anchoBaseHoja * (140 / 195.9);
 
@@ -131,7 +262,7 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ─── Tarjeta 1: Tamaño de Papel, Orientación, Boletos por Hoja y Alto ───
+          // ─── Tarjeta 1: Tamaño de Papel, Orientación, Cantidad de Tickets y Alto ───
           Card(
             elevation: 2,
             child: Padding(
@@ -174,29 +305,6 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _preset = _preset.copyWith(tamanoPapel: val));
-                          },
-                        ),
-                      ),
-
-                      // Boletos por Hoja
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<int>(
-                          initialValue: _preset.boletosPorHoja,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Boletos por Hoja',
-                            prefixIcon: Icon(Icons.view_stream_outlined),
-                            helperText: 'Copias apiladas por página',
-                          ),
-                          items:[
-                            DropdownMenuItem(value: 1, child: Text('per_sheet_1'.tr())),
-                            DropdownMenuItem(value: 2, child: Text('per_sheet_2'.tr())),
-                            DropdownMenuItem(value: 3, child: Text('per_sheet_3'.tr())),
-                            DropdownMenuItem(value: 4, child: Text('per_sheet_4'.tr())),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setState(() => _preset = _preset.copyWith(boletosPorHoja: val));
                           },
                         ),
                       ),
@@ -270,15 +378,16 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                         ),
                       ),
 
-                      // Copias
+                      // Cantidad de tickets a imprimir
                       SizedBox(
-                        width: 140,
+                        width: 220,
                         child: DropdownButtonFormField<int>(
                           initialValue: _preset.copias,
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Copias',
-                            prefixIcon: Icon(Icons.copy_outlined),
+                          decoration: InputDecoration(
+                            labelText: 'tickets_to_print'.tr(),
+                            prefixIcon: const Icon(Icons.copy_outlined),
+                            helperText: 'tickets_to_print_helper'.tr(),
                           ),
                           items: [1, 2, 3, 4, 5]
                               .map((c) => DropdownMenuItem(value: c, child: Text('$c')))
@@ -327,6 +436,12 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                     value: _preset.mostrarDetalles,
                     onChanged: (val) => setState(() => _preset = _preset.copyWith(mostrarDetalles: val)),
                   ),
+                  SwitchListTile(
+                    title: Text('show_qr'.tr()),
+                    subtitle: Text('show_qr_desc'.tr()),
+                    value: _preset.mostrarQr,
+                    onChanged: (val) => setState(() => _preset = _preset.copyWith(mostrarQr: val)),
+                  ),
                   const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -355,6 +470,9 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
           ),
           const SizedBox(height: 16),
 
+          // ─── Tarjeta 2b: Edición de boletos e impresión automática (ADMIN) ───
+          if (_esAdmin) _buildEdicionImpresionCard(),
+
           // ─── Tarjeta 3: Previsualización en vivo del Boleto y Hoja ───
           Card(
             color: isDark ? SwsColors.darkCard : SwsColors.light,
@@ -370,7 +488,13 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Previsualización de Hoja (${_preset.tamanoPapel} ${_preset.orientacion.toUpperCase()}) — ${_preset.boletosPorHoja} boleto(s) por hoja',
+                          AppTranslations.tr(
+                            'diseno_ticket_preview_titulo',
+                            args: [
+                              _preset.tamanoPapel,
+                              _preset.orientacion.toUpperCase(),
+                            ],
+                          ),
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -400,29 +524,9 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          for (int i = 0; i < (isTermico ? 1 : _preset.boletosPorHoja); i++) ...[
-                            if (i > 0) ...[
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  const Icon(Icons.content_cut, size: 12, color: Colors.grey),
-                                  Expanded(
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                                      height: 1,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Línea de corte $i',
-                                    style: const TextStyle(fontSize: 9, color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                            _buildDemoTicketBlock(isTermico),
-                          ],
+                          // Vista de un único ticket: «Cantidad de tickets» es
+                          // cuántas copias completas se imprimen, no un apilado.
+                          _buildDemoTicketBlock(isTermico),
                         ],
                       ),
                     ),
@@ -456,10 +560,200 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
     );
   }
 
+  /// Tarjeta de configuración **de la empresa** (solo ADMIN): tope de ediciones
+  /// por boleto y envío a impresora tras generar el ticket.
+  ///
+  /// El envío automático real aún no está implementado (no hay integración con
+  /// la cola de impresión del SO); se persiste la configuración y se avisa al
+  /// usuario para no prometer un comportamiento que todavía no ocurre.
+  Widget _buildEdicionImpresionCard() {
+    final theme = Theme.of(context);
+    final hayDestinoImpresion = _protocoloImpresion == 'raw_9100' ||
+        _protocoloImpresion == 'lpd_cups' ||
+        _protocoloImpresion == 'nombre_impresora';
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.settings_suggest_outlined,
+                    color: SwsColors.accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'cfg_edicion_impresion'.tr(),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('ADMIN', style: TextStyle(fontSize: 11)),
+                  backgroundColor: SwsColors.accent.withValues(alpha: 0.15),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_cargandoEmpresa)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else ...[
+              // Tope de ediciones
+              SizedBox(
+                width: 320,
+                child: TextField(
+                  controller: _maxEdicionesCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'cfg_max_ediciones'.tr(),
+                    helperText: 'cfg_max_ediciones_hint'.tr(),
+                    helperMaxLines: 2,
+                    prefixIcon:
+                        const Icon(Icons.edit_note_outlined, size: 18),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Divider(color: theme.colorScheme.outlineVariant),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('cfg_impresion_automatica'.tr()),
+                subtitle: Text(
+                  'cfg_impresion_pendiente'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                value: _impresionAutomatica,
+                onChanged: (v) => setState(() => _impresionAutomatica = v),
+              ),
+              SizedBox(
+                width: 340,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _protocoloImpresion,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'cfg_protocolo_impresion'.tr(),
+                    prefixIcon: const Icon(Icons.print_outlined, size: 18),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'predeterminada_so',
+                      child: Text('cfg_protocolo_so'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: 'raw_9100',
+                      child: Text('cfg_protocolo_raw'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: 'lpd_cups',
+                      child: Text('cfg_protocolo_lpd'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: 'nombre_impresora',
+                      child: Text('cfg_protocolo_nombre'.tr()),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _protocoloImpresion = v),
+                ),
+              ),
+              if (hayDestinoImpresion) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _impresoraNombreCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'cfg_impresora_nombre'.tr(),
+                          prefixIcon:
+                              const Icon(Icons.local_print_shop_outlined,
+                                  size: 18),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 200,
+                      child: TextField(
+                        controller: _impresoraHostCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'cfg_impresora_host'.tr(),
+                          prefixIcon: const Icon(Icons.lan_outlined, size: 18),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 140,
+                      child: TextField(
+                        controller: _impresoraPuertoCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'cfg_impresora_puerto'.tr(),
+                          prefixIcon:
+                              const Icon(Icons.numbers_outlined, size: 18),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: _guardandoEmpresa
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text('save'.tr()),
+                  onPressed: _guardandoEmpresa ? null : _guardarEmpresa,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDemoTicketBlock(bool isTermico) {
-    final double textScale = _preset.boletosPorHoja == 4
-        ? 9.5
-        : (_preset.boletosPorHoja == 3 ? 10.2 : 11.0);
+    const double textScale = 11.0;
 
     return DefaultTextStyle(
       style: TextStyle(
@@ -505,11 +799,16 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
             child: Text('LECTURA DE PESOS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
           ),
           const Divider(color: Colors.black45, height: 6),
-          _filaLecturaDemo('Balanza', 'Fecha/Hora', 'Peso Camion', 'Peso Remolque', 'Peso Total', bold: true),
-          _filaLecturaDemo('Balanza Entrada: BALANZA PRINCIPAL', '24/09/2026 11:33', '37.914,00', '0,00', '37.914,00'),
-          _filaLecturaDemo('Balanza Salida: BALANZA PRINCIPAL', '24/09/2026 11:58', '22.084,00', '0,00', '22.084,00'),
           const Divider(color: Colors.black45, height: 6),
-          _filaLecturaDemo('PESO NETO (DESPACHO):', '', '15.830,00', '0,00', '-15.830,00', bold: true),
+          // Tabla de lecturas: la MISMA rejilla que el PDF y el preview de la app
+          // —(vacío) | Fec, Hrs | CAMIÓN | REMOLQUE | TOTAL—, con una fila por
+          // pesada, la de TOTALES (los netos por vehículo) y el PESO NETO.
+          _filaLecturaDemo('', 'Fec, Hrs', 'CAMIÓN', 'REMOLQUE', 'TOTAL', bold: true, cabecera: true),
+          _filaLecturaDemo('ENTRADA:', '24/09/2026 – 11:33', '37.914,00 kg', '0,00 kg', '37.914,00 kg'),
+          _filaLecturaDemo('SALIDA:', '24/09/2026 – 11:58', '22.084,00 kg', '0,00 kg', '22.084,00 kg'),
+          _filaLecturaDemo('', 'TOTALES:', '15.830,00 kg', '0,00 kg', '15.830,00 kg'),
+          const Divider(color: Colors.black45, height: 6),
+          _filaLecturaDemo('PESO NETO:', '15.830,00 kg', '(DESPACHO)', '', '', bold: true),
           _filaLecturaDemo('PESO DECLARADO / DIFERENCIA:', '', '', '15.800,00', '+30,00', bold: true),
           _filaLecturaDemo('DESVIACIÓN:', '', '', '', '0,19 %', bold: true),
           const Divider(color: Colors.black, thickness: 1, height: 6),
@@ -571,25 +870,33 @@ class _TicketDesignScreenState extends State<TicketDesignScreen> {
     String remolque,
     String total, {
     bool bold = false,
+    bool cabecera = false,
   }) {
     final s = TextStyle(
       fontWeight: bold ? FontWeight.bold : FontWeight.normal,
       fontSize: 9.5,
     );
+    // Mismo reparto de anchos que el PDF y el preview (`_REQUIERE_TABLA_PESOS`).
+    const List<int> anchos = [75, 58, 74, 63, 57];
+    final List<String> celdas = [label, fecha, camion, remolque, total];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 34, child: Text(label, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 22, child: Text(fecha, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(camion, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(remolque, textAlign: TextAlign.right, style: s)),
-          const SizedBox(width: 4),
-          Expanded(flex: 14, child: Text(total, textAlign: TextAlign.right, style: s)),
+          for (int i = 0; i < anchos.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              flex: anchos[i],
+              child: Text(
+                celdas[i],
+                textAlign: cabecera
+                    ? TextAlign.center
+                    : (i == 0 ? TextAlign.left : TextAlign.right),
+                style: s,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -483,7 +483,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
             ayuda,
-            style: const TextStyle(fontSize: 12.5, color: SwsColors.gray600),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         InputDecorator(
@@ -512,7 +515,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.only(top: 12),
             child: Text(
               'no_scales_hint_full'.tr(),
-              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
       ],
@@ -1441,9 +1447,9 @@ class _DirectorioTileState extends State<_DirectorioTile> {
           if (_esPersonalizada)
             Text(
               'set_by_admin'.tr(),
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 10.5,
-                  color: SwsColors.primary,
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w600),
             ),
         ],

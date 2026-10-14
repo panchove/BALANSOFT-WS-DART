@@ -19,8 +19,8 @@ class LicenseRepository implements ILicenseRepository {
         _connectivity = connectivity;
 
   Future<bool> get _isConnected async {
-    final result = await _connectivity.checkConnectivity();
-    return result != ConnectivityResult.none;
+    final results = await _connectivity.checkConnectivity();
+    return results.any((r) => r != ConnectivityResult.none);
   }
 
   @override

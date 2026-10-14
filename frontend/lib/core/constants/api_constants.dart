@@ -21,6 +21,9 @@ class ApiConstants {
   static const String weighingList = '$apiPrefix/weighing/list';
   static String weighingByBoleto(String boleto) => '$apiPrefix/weighing/boleto/$boleto';
   static String weighingUpdate(String boleto) => '$apiPrefix/weighing/$boleto';
+  /// Historial de ediciones del boleto (justificación por edición, migración 024).
+  static String weighingEdiciones(String boleto) =>
+      '$apiPrefix/weighing/$boleto/ediciones';
   static String weighingAnular(String boleto) => '$apiPrefix/weighing/$boleto/anular';
   static const String weighingPendientes = '$apiPrefix/weighing/pendientes';
   static String weighingPdf(String boleto) => '$apiPrefix/weighing/$boleto/pdf';

@@ -13,13 +13,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+// ✅ Después
 class _FakeWifiConnectivity extends ConnectivityPlatform {
   @override
-  Future<ConnectivityResult> checkConnectivity() async => ConnectivityResult.wifi;
+  Future<List<ConnectivityResult>> checkConnectivity() async =>
+      [ConnectivityResult.wifi];
 
   @override
-  Stream<ConnectivityResult> get onConnectivityChanged =>
-      const Stream<ConnectivityResult>.empty();
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      const Stream<List<ConnectivityResult>>.empty();
 }
 
 class _TicketMockAdapter implements HttpClientAdapter {
@@ -90,7 +92,7 @@ void main() {
       // Inicialmente devuelve preset por defecto
       final inicial = await storage.getPrinterPreset();
       expect(inicial.nombreImpresora, 'Impresora Térmica POS-80');
-      expect(inicial.boletosPorHoja, 1);
+      expect(inicial.copias, 1);
 
       // Guardar preset personalizado
       const personalizado = PrinterPreset(
@@ -98,7 +100,6 @@ void main() {
         tipoImpresora: 'MATRIZ_PUNTO',
         tamanoPapel: 'Letter',
         orientacion: 'portrait',
-        boletosPorHoja: 3,
         mostrarEncabezado: true,
         mostrarDetalles: false,
       );
@@ -109,7 +110,6 @@ void main() {
       final recuperado = await storage.getPrinterPreset();
       expect(recuperado.nombreImpresora, 'Epson LX-300');
       expect(recuperado.tipoImpresora, 'MATRIZ_PUNTO');
-      expect(recuperado.boletosPorHoja, 3);
       expect(recuperado.mostrarDetalles, isFalse);
     });
 
@@ -117,21 +117,23 @@ void main() {
       const boletoId = 'b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf';
       final response = await repository.getTicketPdf(
         boletoId,
-        boletosPorHoja: 3,
+        copias: 3,
         tamanoPapel: 'Letter',
         orientacion: 'landscape',
         mostrarEncabezado: false,
         mostrarDetalles: true,
+        mostrarQr: false,
       );
 
       expect(response.statusCode, 200);
       expect(mockAdapter.lastRequest, isNotNull);
       expect(mockAdapter.lastRequest!.path, endsWith('/weighing/$boletoId/pdf'));
-      expect(mockAdapter.lastRequest!.queryParameters['boletos_por_hoja'], 3);
+      expect(mockAdapter.lastRequest!.queryParameters['copias'], 3);
       expect(mockAdapter.lastRequest!.queryParameters['tamano_papel'], 'Letter');
       expect(mockAdapter.lastRequest!.queryParameters['orientacion'], 'landscape');
       expect(mockAdapter.lastRequest!.queryParameters['mostrar_encabezado'], isFalse);
       expect(mockAdapter.lastRequest!.queryParameters['mostrar_detalles'], isTrue);
+      expect(mockAdapter.lastRequest!.queryParameters['mostrar_qr'], isFalse);
     });
 
     test('WeighingRepository.getTicketTxt solicita endpoint /txt correctamente', () async {

@@ -139,7 +139,11 @@ class TestAuditoriaPesaje:
             db,
             empresa,
             boleto.boleto,
-            WeighingUpdate(documento="GUI-0001", observaciones="Revisado"),
+            WeighingUpdate(
+                documento="GUI-0001",
+                observaciones="Revisado",
+                justificacion="Corrección del documento de la guía",
+            ),
             id_usuario=usuario.id_usuario,
             ip="10.0.0.2",
         )

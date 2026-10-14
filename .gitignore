@@ -25,6 +25,11 @@ frontend/.dart_tool/
 
 # Misc
 .ruff_cache/
-=4.0
 *.log
 .DS_Store
+
+# Referencias del cliente para el boleto (maquetas, no son fuente de verdad
+# del layout: el layout vive en TicketPreviewDialog + ticket_service).
+/boleto_80mm.odt
+/boleto_80mm.pdf
+/lectura_peso_format_ejemp.ods

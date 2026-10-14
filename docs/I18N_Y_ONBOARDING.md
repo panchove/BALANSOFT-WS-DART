@@ -104,7 +104,7 @@ lib/presentation/screens/auth/         # login/registro/recuperación (entrada �
   `config.json` (`station_config.dart` → `AppConfig.rol`).
 - `SaveFileUtils.esRutaEscribible()` valida la carpeta de reportes creando y
   borrando un archivo de prueba; si falla, se avisa y se usa la predeterminada.
-- `tr()` acepta argumentos posicionales extra: `'ticket_cut_i'.tr(null, ['2'])`
+- `tr()` acepta argumentos posicionales extra: `'ticket_confirm_print'.tr(null, ['2'])`
   sustituye `{0}` en los tres idiomas.
 
 - `AppTranslations.tr()` acepta **clave** (`'save'`) o **texto español**

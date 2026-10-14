@@ -58,6 +58,7 @@ from app.models import (
     Usuario,
 )
 from app.schemas import (
+    BoletoEdicionOut,
     WeighingAnular,
     WeighingClose,
     WeighingCreate,
@@ -75,6 +76,11 @@ _SERVICE = WeighingService()
 
 _PERMISOS_PESO_MANUAL = {"ADMIN", "SUPERVISOR"}
 _PERMISOS_ANULACION = {"ADMIN", "SUPERVISOR"}
+
+
+def _es_admin(user: Usuario) -> bool:
+    """Solo el ADMIN de la cuenta queda exento del tope de ediciones (RB edición)."""
+    return getattr(user, "rol", None) == "ADMIN"
 
 
 def _verificar_peso_manual(es_manual: bool, user: Usuario) -> None:
@@ -498,11 +504,15 @@ async def get_weighing_pdf(
     boleto: str,
     request: Request,
     idioma: str | None = Query(default=None),
-    boletos_por_hoja: int = Query(default=1, ge=1, le=4),
+    copias: int = Query(default=1, ge=1, le=10),
     tamano_papel: str = Query(default="Letter"),
     orientacion: str = Query(default="portrait"),
     mostrar_encabezado: bool = Query(default=True),
     mostrar_detalles: bool = Query(default=True),
+    mostrar_qr: bool = Query(
+        default=True,
+        description="Imprime el bloque QR del boleto (lo configura la estación en Diseño de ticket)",
+    ),
     tipo_ticket: str = Query(default="simple"),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
@@ -515,13 +525,14 @@ async def get_weighing_pdf(
     return generar_ticket_pdf(
         pesaje,
         empresa=empresa,
-        boletos_por_hoja=boletos_por_hoja,
+        copias=copias,
         tamano_papel=tamano_papel,
         orientacion=orientacion,
         mostrar_encabezado=mostrar_encabezado,
         mostrar_detalles=mostrar_detalles,
         idioma=lang,
         tipo_ticket=tipo_ticket,
+        mostrar_qr=mostrar_qr,
     )
 
 
@@ -571,6 +582,7 @@ async def update_weighing(
     boleto: str,
     payload: WeighingUpdate,
     request: Request,
+    idioma: str | None = None,
     current_user: Usuario = Depends(get_current_user),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
@@ -578,6 +590,7 @@ async def update_weighing(
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    lang = resolve_lang(request, idioma, empresa.idioma)
     pesaje_actualizado = await _SERVICE.update(
         db,
         empresa,
@@ -586,9 +599,28 @@ async def update_weighing(
         modificado_por=current_user.nombre,
         id_usuario=current_user.id_usuario,
         ip=request.client.host if request.client else None,
+        es_admin=_es_admin(current_user),
+        rol_usuario=getattr(current_user, "rol", None),
+        justificacion=payload.justificacion,
+        idioma=lang,
     )
     pesaje_actualizado = await _enriquecer_pesaje_ticket(db, pesaje_actualizado)
     return _resolve_to_weighing_out(pesaje_actualizado)
+
+
+@router.get("/{boleto}/ediciones", response_model=list[BoletoEdicionOut])
+async def listar_ediciones_boleto(
+    boleto: str,
+    _user: Usuario = Depends(get_current_user),
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> list[BoletoEdicionOut]:
+    """Historial de ediciones del boleto (justificación obligatoria por edición)."""
+    pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
+    if pesaje is None:
+        raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
+    ediciones = await _SERVICE.listar_ediciones(db, empresa, pesaje.boleto)
+    return [BoletoEdicionOut.model_validate(e) for e in ediciones]
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,8 @@ import 'package:window_manager/window_manager.dart';
 
 /// E2E de la estación (H2b): un recorrido real contra la API.
 ///
-///   login → módulo Entradas → crear pesaje de entrada → registrar salida
+///   login → módulo Entradas → crear pesaje de entrada
+///   → aviso post-entrada ("Cargar salida") → registrar salida
 ///   → verificar el boleto CERRADO en el historial
 ///
 /// Dos modos, según el entorno:
@@ -186,14 +187,17 @@ void main() {
         porque: 'la confirmación de guardado');
     await tocar(tester, find.byKey(const Key('dialogo_confirmar_guardado_btn')));
 
-    // Sin impresión: seguimos en el formulario para registrar la salida.
-    await esperar(tester, find.byKey(const Key('dialogo_nuevo_peso_btn')),
-        porque: 'la pregunta de impresión tras guardar la entrada');
-    await tocar(tester, find.byKey(const Key('dialogo_nuevo_peso_btn')));
+    // Tras guardar la entrada NO se pregunta por imprimir (el boleto aún no
+    // está cerrado): se ofrece cargar la SALIDA del mismo camión o registrar
+    // la SIGUIENTE entrada.
+    await esperar(tester, find.byKey(const Key('dialogo_cargar_salida_btn')),
+        porque: 'el aviso post-entrada (cargar salida)');
+    expect(find.byKey(const Key('dialogo_siguiente_entrada_btn')),
+        findsOneWidget,
+        reason: 'la alternativa de registrar la siguiente entrada');
+    await tocar(tester, find.byKey(const Key('dialogo_cargar_salida_btn')));
 
-    // ── 4. Cierre: elegir el boleto pendiente y capturar la salida ─────────
-    await tocar(tester, find.byKey(const Key('salida_toolbar_button')));
-
+    // ── 4. Cierre: el selector de boleto pendiente se abrió desde el aviso ──
     final fila = find.byKey(Key('boleto_pendiente_$placa'));
     await esperar(tester, fila,
         porque: 'el boleto de entrada $placa pendiente de salida');

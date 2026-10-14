@@ -1,6 +1,6 @@
 -- BALANSOFT-WS - Esquema canónico SQL Server (T-SQL)
 -- Generado a partir del pg_dump --schema-only de la BD local migrada.
--- 29 tablas: 26 canónicas + password_reset_tokens + series_numeracion +
+-- 30 tablas: 27 canónicas + password_reset_tokens + series_numeracion +
 -- schema_migrations. Idempotente: cada
 -- objeto se crea solo si no existe. Prohibido GO: el migrador ejecuta
 -- por lotes separados por ';'.
@@ -73,6 +73,31 @@ IF OBJECT_ID(N'dbo.balanzas', N'U') IS NULL BEGIN
     );
 END
 
+IF OBJECT_ID(N'dbo.boletos_ediciones', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[boletos_ediciones] (
+        [id_edicion] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [boleto] UNIQUEIDENTIFIER NOT NULL,
+        [numero_boleto] NVARCHAR(30) NULL,
+        [id_usuario] UNIQUEIDENTIFIER NULL,
+        [usuario_nombre] NVARCHAR(150) NULL,
+        [rol_usuario] NVARCHAR(30) NULL,
+        [fecha_edicion] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [ip] NVARCHAR(45) NULL,
+        [justificacion] NVARCHAR(500) NOT NULL,
+        [estado_anterior] NVARCHAR(20) NOT NULL,
+        [estado_nuevo] NVARCHAR(20) NOT NULL,
+        [campos_modificados] NVARCHAR(MAX) NULL,
+        [edicion_numero] INTEGER NOT NULL,
+        [sync_operation_id] UNIQUEIDENTIFIER NULL,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_boletos_ediciones_estados] CHECK (estado_anterior IN (N'PENDIENTE',N'CERRADO',N'MODIFICADO') AND estado_nuevo IN (N'PENDIENTE',N'CERRADO',N'MODIFICADO')),
+        CONSTRAINT [ck_boletos_ediciones_edicion_num] CHECK (edicion_numero >= 1),
+        CONSTRAINT [ck_boletos_ediciones_justificacion] CHECK (LEN(LTRIM(RTRIM(justificacion))) >= 10),
+        CONSTRAINT [boletos_ediciones_pkey] PRIMARY KEY (id_edicion)
+    );
+END
+
 IF OBJECT_ID(N'dbo.boletos_pesaje', N'U') IS NULL BEGIN
     CREATE TABLE [dbo].[boletos_pesaje] (
         [boleto] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
@@ -108,6 +133,10 @@ IF OBJECT_ID(N'dbo.boletos_pesaje', N'U') IS NULL BEGIN
         [modificado_por] NVARCHAR(150),
         [anulado_por] NVARCHAR(150),
         [motivo_anulacion] NVARCHAR(MAX),
+        [ediciones_count] INTEGER DEFAULT 0 NOT NULL,
+        [motivo_modificacion_ultima] NVARCHAR(500) NULL,
+        [ultimo_editor_nombre] NVARCHAR(150) NULL,
+        [max_ediciones_boleto_aplicado] INTEGER NULL,
         [peso_total_entrada] DECIMAL(12,2),
         [peso_total_salida] DECIMAL(12,2),
         [peso_neto] DECIMAL(12,2),
@@ -207,6 +236,12 @@ IF OBJECT_ID(N'dbo.empresas', N'U') IS NULL BEGIN
         [ruta_exportacion_reportes] NVARCHAR(500),
         [tamano_ticket_pdf] NVARCHAR(20) DEFAULT N'AUTOMATICO',
         [fuente_ticket_pdf] NVARCHAR(20) DEFAULT N'DejaVu',
+        [max_ediciones_boleto] INTEGER NULL,
+        [impresion_automatica] BIT DEFAULT 0 NOT NULL,
+        [protocolo_impresion]  NVARCHAR(30) NULL,
+        [impresora_nombre]     NVARCHAR(255) NULL,
+        [impresora_host]       NVARCHAR(100) NULL,
+        [impresora_puerto]     INTEGER NULL,
         [licencia_key] NVARCHAR(255),
         [licencia_tier] NVARCHAR(20),
         [licencia_status] NVARCHAR(20),
@@ -219,6 +254,9 @@ IF OBJECT_ID(N'dbo.empresas', N'U') IS NULL BEGIN
         CONSTRAINT [ck_empresas_fuente_ticket_pdf] CHECK (((fuente_ticket_pdf) = N'DejaVu')),
         CONSTRAINT [ck_empresas_idioma] CHECK ((idioma) IN (N'es', N'en', N'pt')),
         CONSTRAINT [ck_empresas_tamano_ticket_pdf] CHECK ((tamano_ticket_pdf) IN (N'AUTOMATICO', N'GRANDE', N'MEDIANO', N'PEQUENO')),
+        CONSTRAINT [ck_empresas_max_ediciones_boleto] CHECK (max_ediciones_boleto IS NULL OR max_ediciones_boleto >= 0),
+        CONSTRAINT [ck_empresas_protocolo_impresion] CHECK (protocolo_impresion IS NULL OR protocolo_impresion IN (N'predeterminada_so', N'raw_9100', N'lpd_cups', N'nombre_impresora')),
+        CONSTRAINT [ck_empresas_impresora_puerto] CHECK (impresora_puerto IS NULL OR impresora_puerto BETWEEN 1 AND 65535),
         CONSTRAINT [empresas_pkey] PRIMARY KEY (id_empresa)
     );
 END
@@ -543,6 +581,15 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'balanzas_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[balanzas] ADD CONSTRAINT [balanzas_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'boletos_ediciones_boleto_fkey' ) BEGIN
+    ALTER TABLE [dbo].[boletos_ediciones] ADD CONSTRAINT [boletos_ediciones_boleto_fkey] FOREIGN KEY (boleto) REFERENCES [dbo].[boletos_pesaje] (boleto);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'boletos_ediciones_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[boletos_ediciones] ADD CONSTRAINT [boletos_ediciones_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'boletos_ediciones_id_usuario_fkey' ) BEGIN
+    ALTER TABLE [dbo].[boletos_ediciones] ADD CONSTRAINT [boletos_ediciones_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario);
+END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'boletos_pesaje_id_almacen_fkey' ) BEGIN
     ALTER TABLE [dbo].[boletos_pesaje] ADD CONSTRAINT [boletos_pesaje_id_almacen_fkey] FOREIGN KEY (id_almacen) REFERENCES [dbo].[almacenes] (id_almacen);
 END
@@ -739,6 +786,15 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_usuarios_rol' ) BEGIN
     CREATE INDEX [idx_usuarios_rol] ON [dbo].[usuarios] (rol, activo);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_boletos_ediciones_boleto_fecha' ) BEGIN
+    CREATE INDEX [ix_boletos_ediciones_boleto_fecha] ON [dbo].[boletos_ediciones] ([id_empresa], [boleto], [fecha_edicion]);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_boletos_ediciones_boleto_num' ) BEGIN
+    CREATE INDEX [ix_boletos_ediciones_boleto_num] ON [dbo].[boletos_ediciones] ([id_empresa], [boleto], [edicion_numero]);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_boletos_ediciones_usuario_fecha' ) BEGIN
+    CREATE INDEX [ix_boletos_ediciones_usuario_fecha] ON [dbo].[boletos_ediciones] ([id_usuario], [fecha_edicion]);
+END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_productos_id_categoria' ) BEGIN
     CREATE INDEX [ix_productos_id_categoria] ON [dbo].[productos] (id_categoria);
 END
@@ -768,6 +824,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_notificaciones_empres
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_series_numeracion_activa_empresa' ) BEGIN
     CREATE UNIQUE INDEX [uq_series_numeracion_activa_empresa] ON [dbo].[series_numeracion] (id_empresa) WHERE (activa = 1);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ux_boletos_ediciones_sync_op' ) BEGIN
+    CREATE UNIQUE INDEX [ux_boletos_ediciones_sync_op] ON [dbo].[boletos_ediciones] ([sync_operation_id]) WHERE [sync_operation_id] IS NOT NULL;
 END
 
 COMMIT;

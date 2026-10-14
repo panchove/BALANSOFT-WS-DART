@@ -56,7 +56,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
       if (!mounted) return;
       setState(() {
         _cargando = false;
-        _error = 'No se pudieron cargar los recordatorios';
+        _error = _tr('notificaciones_error_recordatorios');
       });
     }
   }

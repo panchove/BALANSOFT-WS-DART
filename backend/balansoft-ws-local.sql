@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS empresas (
     ruta_exportacion_reportes VARCHAR(500),
     tamano_ticket_pdf VARCHAR(20) DEFAULT 'AUTOMATICO',
     fuente_ticket_pdf VARCHAR(20) DEFAULT 'DejaVu',
+    -- Configuración de edición e impresión
+    max_ediciones_boleto INTEGER,
+    impresion_automatica BOOLEAN NOT NULL DEFAULT FALSE,
+    protocolo_impresion  VARCHAR(30),
+    impresora_nombre     VARCHAR(255),
+    impresora_host       VARCHAR(100),
+    impresora_puerto     INTEGER,
     -- Snapshot de la licencia (validada contra el servidor central en login)
     licencia_key     VARCHAR(255),
     licencia_tier    VARCHAR(20),
@@ -80,6 +87,13 @@ UPDATE empresas SET fuente_ticket_pdf = 'DejaVu' WHERE fuente_ticket_pdf IS NULL
 ALTER TABLE empresas ALTER COLUMN tamano_ticket_pdf SET DEFAULT 'AUTOMATICO';
 ALTER TABLE empresas ALTER COLUMN fuente_ticket_pdf SET DEFAULT 'DejaVu';
 
+
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS max_ediciones_boleto INTEGER;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS impresion_automatica BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS protocolo_impresion VARCHAR(30);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS impresora_nombre VARCHAR(255);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS impresora_host VARCHAR(100);
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS impresora_puerto INTEGER;
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -95,6 +109,30 @@ BEGIN
         ALTER TABLE empresas
             ADD CONSTRAINT ck_empresas_fuente_ticket_pdf
             CHECK (fuente_ticket_pdf IN ('DejaVu'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_empresas_protocolo_impresion'
+    ) THEN
+        ALTER TABLE empresas
+            ADD CONSTRAINT ck_empresas_protocolo_impresion
+            CHECK (
+                protocolo_impresion IS NULL OR
+                protocolo_impresion IN ('predeterminada_so','raw_9100','lpd_cups','nombre_impresora')
+            );
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_empresas_max_ediciones_boleto'
+    ) THEN
+        ALTER TABLE empresas
+            ADD CONSTRAINT ck_empresas_max_ediciones_boleto
+            CHECK (max_ediciones_boleto IS NULL OR max_ediciones_boleto >= 0);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_empresas_impresora_puerto'
+    ) THEN
+        ALTER TABLE empresas
+            ADD CONSTRAINT ck_empresas_impresora_puerto
+            CHECK (impresora_puerto IS NULL OR impresora_puerto BETWEEN 1 AND 65535);
     END IF;
 END
 $$;
@@ -390,6 +428,11 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     modificado_por           VARCHAR(150),
     anulado_por              VARCHAR(150),
     motivo_anulacion         TEXT,
+    -- Ediciones
+    ediciones_count          INTEGER NOT NULL DEFAULT 0,
+    motivo_modificacion_ultima VARCHAR(500),
+    ultimo_editor_nombre     VARCHAR(150),
+    max_ediciones_boleto_aplicado INTEGER,
 
     -- Cálculos MODEL.md
     peso_total_entrada       NUMERIC(12,2),
@@ -590,5 +633,44 @@ CREATE INDEX IF NOT EXISTS idx_auditoria_fecha          ON auditoria (created_at
 CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_estado  ON notificaciones (id_empresa, estado);
 CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_created ON notificaciones (id_empresa, created_at);
 CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa    ON recordatorios (id_empresa, activo, programada_para);
+
+
+-- ============================================================
+-- 12. HISTORIAL DE EDICIONES DE BOLETOS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS boletos_ediciones (
+    id_edicion          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa          UUID NOT NULL REFERENCES empresas(id_empresa) ON DELETE RESTRICT,
+    boleto              UUID NOT NULL REFERENCES boletos_pesaje(boleto) ON DELETE RESTRICT,
+    numero_boleto       VARCHAR(30),
+    id_usuario          UUID REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
+    usuario_nombre      VARCHAR(150),
+    rol_usuario         VARCHAR(30),
+    fecha_edicion       TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
+    ip                  VARCHAR(45),
+    justificacion       VARCHAR(500) NOT NULL,
+    estado_anterior     VARCHAR(20) NOT NULL,
+    estado_nuevo        VARCHAR(20) NOT NULL,
+    campos_modificados  JSONB,
+    edicion_numero      INTEGER NOT NULL,
+    sync_operation_id   UUID,
+    created_at          TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
+    CONSTRAINT ck_boletos_ediciones_estados CHECK (
+        estado_anterior IN ('PENDIENTE','CERRADO','MODIFICADO') AND
+        estado_nuevo    IN ('PENDIENTE','CERRADO','MODIFICADO')
+    ),
+    CONSTRAINT ck_boletos_ediciones_edicion_num CHECK (edicion_numero >= 1),
+    CONSTRAINT ck_boletos_ediciones_justificacion CHECK (char_length(trim(justificacion)) >= 10)
+);
+
+CREATE INDEX IF NOT EXISTS ix_boletos_ediciones_boleto_fecha
+    ON boletos_ediciones (id_empresa, boleto, fecha_edicion);
+CREATE INDEX IF NOT EXISTS ix_boletos_ediciones_boleto_num
+    ON boletos_ediciones (id_empresa, boleto, edicion_numero);
+CREATE INDEX IF NOT EXISTS ix_boletos_ediciones_usuario_fecha
+    ON boletos_ediciones (id_usuario, fecha_edicion);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_boletos_ediciones_sync_op
+    ON boletos_ediciones (sync_operation_id)
+    WHERE sync_operation_id IS NOT NULL;
 
 COMMIT;

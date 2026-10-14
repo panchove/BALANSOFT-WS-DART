@@ -464,9 +464,12 @@ Future<String?> abrirDetalleDeBoletoNuevo(
   if (await esperar(tester, find.byKey(const Key('dialogo_confirmar_guardado_btn')),
       porque: 'la confirmación de guardado')) {
     await tocar(tester, find.byKey(const Key('dialogo_confirmar_guardado_btn')));
-    if (await esperar(tester, find.byKey(const Key('dialogo_nuevo_peso_btn')),
-        porque: 'la pregunta de impresión')) {
-      await tocar(tester, find.byKey(const Key('dialogo_nuevo_peso_btn')));
+    // Tras la ENTRADA el boleto sigue PENDIENTE: no hay pregunta de impresión
+    // sino `_alertaPostEntrada` (modal) → hay que cerrarla con "siguiente
+    // entrada" o la secuencia posterior no puede continuar.
+    if (await esperar(tester, find.byKey(const Key('dialogo_siguiente_entrada_btn')),
+        porque: 'el aviso post-entrada')) {
+      await tocar(tester, find.byKey(const Key('dialogo_siguiente_entrada_btn')));
     }
   }
   await asentar(tester);

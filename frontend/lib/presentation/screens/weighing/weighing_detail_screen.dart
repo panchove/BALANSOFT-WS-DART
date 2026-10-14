@@ -305,11 +305,12 @@ class _WeighingDetailScreenState extends State<WeighingDetailScreen> {
           ? await repo.getTicketTxt(w.boleto, tipoTicket: preset.tipoTicket)
           : await repo.getTicketPdf(
               w.boleto,
-              boletosPorHoja: preset.boletosPorHoja,
+              copias: preset.copias,
               tamanoPapel: preset.tamanoPapel,
               orientacion: preset.orientacion,
               mostrarEncabezado: preset.mostrarEncabezado,
               mostrarDetalles: preset.mostrarDetalles,
+              mostrarQr: preset.mostrarQr,
               tipoTicket: preset.tipoTicket,
             );
       final bytes = response.data;

@@ -6,26 +6,46 @@ placa, motivo de anulación y marca de agua "ANULADO") es correcto.
 
 from __future__ import annotations
 
+import base64
+import json
 import re
 import uuid
+import zlib
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 from pypdf import PdfReader
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.pdfbase import pdfmetrics
 
 from app.models import BoletoPesaje, Empresa, Kardex
+from app.services import ticket_service as ts
 from app.services.ticket_service import (
-    _ESCALAS_ACTUALES,
+    _GAP_ETIQUETA_TERMICA,
+    _MAX_RATIO_ETIQUETA_TERMICA,
+    _MIN_TABLA_PESOS,
+    _RATIOS_TABLA_PESOS,
+    _REQUIERE_TABLA_PESOS,
+    _TS_TERMICO,
     ANCHO_TXT,
+    FUENTE,
+    FUENTE_BOLD,
+    _ancho_etiqueta_termica,
     _build_pdf,
     _build_txt,
+    _dato,
+    _escala_termica,
+    _filas_lectura_pesos,
     _fmt,
     _fmt_densidad,
     _fmt_sig,
+    _registrar_ttf,
+    _tamano_tabla_pesos,
     generar_ticket_pdf,
 )
 
@@ -40,6 +60,73 @@ def _paginas(p, **kwargs) -> int:
     buf: BytesIO = _build_pdf(p, **kwargs)
     buf.seek(0)
     return len(PdfReader(buf).pages)
+
+
+def _multiplicar_matriz(m1, m2):
+    """Producto de dos matrices afines de PDF (a:b, c:d, e:f)."""
+    return (
+        m1[0] * m2[0] + m1[1] * m2[2],
+        m1[0] * m2[1] + m1[1] * m2[3],
+        m1[2] * m2[0] + m1[3] * m2[2],
+        m1[2] * m2[1] + m1[3] * m2[3],
+        m1[4] * m2[0] + m1[5] * m2[2] + m2[4],
+        m1[4] * m2[1] + m1[5] * m2[3] + m2[5],
+    )
+
+
+def _runs_pdf(p, **kwargs) -> list[tuple[float, float, float, str, float]]:
+    """``(x, y, ancho, texto, tamano)`` de cada línea de texto del PDF.
+
+    ``x``/``y`` salen del producto ``cm × tm`` que pypdf entrega al visitante, y
+    el ancho se recalcula con las métricas del TTF incrustado (el MISMO que usa
+    ReportLab para repartir el párrafo), así que sirve para detectar el solape
+    entre celdas vecinas sin depender de poppler/pdftotext.
+    """
+    buf: BytesIO = _build_pdf(p, **kwargs)
+    buf.seek(0)
+    pagina = PdfReader(buf).pages[0]
+    runs: list[tuple[float, float, float, str, float]] = []
+
+    def _visitor(texto, cm, tm, font_dict, tamano):
+        # pypdf cierra CADA línea con "\n": no es un glifo y falsea el ancho.
+        limpio = (texto or "").rstrip("\n")
+        if not limpio.strip():
+            return
+        matriz = _multiplicar_matriz(cm, tm)
+        negrita = "Bold" in str((font_dict or {}).get("/BaseFont", ""))
+        fuente = FUENTE_BOLD if negrita else FUENTE
+        ancho = pdfmetrics.stringWidth(limpio, fuente, float(tamano))
+        runs.append((float(matriz[4]), float(matriz[5]), ancho, limpio, float(tamano)))
+
+    pagina.extract_text(visitor_text=_visitor)
+    return runs
+
+
+def _por_y(runs) -> dict[float, list[tuple[float, str]]]:
+    """Filas visuales del PDF: ``y → [(x, texto), …]`` de izquierda a derecha.
+
+    El bloque de DATOS se imprime como una tabla de DOS celdas (etiqueta |
+    valor), así que pypdf entrega la etiqueta y su valor como dos líneas de
+    texto distintas aunque compartan la MISMA vertical. Agrupar por ``y``
+    (redondeada a 0,1 pt) reconstruye la fila.
+    """
+    filas: dict[float, list[tuple[float, str]]] = {}
+    for x, y, _ancho, texto, _tam in runs:
+        filas.setdefault(round(y, 1), []).append((x, texto))
+    return {y: sorted(partes) for y, partes in filas.items()}
+
+
+def _solapes(runs, tolerancia_y: float = 0.6, min_x: float = 0.5):
+    """Parejas de líneas que se pisan horizontalmente en la misma banda."""
+    hallados = []
+    ordenados = sorted(runs, key=lambda r: (round(r[1], 1), r[0]))
+    for i, (x1, y1, w1, t1, _s1) in enumerate(ordenados):
+        for x2, y2, w2, t2, _s2 in ordenados[i + 1:]:
+            if abs(y1 - y2) > tolerancia_y:
+                break
+            if min(x1 + w1, x2 + w2) - max(x1, x2) > min_x:
+                hallados.append((round(y1, 2), t1, t2))
+    return hallados
 
 
 def _boleto_baseline() -> BoletoPesaje:
@@ -100,6 +187,17 @@ def _imagenes(p, **kwargs) -> int:
             if ref.get_object().get("/Subtype") == "/Image":
                 total += 1
     return total
+
+
+_MM = 72 / 25.4  # mm → pt
+
+
+def _mediabox(p, **kwargs) -> tuple[float, float]:
+    """(ancho, alto) de la primera página del PDF, en puntos."""
+    buf: BytesIO = _build_pdf(p, **kwargs)
+    buf.seek(0)
+    box = PdfReader(buf).pages[0].mediabox
+    return float(box.width), float(box.height)
 
 
 def _boleto(**overrides) -> BoletoPesaje:
@@ -271,63 +369,64 @@ class TestAnuladoWatermark:
 
 class TestLayoutNuevo:
     def test_pdf_incluye_zonas_del_layout(self):
-        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), boletos_por_hoja=3))
+        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), copias=3))
         for fragmento in (
-            "LECTURA DE PESOS", "Peso Camion", "Peso Remolque", "Peso Total",
-            "PESO NETO", "PESO DECLARADO", "DATOS ADICIONALES",
-            "OBSERVACIONES", "DOC-987654321",
+            "LECTURA DE PESOS", "Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTALES",
+            "ENTRADA:", "SALIDA:", "PESO NETO", "PESO DECLARADO",
+            "DATOS ADICIONALES", "OBSERVACIONES", "DOC-987654321",
         ):
             assert fragmento in txt, f"falta '{fragmento}'"
 
     def test_boleto_unico_estrecho_conserva_contenido(self):
-        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), boletos_por_hoja=1))
+        txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), copias=1))
         for fragmento in (
             "LECTURA DE PESOS", "PESO NETO", "DATOS ADICIONALES",
             "DOC-987654321", "OBSERVACIONES",
         ):
             assert fragmento in txt, f"falta '{fragmento}' (boleto único)"
 
-    def test_3_por_carta_una_pagina(self):
-        assert _paginas(_boleto_completo(), boletos_por_hoja=3, tamano_papel="Letter") == 1
+    def test_cantidad_de_tickets_en_carta(self):
+        # «Cantidad de tickets» = N: el PDF emite N copias completas del boleto.
+        # Cuando no caben empaquetadas, cada copia usa una página; nada se trunca.
+        assert _paginas(_boleto_completo(), copias=3, tamano_papel="Letter") == 3
 
-    def test_3_por_carta_con_encabezado_una_pagina_sin_firmas(self):
+    def test_cantidad_de_tickets_con_encabezado(self):
         kwargs = dict(
-            boletos_por_hoja=3, tamano_papel="Letter",
+            copias=3, tamano_papel="Letter",
             empresa=_empresa_demo(), mostrar_encabezado=True,
         )
-        assert _paginas(_boleto_completo(), **kwargs) == 1
         txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), **kwargs))
         assert txt.count("Documento") == 3
         assert "Firma Conductor" not in txt
 
-    def test_3_por_a4_una_pagina(self):
-        assert _paginas(_boleto_completo(), boletos_por_hoja=3, tamano_papel="A4") == 1
+    def test_cantidad_de_tickets_en_a4(self):
+        assert _paginas(_boleto_completo(), copias=3, tamano_papel="A4") == 3
 
     def test_4_por_carta_no_trunca(self):
-        kwargs = dict(boletos_por_hoja=4, tamano_papel="Letter")
+        kwargs = dict(copias=4, tamano_papel="Letter")
         assert _paginas(_boleto_completo(), **kwargs) >= 1
         txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), **kwargs))
         assert txt.count("Documento") == 4
         assert "Firma Conductor" not in txt
 
     def test_1_por_carta_una_pagina(self):
-        assert _paginas(_boleto_completo(), boletos_por_hoja=1, tamano_papel="Letter") == 1
+        assert _paginas(_boleto_completo(), copias=1, tamano_papel="Letter") == 1
 
     def test_1_por_carta_con_encabezado_centrado_una_pagina(self):
         # Boleto único + encabezado debe caber en el ancho estrecho (140mm).
         assert _paginas(
             _boleto_completo(),
-            boletos_por_hoja=1, tamano_papel="Letter",
+            copias=1, tamano_papel="Letter",
             empresa=_empresa_demo(), mostrar_encabezado=True,
         ) == 1
 
     def test_1_por_a4_centrado_una_pagina(self):
-        assert _paginas(_boleto_completo(), boletos_por_hoja=1, tamano_papel="A4") == 1
+        assert _paginas(_boleto_completo(), copias=1, tamano_papel="A4") == 1
 
     def test_ancho_angosto_en_todas_las_cantidades(self):
         # Ancho fijo 140mm centrado sin importar cuántos boletos se apilen.
         for n in (1, 2, 3, 4):
-            x = _max_text_x(_boleto_completo(), boletos_por_hoja=n, tamano_papel="Letter")
+            x = _max_text_x(_boleto_completo(), copias=n, tamano_papel="Letter")
             assert x < 500.0, f"{n} por hoja ocupa demasiado ancho: {x:.1f}pt"
 
     def test_termico_una_pagina(self):
@@ -411,7 +510,7 @@ class TestEncabezadoEmpresa:
     def test_4_por_carta_con_contacto_y_logo_no_trunca(self, monkeypatch, tmp_path):
         url = _logo_en_media(monkeypatch, tmp_path)
         kwargs = dict(
-            boletos_por_hoja=4, tamano_papel="Letter",
+            copias=4, tamano_papel="Letter",
             empresa=_empresa_contacto(logo_url=url), mostrar_encabezado=True,
         )
         assert _paginas(_boleto_completo(), **kwargs) >= 1
@@ -422,7 +521,7 @@ class TestEncabezadoEmpresa:
     def test_3_por_carta_con_contacto_y_logo_no_trunca(self, monkeypatch, tmp_path):
         url = _logo_en_media(monkeypatch, tmp_path)
         kwargs = dict(
-            boletos_por_hoja=3, tamano_papel="Letter",
+            copias=3, tamano_papel="Letter",
             empresa=_empresa_contacto(logo_url=url), mostrar_encabezado=True,
         )
         assert _paginas(_boleto_completo(), **kwargs) >= 1
@@ -439,14 +538,14 @@ class TestEncabezadoEmpresa:
     def test_boleto_unico_estrecho_con_contacto_una_pagina(self):
         assert _paginas(
             _boleto_completo(),
-            boletos_por_hoja=1, tamano_papel="Letter",
+            copias=1, tamano_papel="Letter",
             empresa=_empresa_contacto(), mostrar_encabezado=True,
         ) == 1
 
     def test_ancho_angosto_con_contacto(self):
         for n in (1, 2, 3, 4):
             x = _max_text_x(
-                _boleto_completo(), boletos_por_hoja=n, tamano_papel="Letter",
+                _boleto_completo(), copias=n, tamano_papel="Letter",
                 empresa=_empresa_contacto(), mostrar_encabezado=True,
             )
             assert x < 500.0, f"{n} por hoja ocupa demasiado ancho: {x:.1f}pt"
@@ -466,16 +565,623 @@ class TestTxtEncabezado:
 
 
 class TestTxtNuevo:
-    def test_txt_incluye_tabla_de_lecturas(self):
+    def test_txt_incluye_tabla_de_pesos(self):
+        # El TXT usa la MISMA tabla de lecturas que el PDF térmico (y la hoja):
+        #   (etiqueta) | Fec, Hrs | CAMIÓN | REMOLQUE | TOTAL
+        # con una fila por pesada (ENTRADA / SALIDA), la de TOTALES (los netos
+        # por vehículo) y la fila PESO NETO con su sufijo.
         buf: BytesIO = _build_txt(_boleto_completo())
         txt = buf.getvalue().decode("utf-8")
         for fragmento in (
-            "LECTURA DE PESOS", "Fecha/Hora", "Peso Camion", "Peso Remolque",
-            "Peso Total", "Balanza Entrada: BALANZA PRINCIPAL",
-            "PESO NETO", "PESO DECLARADO / DIFERENCIA", "DESVIACIÓN",
+            "LECTURA DE PESOS",
+            "Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTAL",
+            "ENTRADA:", "08/09/2026 – 08:30",
+            "50.000,00 kg", "12.500,00 kg", "62.500,00 kg",
+            "SALIDA:", "08/09/2026 – 09:15",
+            "45.000,00 kg", "11.500,00 kg", "56.500,00 kg",
+            "TOTALES:", "5.000,00 kg", "1.000,00 kg", "7.500,00 kg",
+            "PESO NETO:", "7.500,00 kg", "(INGRESO)",
+            "Cliente/Proveedor: PROVEEDOR DE PRUEBA C.A.",
+            "Remolque: Sí — RTA987",
             "DATOS ADICIONALES", "OBSERVACIONES", "DOC-987654321",
         ):
             assert fragmento in txt, f"falta '{fragmento}'"
+
+
+class TestTermicoApilado:
+    """El PDF térmico (80/58mm) apila cada campo en su propia línea, con una
+    página de ALTO DINÁMICO (crece con el contenido) y sin recortes."""
+
+    def test_80mm_apila_todos_los_campos(self):
+        # Se normaliza el espacio de la extracción: el Paragraph envuelve por
+        # PALABRA, así que un valor largo reaparece íntegro al juntar líneas
+        # (esto mismo demuestra que NO se parte a media palabra).
+        txt = " ".join(_extract(_boleto_completo(), tamano_papel="80mm").split())
+        for fragmento in (
+            "Serie - Boleto: TA-00000001",
+            "Camión: ABC123",
+            "Remolque: Sí — RTA987",
+            "Transporte: TRANSPORTE DEMO C.A.",
+            "Conductor: FULANO DE TAL (V-12345678)",
+            "Producto: MAIZ AMARILLO",
+            "Almacén: SILO 01",
+            "Cliente/Proveedor: PROVEEDOR DE PRUEBA C.A.",
+            "LECTURA DE PESOS",
+            # Tabla de lecturas: cabecera + una fila por pesada + TOTALES.
+            "Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTAL",
+            "ENTRADA:", "08/09/2026 – 08:30",
+            "50.000,00 kg", "12.500,00 kg", "62.500,00 kg",
+            "SALIDA:", "08/09/2026 – 09:15",
+            "45.000,00 kg", "11.500,00 kg", "56.500,00 kg",
+            "TOTALES:", "5.000,00 kg", "1.000,00 kg", "7.500,00 kg",
+            "PESO NETO: 7.500,00 kg (INGRESO)",
+            "OBSERVACIONES",
+            "Despacho a granel.",
+            "Revisar merma de viaje.",
+            "CERRADO",
+        ):
+            assert fragmento in txt, f"falta '{fragmento}'"
+
+    def test_80mm_campos_de_cabecera_en_su_propia_linea(self):
+        # Los campos de CABECERA siguen ocupando exactamente una línea cada uno.
+        # La sección de pesos es una tabla (ver TestTablaPesosTermico), por eso
+        # sus celdas no se comprueban aquí.
+        #
+        # El bloque de DATOS se imprime en DOS celdas (etiqueta | valor), así que
+        # pypdf entrega la etiqueta y su valor como líneas de texto APARTE
+        # aunque compartan la misma vertical: "cada campo en su línea" se
+        # comprueba con la geometría real, no con el texto extraído.
+        lineas = _por_y(_runs_pdf(_boleto_completo(), tamano_papel="80mm"))
+        # La tabla de lecturas también tiene celdas con esos rótulos ("Camión:")
+        # y va DEBAJO de la cabecera, así que la búsqueda se acota a las filas
+        # por encima del rótulo "LECTURA DE PESOS" (en el PDF la Y crece hacia
+        # arriba).
+        corte = max(
+            y
+            for y, partes in lineas.items()
+            if any(texto == "LECTURA DE PESOS" for _x, texto in partes)
+        )
+        cabecera = {y: partes for y, partes in lineas.items() if y > corte}
+        etiquetas = (
+            "Serie - Boleto:",
+            "Fecha/Hora:",
+            "Camión:",
+            "Remolque:",
+            "Transporte:",
+            "Conductor:",
+            "Producto:",
+            "Almacén:",
+        )
+        verticales = []
+        for etiqueta in etiquetas:
+            fila = [y for y, partes in cabecera.items() if partes[0][1] == etiqueta]
+            assert len(fila) == 1, f"'{etiqueta}' no está en su propia línea"
+            y = fila[0]
+            assert len(cabecera[y]) >= 2, f"'{etiqueta}' no tiene su valor al lado"
+            assert cabecera[y][1][0] > cabecera[y][0][0], "el valor no va a la derecha"
+            verticales.append(y)
+        # Ninguna etiqueta comparte línea con otra: una vertical por campo.
+        assert len(set(verticales)) == len(etiquetas)
+        # Y las dos mitades se alinean por su cuenta: TODAS las etiquetas acaban
+        # en la misma X (pegadas al borde derecho de su columna) y todos los
+        # valores empiezan en la misma X (pegados al izquierdo de la suya), con
+        # el hueco de separación en medio. Con un único Paragraph era imposible.
+        runs = _runs_pdf(_boleto_completo(), tamano_papel="80mm")
+        bordes_etq = {
+            round(x + ancho, 2)
+            for x, y, ancho, texto, _t in runs
+            if round(y, 1) in verticales and texto in etiquetas
+        }
+        inicios_val = {
+            round(x, 2)
+            for x, y, _ancho, texto, _t in runs
+            if round(y, 1) in verticales and texto not in etiquetas
+        }
+        assert len(bordes_etq) == 1, f"etiquetas desalineadas: {sorted(bordes_etq)}"
+        assert len(inicios_val) == 1, f"valores desalineados: {sorted(inicios_val)}"
+        assert inicios_val.pop() - bordes_etq.pop() == pytest.approx(
+            _GAP_ETIQUETA_TERMICA, abs=0.01
+        )
+        # Y el valor de cada campo (que puede envolver DENTRO de su columna)
+        # sigue contiguo en el texto extraído.
+        plano = " ".join(_extract(_boleto_completo(), tamano_papel="80mm").split())
+        for etiqueta, valor in (
+            ("Serie - Boleto:", "TA-00000001"),
+            ("Fecha/Hora:", "08/09/2026 08:30"),
+            ("Camión:", "ABC123"),
+            ("Remolque:", "Sí — RTA987"),
+            ("Transporte:", "TRANSPORTE DEMO C.A."),
+            ("Conductor:", "FULANO DE TAL (V-12345678)"),
+            ("Producto:", "MAIZ AMARILLO"),
+            ("Almacén:", "SILO 01"),
+            ("Despacho a granel.", ""),
+            ("Revisar merma de viaje.", ""),
+            ("Estado:", "CERRADO"),
+        ):
+            esperado = f"{etiqueta} {valor}".rstrip()
+            assert esperado in plano, f"falta '{esperado}'"
+
+    def test_pagina_termica_alto_dinamico(self):
+        ancho, alto = _mediabox(_boleto_completo(), tamano_papel="80mm")
+        assert abs(ancho - 80 * _MM) < 1.0          # 80 mm exactos de ancho
+        assert 80 * _MM < alto < 297 * _MM          # ni vacía ni el marco fijo
+
+    def test_mas_contenido_pagina_mas_alta(self):
+        # Prueba directa del alto dinámico: el boleto completo (más campos) debe
+        # producir una página estrictamente más alta que el boleto simple.
+        _, corto = _mediabox(_boleto(), tamano_papel="80mm")
+        _, largo = _mediabox(_boleto_completo(), tamano_papel="80mm")
+        assert largo > corto
+
+    def test_ancho_58mm_y_80mm(self):
+        a80 = _mediabox(_boleto_completo(), tamano_papel="80mm")[0]
+        a58 = _mediabox(_boleto_completo(), tamano_papel="58mm")[0]
+        assert abs(a80 - 80 * _MM) < 1.0
+        assert abs(a58 - 58 * _MM) < 1.0
+
+
+class TestTablaPesosTermico:
+    """La LECTURA DE PESOS es una tabla de 5 columnas —
+    ``(vacío) | Fec, Hrs | CAMIÓN | REMOLQUE | TOTAL``— con una fila por pesada
+    (ENTRADA / SALIDA), la de TOTALES —los NETOS por vehículo— y una fila final
+    PESO NETO con su sufijo. El rollo, la hoja y el TXT comparten la MISMA
+    rejilla, así que el reparto no cambia de un boleto a otro."""
+
+    def test_encabezado_de_la_tabla(self):
+        txt = " ".join(_extract(_boleto_completo(), tamano_papel="80mm").split())
+        assert "Fec, Hrs CAMIÓN REMOLQUE TOTAL" in txt
+        # En el TXT las 5 columnas van con anchos fijos (13 | 20 | 14 | 14 | 14
+        # caracteres + el separador), así que cada una arranca siempre igual.
+        lineas = _build_txt(_boleto_completo()).getvalue().decode("utf-8").splitlines()
+        cabecera = next(f for f in lineas if "CAMIÓN" in f and "REMOLQUE" in f)
+        assert cabecera.index("Fec, Hrs") == 14
+        assert cabecera.index("CAMIÓN") == 35
+        assert cabecera.index("REMOLQUE") == 50
+        assert cabecera.index("TOTAL") == 65
+
+    def test_rejilla_de_cinco_columnas_en_todas_las_filas(self):
+        filas = _filas_lectura_pesos(_dato(_boleto_completo()), "es")
+        # 5 celdas por fila, SIEMPRE: la rejilla no depende del boleto.
+        assert all(len(f) == 5 for f in filas)
+        assert [texto for texto, _tipo in filas[0]] == [
+            "", "Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTAL",
+        ]
+        assert [f[0][0] for f in filas[1:]] == ["ENTRADA:", "SALIDA:", "", "PESO NETO:"]
+        # TOTALES va en la SEGUNDA columna (el ejemplo deja la primera vacía).
+        assert filas[3][1][0] == "TOTALES:"
+
+    def test_totales_lleva_los_netos_por_vehiculo(self):
+        # La fila TOTALES son los NETOS de cada vehículo (no el bruto de la
+        # salida, que ya se ve en su propia fila): 50.000−45.000, 12.500−11.500
+        # y el neto del boleto.
+        filas = _filas_lectura_pesos(_dato(_boleto_completo()), "es")
+        assert [texto for texto, _tipo in filas[3]] == [
+            "", "TOTALES:", "5.000,00 kg", "1.000,00 kg", "7.500,00 kg",
+        ]
+        # El PESO NETO va en la columna Fec, Hrs y el sufijo en la de CAMIÓN
+        # (pegados a la etiqueta, como el ejemplo); remolque y total, vacías.
+        assert [texto for texto, _tipo in filas[4]] == [
+            "PESO NETO:", "7.500,00 kg", "(INGRESO)", "", "",
+        ]
+
+    def test_etiquetas_de_fila_en_los_tres_idiomas(self):
+        p = _boleto_completo()
+        for idioma, (entrada, salida, totales, neto) in {
+            "es": ("ENTRADA:", "SALIDA:", "TOTALES:", "PESO NETO:"),
+            "en": ("INBOUND:", "OUTBOUND:", "TOTALS:", "NET WEIGHT:"),
+            "pt": ("ENTRADA:", "SAÍDA:", "TOTAIS:", "PESO LÍQUIDO:"),
+        }.items():
+            filas = _filas_lectura_pesos(_dato(p, idioma), idioma)
+            assert [f[0][0] for f in filas[1:]] == [entrada, salida, "", neto]
+            assert filas[3][1][0] == totales
+
+    def test_totales_y_neto_en_el_pdf(self):
+        p = _boleto_completo()
+        txt = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "ENTRADA:" in txt
+        assert "SALIDA:" in txt
+        assert "TOTALES:" in txt
+        # Desglose por vehículo en las tres filas de pesos.
+        for valor in (
+            "50.000,00 kg",  # camión, entrada
+            "12.500,00 kg",  # remolque, entrada
+            "62.500,00 kg",  # total, entrada
+            "45.000,00 kg",  # camión, salida
+            "11.500,00 kg",  # remolque, salida
+            "56.500,00 kg",  # total, salida
+            "5.000,00 kg",   # neto camión
+            "1.000,00 kg",   # neto remolque
+        ):
+            assert valor in txt, valor
+
+    def test_sin_remolque_las_celdas_de_remolque_van_a_cero(self):
+        p = _boleto()  # remolque=False
+        pdf = " ".join(_extract(p, tamano_papel="80mm").split())
+        # La rejilla es fija: la columna REMOLQUE (y TOTAL) siguen, en 0,00 kg.
+        assert "REMOLQUE" in pdf
+        assert "TOTALES:" in pdf
+        assert "0,00 kg" in pdf
+        # La cabecera de DATOS sigue diciendo que no lleva remolque.
+        assert "Remolque: No" in pdf
+
+    def test_neto_en_fila_propia_con_sufijo(self):
+        p = _boleto_completo()
+        txt = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "PESO NETO: 7.500,00 kg (INGRESO)" in txt
+
+    def test_tabla_cabe_en_58mm_sin_error(self):
+        # El ancho útil del 58mm (53 mm) es el peor caso: la tabla debe generarse
+        # sin recortes ni excepciones y la página conservar el ancho del rollo.
+        p = _boleto_completo()
+        ancho, alto = _mediabox(p, tamano_papel="58mm")
+        assert abs(ancho - 58 * _MM) < 1.0
+        txt = _extract(p, tamano_papel="58mm")
+        assert "LECTURA DE PESOS" in txt
+        assert "Camión:" in txt
+
+    def test_una_sola_pagina(self):
+        assert _paginas(_boleto_completo(), tamano_papel="80mm") == 1
+        assert _paginas(_boleto_completo(), tamano_papel="58mm") == 1
+
+
+#: Soportes de la matriz de la tabla de lecturas: el rollo (un boleto por
+#: página) y las tres hojas con 1..4 boletos por página.
+_MATRIZ_TABLA_PESOS: list[tuple[str, int]] = [("80mm", 1), ("58mm", 1)] + [
+    (papel, n) for papel in ("HalfLetter", "Letter", "A4") for n in (1, 2, 3, 4)
+]
+
+
+class TestTablaPesosSinSolape:
+    """La tabla de LECTURA DE PESOS no puede pisar texto (regresión de H1).
+
+    Con anchos de columna fijos y 7,5 pt de cuerpo, la fecha ``dd/mm/aaaa``
+    (43,2 pt) no cabía en su columna de 42 pt y la celda del vecino aparecía
+    encima. El reparto es proporcional al peor caso y el cuerpo se auto-ajusta,
+    de modo que cada línea queda dentro de su columna. El ajuste vale para el
+    rollo Y para la hoja (misma rejilla de 5 columnas).
+    """
+
+    #: Rótulos de la tabla que NO pueden salir partidos, por idioma.
+    ETIQUETAS = {
+        "es": (
+            "Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTAL",
+            "ENTRADA:", "SALIDA:", "TOTALES:", "PESO NETO:",
+        ),
+        "en": (
+            "Date, Time", "TRUCK", "TRAILER", "TOTAL",
+            "INBOUND:", "OUTBOUND:", "TOTALS:", "NET WEIGHT:",
+        ),
+        "pt": (
+            "Data, Hora", "CAMINHÃO", "REBOLQUE", "TOTAL",
+            "ENTRADA:", "SAÍDA:", "TOTAIS:", "PESO LÍQUIDO:",
+        ),
+    }
+
+    @pytest.mark.parametrize("papel", ["80mm", "58mm"])
+    def test_boleto_completo(self, papel):
+        runs = _runs_pdf(_boleto_completo(), tamano_papel=papel)
+        assert "CAMIÓN" in " ".join(r[3] for r in runs)
+        assert _solapes(runs) == []
+
+    @pytest.mark.parametrize("papel", ["80mm", "58mm"])
+    def test_boleto_solo_entrada(self, papel):
+        # Sin salida, la fila SALIDA no se imprime pero la rejilla (5 columnas)
+        # y el reparto no cambian.
+        runs = _runs_pdf(_boleto(), tamano_papel=papel)
+        textos = " ".join(r[3] for r in runs)
+        assert "CAMIÓN" in textos
+        assert "ENTRADA:" in textos
+        assert "SALIDA:" not in textos
+        assert "TOTALES:" in textos
+        assert _solapes(runs) == []
+
+    @pytest.mark.parametrize("papel", ["80mm", "58mm"])
+    @pytest.mark.parametrize("idioma", ["es", "en", "pt"])
+    def test_todos_los_idiomas(self, papel, idioma):
+        # "(OUTBOUND)" es el sufijo del PESO NETO más ancho: si no cabe, el
+        # auto-ajuste tiene que bajarlo.
+        runs = _runs_pdf(_boleto_completo(), tamano_papel=papel, idioma=idioma)
+        assert _solapes(runs) == []
+
+    @pytest.mark.parametrize("idioma", ["es", "en", "pt"])
+    @pytest.mark.parametrize(
+        "papel,n",
+        _MATRIZ_TABLA_PESOS,
+        ids=[f"{papel}-{n}" for papel, n in _MATRIZ_TABLA_PESOS],
+    )
+    def test_sin_solapes_ni_rotulos_partidos_en_toda_la_matriz(
+        self, papel, n, idioma
+    ):
+        """El rollo (80/58 mm) y la hoja (media carta, Carta y A4) comparten la
+        MISMA rejilla de 5 columnas y el mismo auto-ajuste, así que la matriz
+        completa —5 soportes × 1..4 boletos por hoja × 3 idiomas— no puede tener
+        ni una celda pisando a su vecina ni un rótulo partido por carácter.
+
+        La hoja de 1 boleto por página usa 100 mm útiles: si no auto-ajustara,
+        ``ENTRADA:`` y la cabecera ``REMOLQUE`` se partirían (defecto
+        preexistente que este test fija).
+        """
+        runs = _runs_pdf(
+            _boleto_completo(),
+            tamano_papel=papel,
+            copias=n,
+            idioma=idioma,
+        )
+        norm = " ".join(" ".join(r[3] for r in runs).split())
+        etiquetas = {
+            "es": ("Fec, Hrs", "CAMIÓN", "REMOLQUE", "TOTAL",
+                   "ENTRADA:", "SALIDA:", "TOTALES:", "PESO NETO:"),
+            "en": ("Date, Time", "TRUCK", "TRAILER", "TOTAL",
+                   "INBOUND:", "OUTBOUND:", "TOTALS:", "NET WEIGHT:"),
+            "pt": ("Data, Hora", "CAMINHÃO", "REBOLQUE", "TOTAL",
+                   "ENTRADA:", "SAÍDA:", "TOTAIS:", "PESO LÍQUIDO:"),
+        }[idioma]
+        for etiqueta in etiquetas:
+            assert etiqueta in norm, f"{papel}/{n}/{idioma}: falta {etiqueta!r}"
+        assert _solapes(runs) == []
+
+    def test_el_cuerpo_de_la_tabla_es_menor_que_el_del_resto(self):
+        runs = _runs_pdf(_boleto_completo(), tamano_papel="80mm")
+        tam_tabla = [
+            t for _x, _y, _w, texto, t in runs if texto.strip() in ("ENTRADA:", "Fec, Hrs")
+        ]
+        tam_cuerpo = [
+            t for _x, _y, _w, texto, t in runs if texto.strip() == "Serie - Boleto:"
+        ]
+        assert tam_tabla and tam_cuerpo
+        # Las celdas de la tabla se auto-ajustan (las 5 comparten el tamaño),
+        # así que siempre van por debajo del cuerpo base del boleto.
+        assert len(set(tam_tabla)) == 1
+        assert tam_tabla[0] < tam_cuerpo[0]
+
+
+class TestRepartoTablaPesos:
+    """Aritmética pura del reparto de la tabla de lecturas (sin montar página).
+
+    El reparto es el MISMO en el rollo y en la hoja: 5 columnas con ratios
+    fijos que no dependen del boleto.
+    """
+
+    @pytest.mark.parametrize("ancho_util", [209.77, 150.24])
+    def test_el_peor_caso_cabe_en_su_columna(self, ancho_util):
+        tam, cortar = _tamano_tabla_pesos(
+            ancho_util, list(_REQUIERE_TABLA_PESOS), 7.5
+        )
+        assert not cortar
+        assert _MIN_TABLA_PESOS < tam <= 7.5
+        for ratio, requiere in zip(
+            _RATIOS_TABLA_PESOS, _REQUIERE_TABLA_PESOS, strict=True
+        ):
+            assert requiere * tam <= ancho_util * ratio + 1e-9
+
+    def test_el_reparto_suma_el_ancho_util(self):
+        assert abs(sum(_RATIOS_TABLA_PESOS) - 1.0) < 1e-9
+
+    def test_el_tope_manda_cuando_todo_cabe(self):
+        tam, cortar = _tamano_tabla_pesos(209.77, list(_REQUIERE_TABLA_PESOS), 5.0)
+        assert not cortar
+        assert tam == pytest.approx(5.0)
+
+    def test_contenido_mas_largo_baja_el_tamano(self):
+        base, _ = _tamano_tabla_pesos(209.77, list(_REQUIERE_TABLA_PESOS), 7.5)
+        largo, _ = _tamano_tabla_pesos(
+            209.77, [r * 5 for r in _REQUIERE_TABLA_PESOS], 7.5
+        )
+        assert largo < base
+
+    def test_contenido_absurdo_pide_corte_por_caracter(self):
+        tam, cortar = _tamano_tabla_pesos(150.0, [60.0] * 5, 7.5)
+        assert cortar
+        assert tam == _MIN_TABLA_PESOS
+
+
+class TestAnchoEtiquetaTermica:
+    """Reparto de la columna de ETIQUETAS de las filas del rollo.
+
+    La etiqueta va a la DERECHA de su celda y el valor a la IZQUIERDA de la
+    suya, así que la columna de etiquetas no puede ser fija: mide lo que pide la
+    etiqueta más larga del grupo (con el TTF real y el cuerpo en uso) y el tope
+    (`_MAX_RATIO_ETIQUETA_TERMICA`) solo actúa como red de seguridad.
+    """
+
+    #: 74 mm útiles de un rollo de 80 mm y 52 mm de uno de 58 mm.
+    UTIL_80MM = 74.0 * 72 / 25.4
+    UTIL_58MM = 52.0 * 72 / 25.4
+
+    @pytest.fixture(autouse=True)
+    def _ttf(self):
+        """La medida usa el TTF real, que se registra al construir un PDF.
+
+        Sin esto la clase dependería de que otro test ya hubiera montado un
+        PDF (``KeyError: DejaVu` al medir).
+        """
+        _registrar_ttf()
+
+    def _ancho_de(self, etiqueta: str, tamano: float = 9.0) -> float:
+        return pdfmetrics.stringWidth(f"{etiqueta}:", FUENTE_BOLD, tamano)
+
+    def test_mide_la_etiqueta_mas_larga_del_grupo(self):
+        ancho, cortar = _ancho_etiqueta_termica(
+            self.UTIL_80MM, ["Camión", "Cliente/Proveedor", "Almacén"], 9.0
+        )
+        assert not cortar
+        assert ancho == pytest.approx(
+            self._ancho_de("Cliente/Proveedor") + _GAP_ETIQUETA_TERMICA
+        )
+
+    def test_el_grupo_de_una_sola_etiqueta_mide_esa_etiqueta(self):
+        ancho, cortar = _ancho_etiqueta_termica(self.UTIL_80MM, ["Camión"], 9.0)
+        assert not cortar
+        assert ancho == pytest.approx(
+            self._ancho_de("Camión") + _GAP_ETIQUETA_TERMICA
+        )
+
+    def test_el_tope_no_muerde_en_80mm(self):
+        # La etiqueta más larga de los tres idiomas ("Cliente / Fornecedor:")
+        # queda por debajo del tope, así que la columna la mide entera.
+        ancho, cortar = _ancho_etiqueta_termica(
+            self.UTIL_80MM, ["Cliente / Fornecedor"], 9.0
+        )
+        assert not cortar
+        assert ancho == pytest.approx(
+            self._ancho_de("Cliente / Fornecedor") + _GAP_ETIQUETA_TERMICA
+        )
+        assert ancho < self.UTIL_80MM * _MAX_RATIO_ETIQUETA_TERMICA
+
+    def test_el_tope_recorta_en_58mm(self):
+        ancho, cortar = _ancho_etiqueta_termica(
+            self.UTIL_58MM, ["Cliente / Fornecedor"], 9.0
+        )
+        assert ancho == pytest.approx(self.UTIL_58MM * _MAX_RATIO_ETIQUETA_TERMICA)
+        # La etiqueta no cabe entera, pero por PALABRAS sí: envuelve sola, sin
+        # partir ninguna palabra, así que no hace falta el corte por carácter.
+        assert not cortar
+
+    def test_la_palabra_mas_larga_cabe_en_el_tope_de_58mm(self):
+        # Con el tope actual ninguna etiqueta real necesita partirse a media
+        # palabra: la más larga de una sola pieza ("Cliente/Proveedor:") cabe.
+        ancho, cortar = _ancho_etiqueta_termica(
+            self.UTIL_58MM, ["Cliente/Proveedor"], 9.0
+        )
+        assert not cortar
+        assert self._ancho_de("Cliente/Proveedor") + _GAP_ETIQUETA_TERMICA == ancho
+
+    def test_pide_corte_por_caracter_si_una_palabra_desborda(self):
+        # Si una sola palabra no cabe ni con el tope (grupo estrecho), hay que
+        # partirla por carácter: desbordar la celda se pisaría con el valor.
+        ancho, cortar = _ancho_etiqueta_termica(120.0, ["Cliente/Proveedor"], 9.0)
+        assert cortar
+        assert ancho == pytest.approx(120.0 * _MAX_RATIO_ETIQUETA_TERMICA)
+        assert self._ancho_de("Cliente/Proveedor") > ancho
+
+    def test_el_ancho_se_adapta_al_cuerpo(self):
+        chico, _ = _ancho_etiqueta_termica(self.UTIL_80MM, ["Cliente/Proveedor"], 6.5)
+        grande, _ = _ancho_etiqueta_termica(self.UTIL_80MM, ["Cliente/Proveedor"], 9.0)
+        assert chico < grande
+
+
+class TestEscalaTermica:
+    """El peldaño de la empresa (REQ-FN-015) sigue siendo techo en el térmico."""
+
+    def test_base_para_automatico_y_grande(self):
+        assert _escala_termica("AUTOMATICO") == _TS_TERMICO
+        assert _escala_termica("GRANDE") == _TS_TERMICO
+        assert _escala_termica(None) == _TS_TERMICO
+        assert _escala_termica("desconocido") == _TS_TERMICO
+
+    def test_peldano_recorta_la_base(self):
+        assert _escala_termica("PEQUENO") == 7.5
+        assert _escala_termica("MEDIANO") == 9.0
+
+    def test_el_pdf_termico_respeta_el_peldano(self):
+        auto = _runs_pdf(_boleto(), tamano_papel="80mm")
+        pequeno = _runs_pdf(
+            _boleto(),
+            empresa=_empresa_demo(tamano_ticket_pdf="PEQUENO"),
+            tamano_papel="80mm",
+        )
+        assert max(t for *_r, t in auto) > max(t for *_r, t in pequeno)
+
+
+class TestFallbacksTermico:
+    """Cadena de respaldo del número de boleto y del remolque (REQ)."""
+
+    def test_numero_fallback_bol_8(self):
+        p = _boleto(numero_boleto=None)
+        esperado = f"BOL-{str(p.boleto)[:8].upper()}"
+        assert esperado in _extract(p, tamano_papel="80mm")
+        assert esperado in _build_txt(p).getvalue().decode("utf-8")
+
+    def test_numero_fallback_serie_correlativo(self):
+        p = _boleto(numero_boleto=None)
+        p.boleto = None  # type: ignore[assignment]
+        p.__setattr__("serie", "TA")
+        p.__setattr__("correlativo", 42)
+        assert "TA-00000042" in _extract(p, tamano_papel="80mm")
+
+    def test_numero_fallback_sin_numero(self):
+        p = _boleto(numero_boleto=None)
+        p.boleto = None  # type: ignore[assignment]
+        assert "Boleto s/n" in _extract(p, tamano_papel="80mm")
+
+    def test_remolque_placa(self):
+        # La cabecera del térmico va en DOS celdas (etiqueta | valor), así que
+        # pypdf las extrae en líneas distintas: se normaliza el espacio como en
+        # el resto de comprobaciones de contenido.
+        pdf = " ".join(_extract(_boleto_completo(), tamano_papel="80mm").split())
+        assert "Remolque: Sí — RTA987" in pdf
+
+    def test_remolque_flag_sin_placa(self):
+        pdf = " ".join(_extract(_boleto(remolque=True), tamano_papel="80mm").split())
+        assert "Remolque: Sí" in pdf
+
+    def test_remolque_id_sin_placa(self):
+        p = _boleto(remolque=False, id_remolque=uuid.uuid4())
+        pdf = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "Remolque: Sí" in pdf
+
+    def test_remolque_no(self):
+        pdf = " ".join(_extract(_boleto(remolque=False), tamano_papel="80mm").split())
+        assert "Remolque: No" in pdf
+
+
+class TestSinSalida:
+    def test_solo_entrada_cuando_no_hay_salida(self):
+        # _boleto() no define fecha_hora_salida: la fila SALIDA no se imprime,
+        # pero la de TOTALES sí (la rejilla de 5 columnas es fija).
+        p = _boleto()
+        pdf = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "ENTRADA:" in pdf
+        assert "SALIDA:" not in pdf
+        assert "TOTALES:" in pdf
+        assert "50.000,00 kg" in pdf
+        assert "45.000,00 kg" not in pdf
+        txt = _build_txt(p).getvalue().decode("utf-8")
+        assert "ENTRADA:" in txt
+        assert "SALIDA:" not in txt
+        assert "TOTALES:" in txt
+        assert "45.000,00 kg" not in txt
+
+
+class TestNormalizacionSimple:
+    def test_colapsa_espacios_dobles_en_campos_simples(self):
+        p = _boleto(id_vehiculo="YOHANDER  SANCHEZ")
+        pdf = _extract(p, tamano_papel="80mm")
+        assert "YOHANDER  SANCHEZ" not in pdf
+        # La etiqueta y el valor van en DOS celdas: contiguos en la geometría,
+        # no necesariamente en el texto extraído.
+        assert "Camión: YOHANDER SANCHEZ" in " ".join(pdf.split())
+        txt = _build_txt(p).getvalue().decode("utf-8")
+        assert "Camión: YOHANDER SANCHEZ" in txt
+
+    def test_observaciones_conserva_saltos_de_linea(self):
+        p = _boleto(observaciones="Primera   linea\nSegunda linea")
+        pdf = _extract(p, tamano_papel="80mm")
+        # Doble espacio interior colapsado, pero cada línea original sale como
+        # una línea APARTE (no un párrafo unido).
+        lineas_pdf = pdf.splitlines()
+        assert "Primera linea" in lineas_pdf
+        assert "Segunda linea" in lineas_pdf
+        # El TXT debe comportarse igual que el PDF térmico.
+        lineas_txt = _build_txt(p).getvalue().decode("utf-8").splitlines()
+        assert "Primera linea" in lineas_txt
+        assert "Segunda linea" in lineas_txt
+
+
+class TestCoherenciaTxtPdfTermico:
+    def test_mismo_orden_de_campos_en_txt_y_pdf(self):
+        etiquetas = [
+            "Serie - Boleto", "Fecha/Hora", "Camión", "Remolque", "Transporte",
+            "Conductor", "Producto", "Almacén", "Cliente/Proveedor",
+            "LECTURA DE PESOS", "ENTRADA:", "SALIDA:", "TOTALES:", "PESO NETO:",
+        ]
+        txt = _build_txt(_boleto_completo()).getvalue().decode("utf-8")
+        pos_txt = [txt.index(e) for e in etiquetas]
+        assert pos_txt == sorted(pos_txt), f"orden TXT roto: {pos_txt}"
+
+        pdf = _extract(_boleto_completo(), tamano_papel="80mm")
+        pos_pdf = [pdf.index(e) for e in etiquetas]
+        assert pos_pdf == sorted(pos_pdf), f"orden PDF roto: {pos_pdf}"
 
 
 class TestFormato:
@@ -505,36 +1211,66 @@ class TestFormato:
 
 class TestI18nTicket:
     def test_ticket_txt_ingles(self):
-        buf: BytesIO = _build_txt(_boleto_completo(), idioma="en")
+        buf: BytesIO = _build_txt(
+            _boleto_completo(), empresa=cast(Empresa, _empresa_demo()), idioma="en"
+        )
         txt = buf.getvalue().decode("utf-8")
-        assert "BALANSOFT WEIGHING TICKET" in txt
+        assert "WEIGHING TICKET" in txt
         assert "WEIGHT READINGS" in txt
-        assert "Truck Weight" in txt
-        assert "NET WEIGHT" in txt
+        # Tabla de lecturas (misma rejilla que el PDF y la hoja): la cabecera,
+        # una fila por pesada, la de TOTALS (los netos por vehículo) y NET WEIGHT.
+        assert "TRUCK" in txt and "TRAILER" in txt
+        assert "INBOUND:" in txt
+        assert "OUTBOUND:" in txt
+        assert "TOTALS:" in txt
+        assert "NET WEIGHT:" in txt
+        assert "50,000.00 kg" in txt
+        assert "45,000.00 kg" in txt
+        assert "7,500.00 kg" in txt
+        assert "(INBOUND)" in txt
         assert "Driver Signature" not in txt  # BÁSICO sin firmas
-        adv = _build_txt(_boleto_completo(), idioma="en", tipo_ticket="avanzado").getvalue().decode("utf-8")
+        adv = _build_txt(
+            _boleto_completo(),
+            empresa=cast(Empresa, _empresa_demo()),
+            idioma="en",
+            tipo_ticket="avanzado",
+        ).getvalue().decode("utf-8")
         assert "Driver Signature" in adv
 
     def test_ticket_txt_portugues(self):
-        buf: BytesIO = _build_txt(_boleto_completo(), idioma="pt")
+        buf: BytesIO = _build_txt(
+            _boleto_completo(), empresa=cast(Empresa, _empresa_demo()), idioma="pt"
+        )
         txt = buf.getvalue().decode("utf-8")
-        assert "BILHETE DE PESAGEM BALANSOFT" in txt
+        assert "BILHETE DE PESAGEM" in txt
         assert "LEITURA DE PESOS" in txt
-        assert "Peso Caminhão" in txt
-        assert "PESO LÍQUIDO" in txt
+        assert "CAMINHÃO" in txt and "REBOLQUE" in txt
+        assert "ENTRADA:" in txt
+        assert "SAÍDA:" in txt
+        assert "TOTAIS:" in txt
+        assert "PESO LÍQUIDO:" in txt
+        assert "50.000,00 kg" in txt
+        assert "45.000,00 kg" in txt
+        assert "7.500,00 kg" in txt
+        assert "(ENTRADA)" in txt
         assert "Assinatura do Motorista" not in txt  # BÁSICO sin firmas
-        adv = _build_txt(_boleto_completo(), idioma="pt", tipo_ticket="avanzado").getvalue().decode("utf-8")
+        adv = _build_txt(
+            _boleto_completo(),
+            empresa=cast(Empresa, _empresa_demo()),
+            idioma="pt",
+            tipo_ticket="avanzado",
+        ).getvalue().decode("utf-8")
         assert "Assinatura do Motorista" in adv
 
     def test_ticket_pdf_ingles(self):
         txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), idioma="en"))
-        assert "BALANSOFT WEIGHING TICKET" in txt
+        assert "WEIGHING TICKET" in txt
         assert "WEIGHT READINGS" in txt
         assert "NET WEIGHT" in txt
 
     def test_ticket_pdf_portugues(self):
         txt = re.sub(r"\s+", " ", _extract(_boleto_completo(), idioma="pt"))
-        assert "BILHETE DE PESAGEM BALANSOFT" in txt
+        assert "BILHETE DE PESAGEM" in txt
         assert "LEITURA DE PESOS" in txt
         assert "PESO LÍQUIDO" in txt
 
@@ -599,7 +1335,7 @@ class TestTicketAvanzadoCompleto:
         cortar el excedente (como hacía antes), las copias fluyen a páginas
         siguientes y TODA la información aparece en el PDF."""
         txt = re.sub(r"\s+", " ", _extract(
-            self._boleto_avanzado(), boletos_por_hoja=3, tamano_papel="Letter", tipo_ticket="avanzado"
+            self._boleto_avanzado(), copias=3, tamano_papel="Letter", tipo_ticket="avanzado"
         ))
         for frag in (
             "Boleto", "SUNAGRO-2026-001", "M3", "C/S 250,00",
@@ -607,7 +1343,7 @@ class TestTicketAvanzadoCompleto:
         ):
             assert frag in txt, f"falta '{frag}' en PDF avanzado a 3/hoja"
         total = _paginas(
-            self._boleto_avanzado(), boletos_por_hoja=3, tamano_papel="Letter", tipo_ticket="avanzado"
+            self._boleto_avanzado(), copias=3, tamano_papel="Letter", tipo_ticket="avanzado"
         )
         assert total >= 1
         assert "Boleto" in txt
@@ -648,6 +1384,112 @@ class TestTicketCatalogoControl:
         for k, v in extras.items():
             p.__setattr__(k, v)
         return p
+
+    def test_cada_bloque_mide_su_propia_columna_de_etiquetas(self):
+        """DATOS, DATOS ADICIONALES y CATÁLOGO apilan con la etiqueta más larga
+        de CADA bloque: ninguno hereda el ancho de otro y, dentro de un bloque,
+        todos los valores arrancan en la misma X."""
+        lineas = _por_y(
+            _runs_pdf(
+                self._boleto_catalogo(), tamano_papel="80mm", tipo_ticket="avanzado"
+            )
+        )
+        marcas = {
+            texto: y
+            for y, partes in lineas.items()
+            for _x, texto in partes
+            if texto
+            in (
+                "LECTURA DE PESOS",
+                "DATOS ADICIONALES",
+                "DATOS DEL CATÁLOGO Y CONTROL",
+                "OBSERVACIONES",
+            )
+        }
+        assert len(marcas) == 4, f"faltan rótulos de sección: {sorted(marcas)}"
+        bloques = {
+            "DATOS": [y for y in lineas if y > marcas["LECTURA DE PESOS"]],
+            "ADICIONALES": [
+                y
+                for y in lineas
+                if marcas["DATOS DEL CATÁLOGO Y CONTROL"] < y < marcas["DATOS ADICIONALES"]
+            ],
+            # El CATÁLOGO acaba en OBSERVACIONES: más abajo van las firmas, que
+            # son DOS celdas (no una fila "etiqueta | valor").
+            "CATÁLOGO": [
+                y
+                for y in lineas
+                if marcas["OBSERVACIONES"] < y < marcas["DATOS DEL CATÁLOGO Y CONTROL"]
+            ],
+        }
+        columnas: dict[str, float] = {}
+        for nombre, ys in bloques.items():
+            # Solo las filas "etiqueta | valor" (las de una sola celda son
+            # títulos, observaciones o la continuación de un valor envuelto).
+            inicios = {
+                round(lineas[y][1][0], 2) for y in ys if len(lineas[y]) == 2
+            }
+            assert len(inicios) == 1, f"{nombre}: valores desalineados {sorted(inicios)}"
+            columnas[nombre] = inicios.pop()
+        # Cada bloque mide su columna: el CATÁLOGO (etiquetas compuestas) es el
+        # más ancho y DATOS ADICIONALES el más estrecho. Si los tres compartieran
+        # una columna global, estos números coincidirían.
+        assert columnas["ADICIONALES"] < columnas["DATOS"] < columnas["CATÁLOGO"], columnas
+
+    @pytest.mark.parametrize("papel", ["HalfLetter", "Letter", "A4"])
+    def test_hoja_usa_las_dos_columnas_del_termico(self, papel: str):
+        """La HOJA (media carta, Carta y A4) apila el bloque de DATOS con la MISMA
+        forma que el rollo: la etiqueta se pega a la DERECHA de su columna y el
+        valor arranca a la IZQUIERDA de la siguiente.
+
+        Antes la hoja repartía la fila con la etiqueta a la IZQUIERDA y el valor
+        pegado al borde DERECHO (justificado a los extremos), así que ni los
+        arranques de los valores ni los finales de las etiquetas coincidían: las
+        dos columnas de este test fallarían con aquel layout.
+        """
+        runs = _runs_pdf(
+            self._boleto_catalogo(),
+            tamano_papel=papel,
+            tipo_ticket="avanzado",
+            mostrar_encabezado=False,
+        )
+        lineas = _por_y(runs)
+        y_ini = next(
+            y for y, partes in lineas.items()
+            if any(t == "Serie - Boleto:" for _x, t in partes)
+        )
+        y_fin = next(
+            y for y, partes in lineas.items()
+            if any(t == "Razón Social:" for _x, t in partes)
+        )
+        por_y: dict[float, list[tuple[float, float, float, str, float]]] = {}
+        for run in runs:
+            por_y.setdefault(round(run[1], 1), []).append(run)
+        filas = {
+            y: sorted(rs)
+            for y, rs in por_y.items()
+            if y_fin <= y <= y_ini and len(rs) == 2
+        }
+        assert len(filas) >= 10, f"esperaba ≥10 filas de DATOS, hay {len(filas)}"
+
+        # Cada fila son DOS celdas: la etiqueta queda a la izquierda del valor.
+        for partes in filas.values():
+            (xl, _yl, wl, etiqueta, _sl), (xv, _yv, _wv, valor, _sv) = partes
+            assert xl + wl <= xv + 0.5, f"'{etiqueta}' no queda a la izquierda de '{valor}'"
+
+        # La columna de etiquetas se pega a la DERECHA: los bordes derechos
+        # coinciden (en el layout viejo las etiquetas iban a la izquierda).
+        derechos = {round(x + w, 1) for (x, _y, w, _t, _s), _v in filas.values()}
+        assert len(derechos) == 1, f"etiquetas fuera de columna: {sorted(derechos)}"
+
+        # Y la de valores arranca a la IZQUIERDA: todos en la misma X.
+        inicios = {round(v[0], 1) for _l, v in filas.values()}
+        assert len(inicios) == 1, f"valores desalineados: {sorted(inicios)}"
+
+        # Las dos columnas son CONTIGUAS (solo las separa el hueco del PDF): no
+        # es una etiqueta a un extremo y un valor al otro.
+        hueco = inicios.pop() - derechos.pop()
+        assert 0 <= hueco <= _GAP_ETIQUETA_TERMICA + 0.5, f"separación {hueco} pt"
 
     def test_pdf_avanzado_incluye_catalogo_y_control(self):
         txt = re.sub(r"\s+", " ", _extract(self._boleto_catalogo(), tipo_ticket="avanzado"))
@@ -696,15 +1538,29 @@ class TestTipografiaBaseline:
     def test_baseline_automatico_es_estable(self):
         """REQ-FN-012: con AUTOMATICO el texto extraído es idéntico al baseline."""
         b = _boleto_baseline()
-        texto = self._extraido(b, empresa=None, boletos_por_hoja=1)
+        texto = self._extraido(b, empresa=None, copias=1)
         assert texto != "", "PDF vacío"
         # Firma estable del baseline (fragmentos que no cambian entre ejecuciones)
         assert "TA-00000123" in texto
         assert "ABC-123" in texto
         assert "MATERIA PRIMA" in texto
 
-    def test_automatico_no_regression(self):
-        """No-regresión: dos generaciones con AUTOMATICO producen texto idéntico."""
+    def test_automatico_no_regression(self, monkeypatch):
+        """No-regresión: dos generaciones con AUTOMATICO producen texto idéntico.
+
+        El reloj se congela a proposito: el pie del boleto estampa
+        ``datetime.now()`` y dos generaciones seguidas pueden caer a distinto
+        lado de un cambio de segundo, con lo que el test fallaba por el reloj y
+        no por la tipografia.
+        """
+        import app.services.ticket_service as ts
+
+        class _RelojFijo(datetime):
+            @classmethod
+            def now(cls, tz=None):  # type: ignore[override]
+                return datetime(2026, 10, 14, 12, 0, 0)
+
+        monkeypatch.setattr(ts, "datetime", _RelojFijo)
         b = _boleto_baseline()
         t1 = self._extraido(b)
         t2 = self._extraido(b)
@@ -734,21 +1590,23 @@ class TestTipografiaPeldaños:
     - sobre el PDF, midiendo el tamano de fuente que ReportLab dibujo.
 
     Para lo segundo el valor esperado **se deriva de ``_estilos_simples``** y no
-    se escribe a mano. El desplazamiento entre el peldaño y cada estilo (la
-    etiqueta va en ``ts - 0.5``) es un detalle del modulo: si cambia, el test
-    sigue diciendo la verdad en vez de romperse por 0.5 puntos que nadie toco.
+    se escribe a mano: se mide en el PDF el tamano de la etiqueta de las filas de
+    datos y se compara con el que el modulo le asigna a ese estilo (``term_etq``).
+    El desplazamiento entre el peldaño y el estilo es un detalle del modulo: si
+    cambia, el test sigue diciendo la verdad en vez de romperse por 0.5 puntos
+    que nadie toco.
+
+    Los peldaños que se esperan en el PDF (mas abajo) son los **medidos** con el
+    contenido vigente del boleto. No son un adorno: en cuanto el boleto crece (la
+    tabla de lecturas de cinco columnas, el bloque de datos a dos columnas y el
+    QR de resumen) el apilado cambia de peldaño, y el valor esperado tiene que
+    acompañarlo. La garantia de que el techo se respeta vive en
+    ``test_el_peldaño_configurado_es_el_techo``, que comprueba la aritmetica pura
+    de ``escalera_efectiva`` sin depender del contenido.
     """
 
-    # Los nombres de fuente llevan sufijo de subconjunto ("F2+0", "F3+0"), asi
-    # que el patron tiene que aceptar el "+0". Con "/F\d+" solo se leian las
-    # lineas de F1, y la extraccion devolvia 10.0 para todos los casos: es decir,
-    # no media nada.
-    _RE_TF = re.compile(r"/F[^\s/]+\s+([\d.]+)\s+Tf")
-
     #: Tamano de la cabecera de pagina y del pie, fijos y ajenos al peldaño.
-    #: 12.0 es el nombre de la empresa y 7.0 el de los datos de cabecera. OJO:
-    #: 7.0 es *tambien* el cuerpo del boleto con PEQUENO, asi que no se puede
-    #: usar como "ajeno" en general (ver `_cuerpo`, que no lista ninguno).
+    #: 12.0 es el nombre de la empresa y 7.0 el de los datos de cabecera.
     _AJENOS = (12.0,)
 
     @staticmethod
@@ -770,49 +1628,29 @@ class TestTipografiaPeldaños:
 
     @classmethod
     def _cuerpo(cls, p, **kwargs) -> float:
-        """Tamano de fuente del cuerpo del boleto: el mas repetido.
+        """Tamano de fuente del cuerpo del boleto: la etiqueta de las filas de DATOS.
 
-        El cuerpo del boleto son las etiquetas y los valores, que comparten el
-        tamano ``ts - 0.5`` (``label_l``/``valor_r``/``tab_val``). El PDF tambien
-        trae encabezado, titulo y sellos con tamaños propios, y con 3 o 4 boletos
-        por hoja la moda *global* la gana el encabezado (10.0), no el cuerpo. Por
-        eso se mide la moda **de los candidatos a cuerpo**: los ``ts - 0.5`` que
-        la escalera de este ajuste puede elegir. Asi el observables es el del
-        peldaño y no el de la pagina entera.
+        El cuerpo son las filas ``Etiqueta: valor`` (DATOS, operador, ADICIONALES
+        y CATALOGO), que el modulo dibuja con ``term_etq``/``term_val``. Se mide
+        la etiqueta ``Serie - Boleto:`` —una por copia y siempre presente— en vez
+        de la moda de los tamanos de la pagina: con la tabla de lecturas (que se
+        recorta al tope por contenido) y el pie, la moda la gana un tamano ajeno
+        al peldaño y el observable deja de medir la escala elegida.
         """
-        from collections import Counter
-
-        from app.services.ticket_service import escalera_efectiva
-
-        escalera = escalera_efectiva(
-            _ESCALAS_ACTUALES, getattr(kwargs.get("empresa"), "tamano_ticket_pdf", "AUTOMATICO")
+        for _x, _y, _ancho, texto, tamano in _runs_pdf(p, **kwargs):
+            if texto.strip() == "Serie - Boleto:":
+                return tamano
+        raise AssertionError(
+            "no se encontro la etiqueta 'Serie - Boleto:' en el PDF: no se pudo "
+            "medir el cuerpo del boleto"
         )
-        candidatos = {round(ts - 0.5, 2) for ts in escalera[kwargs.get("boletos_por_hoja", 1)]}
-        # `peso_manual_c` usa `ts` (no `ts - 0.5`) y no aplica a este boleto, pero
-        # se incluye por si el fixture cambia.
-        candidatos |= {round(ts, 2) for ts in escalera[kwargs.get("boletos_por_hoja", 1)]}
-
-        buf = _build_pdf(p, **kwargs)
-        buf.seek(0)
-        contents = PdfReader(buf).pages[0].get_contents()
-        assert contents is not None, "la página del PDF no tiene stream de contenido"
-        tamanos = Counter(
-            float(m)
-            for m in cls._RE_TF.findall(contents.get_data().decode("latin-1"))
-            if float(m) in candidatos
-        )
-        assert tamanos, (
-            "ningun tamano del PDF corresponde a la escalera de "
-            f"{sorted(candidatos)}: la extraccion de Tf no encontro el cuerpo"
-        )
-        return tamanos.most_common(1)[0][0]
 
     @staticmethod
     def _esperado(peldaño: float) -> float:
         """Tamano que deberia verse en pantalla si se eligio ``peldaño``."""
         from app.services.ticket_service import _estilos_simples
 
-        return _estilos_simples(peldaño)["label_l"].fontSize  # type: ignore[attr-defined]
+        return _estilos_simples(peldaño)["term_etq"].fontSize  # type: ignore[attr-defined]
 
     # ── Escalera de referencia: control antes que nada ──────────────────────
     @pytest.mark.parametrize(
@@ -840,9 +1678,9 @@ class TestTipografiaPeldaños:
         p = _boleto_baseline()
         for por_hoja in (1, 2, 3, 4):
             con_auto = self._cuerpo(
-                p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja
+                p, empresa=self._empresa("AUTOMATICO"), copias=por_hoja
             )
-            sin_configurar = self._cuerpo(p, boletos_por_hoja=por_hoja)
+            sin_configurar = self._cuerpo(p, copias=por_hoja)
             assert con_auto == sin_configurar, (
                 f"con {por_hoja} boleto(s) por hoja, AUTOMATICO imprimio a "
                 f"{con_auto} y sin configurar se imprimia a {sin_configurar}"
@@ -858,16 +1696,16 @@ class TestTipografiaPeldaños:
         p = _boleto_baseline()
         for por_hoja in (1, 2, 3, 4):
             sin_configurar = self._sin_marca_de_impresion(
-                _extract(p, boletos_por_hoja=por_hoja)
+                _extract(p, copias=por_hoja)
             )
             con_automatico = self._sin_marca_de_impresion(
-                _extract(p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja)
+                _extract(p, empresa=self._empresa("AUTOMATICO"), copias=por_hoja)
             )
             assert sin_configurar == con_automatico, (
                 f"AUTOMATICO cambio el texto con {por_hoja} por hoja"
             )
-            assert _paginas(p, boletos_por_hoja=por_hoja) == _paginas(
-                p, empresa=self._empresa("AUTOMATICO"), boletos_por_hoja=por_hoja
+            assert _paginas(p, copias=por_hoja) == _paginas(
+                p, empresa=self._empresa("AUTOMATICO"), copias=por_hoja
             ), f"AUTOMATICO cambio el numero de paginas con {por_hoja} por hoja"
 
     @staticmethod
@@ -882,15 +1720,15 @@ class TestTipografiaPeldaños:
         return re.sub(r"Impreso: .*?Estado", "Impreso: <hora> Estado", texto)
 
     # ── Los tres peldaños configurados ──────────────────────────────────────
-    # 7.5 es el techo, asi que es el mayor peldaño posible *de las escaleras que lo
-    # tienen*. Las de 3 y 4 por hoja sí lo tienen; la de 4, sin embargo, exige
-    # bajar a 5.5 para que el boleto quepa, asi que el cuerpo sale a 5.0 con
-    # PEQUENO y tambien sin nada configurado (medido contra el PDF: 7.0 / 7.0 /
-    # 7.0 / 5.0). No es que el filtro falle: es que el contenido manda
-    # (REQ-FN-011).
+    # 7.5 es el techo, asi que es el mayor peldaño posible *de las escaleras que
+    # lo tienen*, y con 1 boleto por hoja el boleto cabe justo ahi. Con 2 o mas
+    # por hoja el apilado ya no admite el techo —el QR de resumen y la tabla de
+    # lecturas añaden alto— y la escalera baja a 7.0, el primer peldaño que cabe
+    # (medido contra el PDF: 7.5 / 7.0 / 7.0 / 7.0). No es que el filtro falle:
+    # es que el contenido manda (REQ-FN-011).
     @pytest.mark.parametrize(
         ("por_hoja", "peldano_esperado"),
-        [(1, 7.5), (2, 7.5), (3, 7.5), (4, 5.5)],
+        [(1, 7.5), (2, 7.0), (3, 7.0), (4, 7.0)],
     )
     def test_pequeno_arranca_en_7_5_si_la_escalera_lo_tiene(
         self, por_hoja: int, peldano_esperado: float
@@ -898,7 +1736,7 @@ class TestTipografiaPeldaños:
         """PEQUENO arranca en 7.5 donde cabe; si no, baja lo necesario (CE-04)."""
         p = _boleto_baseline()
         observado = self._cuerpo(
-            p, empresa=self._empresa("PEQUENO"), boletos_por_hoja=por_hoja
+            p, empresa=self._empresa("PEQUENO"), copias=por_hoja
         )
         assert observado == self._esperado(peldano_esperado), (
             f"con {por_hoja} boleto(s) por hoja, PEQUENO deberia imprimir a "
@@ -907,12 +1745,13 @@ class TestTipografiaPeldaños:
         )
 
     # El techo no se puede exigir por igual en las cuatro variantes: recorta lo
-    # que lo supere, pero no alarga una escalera que ya arranca mas pequena. La de
-    # 3 queda en 8.5 y la de 4 en 8.0, ambas por debajo de 9.0 (medido contra el
-    # PDF: cuerpo a 8.5 / 8.5 / 7.5 / 5.0 para 1..4 por hoja).
+    # que lo supere, pero no alarga una escalera que ya arranca mas pequena. Con
+    # 1 boleto por hoja MEDIANO arranca en 9.0; con 2 o mas manda el apilado y
+    # baja a 7.0, el mismo sitio al que llega PEQUENO (medido contra el PDF: los
+    # peldaños 9.0 / 7.0 / 7.0 / 7.0, es decir cuerpo a 7.0 / 5.0 / 5.0 / 5.0).
     @pytest.mark.parametrize(
         ("por_hoja", "peldano_esperado"),
-        [(1, 9.0), (2, 9.0), (3, 8.0), (4, 5.5)],
+        [(1, 9.0), (2, 7.0), (3, 7.0), (4, 7.0)],
     )
     def test_mediano_arranca_en_9_0_si_la_escalera_lo_tiene(
         self, por_hoja: int, peldano_esperado: float
@@ -920,7 +1759,7 @@ class TestTipografiaPeldaños:
         """MEDIANO arranca en 9.0 donde cabe; si no, baja lo necesario."""
         p = _boleto_baseline()
         observado = self._cuerpo(
-            p, empresa=self._empresa("MEDIANO"), boletos_por_hoja=por_hoja
+            p, empresa=self._empresa("MEDIANO"), copias=por_hoja
         )
         assert observado == self._esperado(peldano_esperado), (
             f"con {por_hoja} boleto(s) por hoja, MEDIANO deberia imprimir a "
@@ -937,9 +1776,9 @@ class TestTipografiaPeldaños:
         """
         p = _boleto_baseline()
         con_grande = self._cuerpo(
-            p, empresa=self._empresa("GRANDE"), boletos_por_hoja=por_hoja
+            p, empresa=self._empresa("GRANDE"), copias=por_hoja
         )
-        sin_configurar = self._cuerpo(p, boletos_por_hoja=por_hoja)
+        sin_configurar = self._cuerpo(p, copias=por_hoja)
         assert con_grande == sin_configurar, (
             f"con {por_hoja} por hoja, GRANDE imprimio a {con_grande} y sin "
             f"configurar se imprimia a {sin_configurar}"
@@ -1035,7 +1874,7 @@ class TestTipografiaPeldaños:
         T6 solo cambia peldaños; no puede cambiar el formato del boleto.
         """
         p = _boleto_baseline()
-        texto = _extract(p, empresa=self._empresa(tamano), boletos_por_hoja=por_hoja)
+        texto = _extract(p, empresa=self._empresa(tamano), copias=por_hoja)
         assert "..." not in texto, f"{tamano} a {por_hoja} por hoja trunco el boleto"
         assert "TA-00000123" in texto, f"{tamano} a {por_hoja} por hoja perdio el numero"
 
@@ -1063,6 +1902,225 @@ class TestTipografiaPeldaños:
         try:
             p = _boleto_baseline()
             for tamano in ("AUTOMATICO", "PEQUENO"):
-                _build_pdf(p, empresa=self._empresa(tamano), boletos_por_hoja=2)
+                _build_pdf(p, empresa=self._empresa(tamano), copias=2)
         finally:
             socket.socket = original  # type: ignore[misc]
+
+
+class TestEscapadoXml:
+    """ReportLab interpreta el texto de un ``Paragraph`` como XML reducido.
+
+    Un ``&`` sin escapar se imprime mal (p. ej. «S&S» → «S&S;») y un ``<algo>``
+    se descarta en silencio. Todo dato que venga del usuario o de la BD debe
+    salir literal en el ticket; estas pruebas fijan esa garantía.
+    """
+
+    def test_ampersand_de_la_empresa_no_se_corrompe(self):
+        # El propio nombre del cliente contiene '&' ('VARIEDADES S&S'): antes de
+        # escapar, el PDF extraía 'S&S;' (un ';' espurio tras la 'S').
+        p = _boleto_completo()
+        txt = _extract(p, empresa=_empresa_demo(), tamano_papel="80mm")
+        assert "S&S" in txt
+        assert "S&S;" not in txt
+
+    def test_menor_y_mayor_no_se_descartan(self):
+        p = _boleto_completo()
+        p.__setattr__("producto_nombre", "<MAIZ> & AMARILLO")
+        txt = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "<MAIZ> & AMARILLO" in txt
+
+    def test_observaciones_con_markup_se_imprimen_literal(self):
+        p = _boleto(observaciones="<pendiente> & revisar")
+        txt = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "<pendiente> & revisar" in txt
+
+    def test_motivo_de_anulacion_se_escapa(self):
+        p = _boleto(
+            estado_boleto=BoletoPesaje.ESTADO_ANULADO,
+            motivo_anulacion="peso <ilegible> & borroso",
+        )
+        txt = " ".join(_extract(p, tamano_papel="80mm").split())
+        assert "<ilegible> & borroso" in txt
+
+    def test_cabecera_de_empresa_con_markup_se_escapa(self):
+        p = _boleto_completo()
+        emp = _empresa_demo(nombre_comercial="A & B <C.A.>")
+        txt = " ".join(_extract(p, empresa=emp, tamano_papel="80mm").split())
+        assert "A & B <C.A.>" in txt
+
+    def test_hoja_carta_tambien_escapa(self):
+        p = _boleto_completo()
+        p.__setattr__("producto_nombre", "S&S <grado A>")
+        txt = " ".join(_extract(p, copias=1).split())
+        assert "S&S <grado A>" in txt
+
+    def test_txt_no_escapa_entidades(self):
+        # El TXT es texto plano: se conserva el dato tal cual, sin entidades XML.
+        p = _boleto_completo()
+        p.__setattr__("producto_nombre", "S&S <grado A>")
+        txt = _build_txt(p).getvalue().decode("utf-8")
+        assert "S&S <grado A>" in txt
+        assert "&amp;" not in txt
+
+    def test_esc_helper_es_idempotente_sobre_texto_plano(self):
+        from app.services.ticket_service import _esc
+
+        # Texto sin caracteres XML: pasa intacto (y re-aplicarlo no lo cambia).
+        assert _esc("texto plano 123") == "texto plano 123"
+        assert _esc(_esc("texto plano 123")) == "texto plano 123"
+        # Y escapa lo que debe escapar.
+        assert _esc("S&S") == "S&amp;S"
+        assert _esc("a < b > c") == "a &lt; b &gt; c"
+        assert _esc(None) == ""
+        assert _esc("") == ""
+
+
+class TestQrDelPesaje:
+    """El bloque QR se imprime solo cuando la estación lo deja activado.
+
+    La etiqueta ``QR - RESUMEN DEL PESAJE`` la dibuja el propio flowable sobre
+    el código, así que es un centinela fiable: si está en el texto extraído, el
+    bloque entero participó del layout (y su altura cuenta en el ajuste).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _qr_global_activo(self, monkeypatch):
+        """Aísla estas pruebas del interruptor GLOBAL de fábrica.
+
+        Aquí se fija la conducta de la ESTACIÓN (``mostrar_qr`` por petición);
+        el interruptor de instalación se prueba aparte y con su propio
+        ``monkeypatch``, así que el apagado de fábrica no tumba al resto.
+        """
+        monkeypatch.setattr("app.services.ticket_service.MOSTRAR_QR_EN_REPORTES", True)
+
+    @pytest.mark.parametrize("papel", ["80mm", "58mm", "Letter", "HalfLetter", "A4"])
+    def test_por_defecto_el_qr_se_imprime(self, papel: str):
+        texto = _extract(_boleto_completo(), tamano_papel=papel)
+        assert "QR - RESUMEN DEL PESAJE" in texto
+
+    @pytest.mark.parametrize("papel", ["80mm", "58mm", "Letter", "A4"])
+    def test_la_app_puede_apagarlo_por_peticion(self, papel: str):
+        texto = _extract(_boleto_completo(), tamano_papel=papel, mostrar_qr=False)
+        assert "QR - RESUMEN DEL PESAJE" not in texto
+
+    def test_apagarlo_no_toca_el_resto_del_boleto(self):
+        p = _boleto_completo()
+        con_qr = _extract(p, tamano_papel="80mm")
+        sin_qr = _extract(p, tamano_papel="80mm", mostrar_qr=False)
+        assert "BOLETO DE PESAJE" in sin_qr
+        assert "LECTURA DE PESOS" in sin_qr
+        # La misma información de pesada en los dos casos.
+        assert con_qr.count("ENTRADA:") == sin_qr.count("ENTRADA:")
+
+    def test_sin_qr_el_rollo_es_mas_corto(self):
+        p = _boleto_completo()
+        _, alto_con = _mediabox(p, tamano_papel="80mm")
+        _, alto_sin = _mediabox(p, tamano_papel="80mm", mostrar_qr=False)
+        # El QR forma parte del flujo: si desaparece, la página encoge.
+        assert 0 < alto_sin < alto_con
+
+    def test_el_interruptor_global_manda_sobre_la_empresa(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.ticket_service.MOSTRAR_QR_EN_REPORTES", False
+        )
+        for papel in ("80mm", "Letter"):
+            texto = _extract(_boleto_completo(), tamano_papel=papel)
+            assert "QR - RESUMEN DEL PESAJE" not in texto
+
+    def test_el_qr_no_necesita_datos_extra(self):
+        # Un boleto sin salida (solo pesada de entrada) sigue llevando su QR.
+        p = _boleto_baseline()
+        p.__setattr__("fecha_hora_salida", None)
+        p.__setattr__("peso_salida_vehiculo", None)
+        p.__setattr__("peso_neto", None)
+        assert "QR - RESUMEN DEL PESAJE" in _extract(p, tamano_papel="80mm")
+        assert "QR - RESUMEN DEL PESAJE" not in _extract(
+            p, tamano_papel="80mm", mostrar_qr=False
+        )
+
+
+def _datos_qr(payload: str) -> dict:
+    """Descomprime el payload del QR: Base64 URL-safe → zlib → JSON."""
+    return json.loads(zlib.decompress(base64.urlsafe_b64decode(payload)))
+
+
+def _payload_qr(p, **kwargs) -> str:
+    """Payload del QR que realmente se imprime, capturado del render."""
+    capturado: list[str] = []
+    original = ts._qr_payload_pesaje  # antes del parche: evita la recursión
+
+    def espia(datos):
+        payload = original(datos)
+        capturado.append(payload)
+        return payload
+
+    with patch.object(ts, "_qr_payload_pesaje", espia):
+        _extract(p, **kwargs)
+    assert capturado, "el QR no llegó a generarse"
+    return capturado[0]
+
+
+class TestContenidoDelQr:
+    """Qué lleva dentro el QR: todos los campos menos el texto libre.
+
+    El payload es ``Base64(zlib(JSON))``. Sin comprimir un boleto real ocupaba
+    ≈1 900 caracteres → 145 módulos → 0,22 mm/módulo en el rollo de 34 mm (la
+    térmica resuelve 0,125 mm/punto: se veía como una mancha de cuadritos).
+    Comprimido baja a ≈1 000 caracteres → 109 módulos.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _qr_global_activo(self, monkeypatch):
+        monkeypatch.setattr(ts, "MOSTRAR_QR_EN_REPORTES", True)
+
+    def test_el_payload_va_comprimido_y_se_decodifica(self):
+        payload = _payload_qr(_boleto_completo(), tamano_papel="80mm")
+        datos = _datos_qr(payload)
+        assert datos["tipo"] == "BALANSOFT_PESAJE"
+        assert datos["v"] == 2
+        assert datos["datos"]["numero"]  # el boleto viaja
+
+    def test_el_payload_pesa_la_mitad_y_el_qr_baja_de_modulos(self):
+        # Medido: JSON crudo ≈1 400 B → 1 888 en Base64 (145 módulos).
+        payload = _payload_qr(_boleto_completo(), tamano_papel="80mm")
+        assert len(payload) <= 1300
+
+        codigo = QrCodeWidget(payload)
+        assert codigo.getBounds()  # aquí construye el QR y resolvía el overflow
+        assert codigo.qr.getModuleCount() <= 120
+
+    def test_observaciones_no_viaja_en_el_qr(self):
+        # Es el único campo de texto libre sin cota: ≈800 caracteres hacían
+        # fallar el QR entero (code length overflow) y con él el PDF.
+        payload = _payload_qr(_boleto_completo(), tamano_papel="80mm")
+        assert "observaciones" not in _datos_qr(payload)["datos"]
+        assert "Despacho a granel" not in payload
+
+    def test_el_qr_lleva_el_rif_del_emisor(self):
+        # `empresa_rif` lo proyecta `_dato` desde el atributo del boleto, pero
+        # el RIF vive en la empresa: se inyecta vía `_empresa_cabecera` en el
+        # _build_pdf. Si la estación envía una empresa con RIF, debe viajar en el QR.
+        payload = _payload_qr(
+            _boleto_completo(),
+            tamano_papel="80mm",
+            empresa=cast(Empresa, _empresa_demo()),
+        )
+        datos = _datos_qr(payload)["datos"]
+        assert datos.get("empresa_rif") == "J-31490236-2"
+
+    def test_un_qr_que_no_cabe_no_tumba_el_ticket(self, monkeypatch):
+        class _QrQueRevienta:
+            """Imita a ReportLab cuando el payload supera la capacidad."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def getBounds(self):
+                raise Exception("code length overflow. (23188 > 22496)")
+
+        monkeypatch.setattr(ts, "QrCodeWidget", _QrQueRevienta)
+        texto = _extract(_boleto_completo(), tamano_papel="80mm")
+        assert "BOLETO DE PESAJE" in texto
+        assert "ENTRADA:" in texto
+        # La etiqueta del QR se dibuja DESPUÉS del código: sin código, sin rótulo.
+        assert "QR - RESUMEN DEL PESAJE" not in texto

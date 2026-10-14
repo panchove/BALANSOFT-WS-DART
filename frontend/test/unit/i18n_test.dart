@@ -41,10 +41,6 @@ void main() {
             langCode: 'pt', args: ['1']),
         'Confirmar e Imprimir (1)',
       );
-      expect(
-        AppTranslations.tr('ticket_cut_i', langCode: 'en', args: ['2']),
-        'Cut 2',
-      );
     });
 
     test('el texto en español cae como fallback', () {

@@ -362,7 +362,7 @@ def _sembrar_migraciones_sqlserver(conn: Any, versiones: list[str]) -> None:
     """Registra en ``schema_migrations`` las migraciones plegadas en el T-SQL.
 
     El esquema canónico de SQL Server es autocontenido (incluye el efecto de
-    ``migrations/001..023``); al aplicarlo por primera vez se siembra el
+    ``migrations/001..024``); al aplicarlo por primera vez se siembra el
     registro para que las futuras migraciones dual-dialecto (024+) partan de
     un estado coherente. Idempotente: si ya hay filas, no toca nada.
     """
@@ -382,11 +382,11 @@ def _asegurar_db_sqlserver(db_url: str) -> None:
     """Bootstrap SQL Server (Fase 2): crea la BD y aplica el esquema T-SQL.
 
     Aplica ``sqlserver/balansoft-ws-local.sql`` (autocontenido e idempotente:
-    el esquema canónico con las 26 tablas + ``password_reset_tokens`` +
+    el esquema canónico con las 27 tablas + ``password_reset_tokens`` +
     ``series_numeracion`` + ``schema_migrations``) solo cuando la BD no tiene
     tablas, y siembra ``schema_migrations`` con la lista de migraciones
     plegadas. Las migraciones ``migrations/*.sql`` son DDL de PostgreSQL; a
-    partir de la 023 deberán ser dual-dialecto y se aplicarán aquí. El
+    partir de la 024 deberán ser dual-dialecto y se aplicarán aquí. El
     resultado se siembra en la caché de ``app.core.db_engine`` (la API
     responde 503 «esquema pendiente» si el driver no está o la BD es
     inalcanzable). **No falla el arranque.**
@@ -471,7 +471,7 @@ def asegurar_db(db_url_sync: str) -> None:
 
     SQL Server (Fase 2): ``_asegurar_db_sqlserver`` crea la BD, aplica el
     esquema T-SQL autocontenido (``sqlserver/balansoft-ws-local.sql``) y
-    siembra ``schema_migrations`` con las migraciones plegadas 001-023.
+    siembra ``schema_migrations`` con las migraciones plegadas 001-024.
     """
     from app.core.db_engine import detectar_motor
 

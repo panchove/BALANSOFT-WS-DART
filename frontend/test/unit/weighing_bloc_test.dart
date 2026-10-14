@@ -1,6 +1,7 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:balansoft_ws/domain/entities/boleto_edicion.dart';
 import 'package:balansoft_ws/domain/entities/weighing.dart';
 import 'package:balansoft_ws/domain/repositories/i_weighing_repository.dart';
 import 'package:balansoft_ws/domain/usecases/weighing_usecases.dart';
@@ -61,6 +62,9 @@ class _FakeRepo implements IWeighingRepository {
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data) async => _weighing();
 
   @override
+  Future<List<BoletoEdicion>> getEdiciones(String boleto) async => const [];
+
+  @override
   Future<Weighing> anularWeighing(String boleto, String motivo) async {
     if (error != null) throw error!;
     return _weighing(estado: 'ANULADO');
@@ -72,7 +76,7 @@ class _FakeRepo implements IWeighingRepository {
   @override
   Future<Response> getTicketPdf(
     String boleto, {
-    int boletosPorHoja = 1,
+    int copias = 1,
     String tamanoPapel = 'Letter',
     String orientacion = 'portrait',
     bool mostrarEncabezado = true,

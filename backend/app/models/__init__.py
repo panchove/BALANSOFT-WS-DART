@@ -113,6 +113,17 @@ class Empresa(Base):
     fuente_ticket_pdf: Mapped[str | None] = mapped_column(
         String(20), nullable=True, default="DejaVu", server_default="DejaVu"
     )
+    # Edición de boletos: tope por boleto para las sesiones que no son ADMIN.
+    # NULL o 0 = sin tope (el ADMIN nunca está sujeto al tope).
+    max_ediciones_boleto: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Impresión automática del ticket (config persistida; el envío real es pendiente)
+    impresion_automatica: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    protocolo_impresion: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    impresora_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    impresora_host: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    impresora_puerto: Mapped[int | None] = mapped_column(Integer, nullable=True)
     licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -546,6 +557,15 @@ class BoletoPesaje(Base):
     anulado_por: Mapped[str | None] = mapped_column(String(150), nullable=True)
     motivo_anulacion: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Ediciones: contador por boleto, última justificación y editor (historial en
+    # `boletos_ediciones`). El peso capturado por la báscula nunca se edita.
+    ediciones_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    motivo_modificacion_ultima: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ultimo_editor_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    max_ediciones_boleto_aplicado: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Cálculos MODEL.md (firmados): PTE = PEC+PER, PTS = PSC+PSR, PNT = PTE-PTS,
     # PND = peso declarado (guía), PDF = PNT-PND, PDV = PDF/PND (%)
     peso_total_entrada: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
@@ -638,6 +658,48 @@ class Auditoria(Base):
     entidad_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     detalle: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+
+
+class BoletoEdicion(Base):
+    """Historial inmutable de ediciones de un boleto de pesaje.
+
+    Cada edición exige justificación y queda registrada con quién, cuándo,
+    desde qué IP y qué campos cambiaron (antes/después). No se actualiza ni se
+    borra vía API: es el rastro de auditoría de la edición.
+    """
+
+    __tablename__ = "boletos_ediciones"
+
+    id_edicion: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa"), nullable=False
+    )
+    boleto: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("boletos_pesaje.boleto"), nullable=False
+    )
+    numero_boleto: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    id_usuario: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id_usuario"), nullable=True
+    )
+    usuario_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    rol_usuario: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    fecha_edicion: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    justificacion: Mapped[str] = mapped_column(String(500), nullable=False)
+    estado_anterior: Mapped[str] = mapped_column(String(20), nullable=False)
+    estado_nuevo: Mapped[str] = mapped_column(String(20), nullable=False)
+    campos_modificados: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    edicion_numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    sync_operation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc()
     )

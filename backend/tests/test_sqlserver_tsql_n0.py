@@ -5,7 +5,7 @@ No requiere SQL Server real: verifica la integridad del esquema canónico
 guards idempotentes, límite NVARCHAR(255) en columnas indexadas y paridad con
 el esquema PostgreSQL ``balansoft-ws-local.sql``).
 
-La paridad esperada es 29 tablas = 26 canónicas SQLite/PG + 3 auxiliares que
+La paridad esperada es 30 tablas = 27 canónicas SQLite/PG + 3 auxiliares que
 solo existen en SQL Server: ``password_reset_tokens``, ``series_numeracion``
 y ``schema_migrations``.
 """
@@ -20,7 +20,8 @@ ESQUEMA_MSSQL = Path(__file__).resolve().parents[1] / "sqlserver" / "balansoft-w
 MIGRACIONES_DIR = Path(__file__).resolve().parents[1] / "migrations"
 
 TABLAS_PG_Y_MSSQL = {
-    "almacenes", "auditoria", "balanzas", "boletos_pesaje", "camiones",
+    "almacenes", "auditoria", "balanzas", "boletos_pesaje", "boletos_ediciones",
+    "camiones",
     "categorias", "conductores", "configuraciones", "empresas",
     "identidad_local", "imagenes_pesaje", "kardex", "logs_sistema", "marcas",
     "modelos_camion", "notificaciones", "parametros_sistema",
@@ -30,9 +31,9 @@ TABLAS_PG_Y_MSSQL = {
 TABLAS_SOLO_MSSQL = {"password_reset_tokens", "series_numeracion", "schema_migrations"}
 TABLAS_ESPERADAS_MSSQL = TABLAS_PG_Y_MSSQL | TABLAS_SOLO_MSSQL
 
-ESPERADAS_PK = 29
-ESPERADAS_FK = 41
-ESPERADAS_MIGRACIONES_PLEGADAS = 23
+ESPERADAS_PK = 30
+ESPERADAS_FK = 44
+ESPERADAS_MIGRACIONES_PLEGADAS = 24
 MAX_NVARCHAR_INDEXADA = 255
 
 
@@ -80,17 +81,17 @@ def test_cabecera_transaccional():
 # ---------------------------------------------------------------------------
 # conteos
 # ---------------------------------------------------------------------------
-def test_conteo_tablas_29():
+def test_conteo_tablas():
     assert _tablas_mssql(_leer_mssql()) == TABLAS_ESPERADAS_MSSQL
-    assert len(_tablas_mssql(_leer_mssql())) == 29
+    assert len(_tablas_mssql(_leer_mssql())) == 30
 
 
-def test_conteo_pk_29():
+def test_conteo_pk():
     texto = _leer_mssql()
     assert len(re.findall(r"PRIMARY KEY", texto, re.I)) == ESPERADAS_PK
 
 
-def test_conteo_fk_41():
+def test_conteo_fk():
     texto = _leer_mssql()
     assert len(re.findall(r"FOREIGN KEY", texto, re.I)) == ESPERADAS_FK
 
@@ -109,7 +110,7 @@ def test_guards_idempotentes_tablas():
     texto = _leer_mssql()
     crea = len(re.findall(r"CREATE TABLE", texto, re.I))
     guards = len(re.findall(r"IF OBJECT_ID", texto, re.I))
-    assert crea == guards == 29, f"CREATE TABLE={crea} guards={guards}"
+    assert crea == guards == 30, f"CREATE TABLE={crea} guards={guards}"
 
 
 def test_guards_idempotentes_indices_y_fk():
@@ -117,6 +118,52 @@ def test_guards_idempotentes_indices_y_fk():
     texto = _leer_mssql()
     assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.indexes") >= 30
     assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys") == ESPERADAS_FK
+
+
+def test_orden_creacion_tabla_antes_de_fk_e_indice():
+    """Toda FK/índice va **después** del CREATE TABLE de su tabla y antes de COMMIT.
+
+    Regresión de un defecto real: los `ALTER TABLE ... FOREIGN KEY` de
+    ``boletos_ediciones`` quedaron dentro de la transacción pero el
+    ``CREATE TABLE`` de esa tabla se anexó **después** del ``COMMIT``. El lote
+    entero lo ejecuta pyodbc de una sola vez y el error deshace la transacción
+    completa (bootstrap de SQL Server roto, API en 503 permanente). El conteo de
+    apariciones no lo detectaba y N1 se salta sin SQL Server.
+    """
+    lineas = _leer_mssql().splitlines()
+    linea_commit = next(
+        i for i, ln in enumerate(lineas) if ln.strip().upper().startswith("COMMIT")
+    )
+    creacion: dict[str, int] = {}
+    for i, ln in enumerate(lineas):
+        m = re.match(r"\s*CREATE TABLE\s+\[?\w+\]?\.\[?(\w+)\]?", ln, re.I)
+        if m:
+            creacion[m.group(1).lower()] = i
+
+    problemas: list[str] = []
+    for i, ln in enumerate(lineas):
+        # ALTER TABLE [dbo].[tabla] ADD CONSTRAINT ... FOREIGN KEY
+        m = re.search(r"ALTER TABLE\s+\[?\w+\]?\.\[?(\w+)\]?", ln, re.I)
+        if m and "FOREIGN KEY" in ln.upper():
+            tabla = m.group(1).lower()
+            if tabla not in creacion:
+                problemas.append(f"FK sobre tabla inexistente: {tabla}")
+            elif i < creacion[tabla]:
+                problemas.append(f"FK de {tabla} antes de su CREATE TABLE")
+            elif i > linea_commit:
+                problemas.append(f"FK de {tabla} después del COMMIT")
+        # CREATE [UNIQUE] INDEX ... ON [dbo].[tabla] ...
+        m = re.search(r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+\[?\w+\]?\.\[?(\w+)\]?", ln, re.I)
+        if m:
+            tabla = m.group(1).lower()
+            if tabla not in creacion:
+                problemas.append(f"índice sobre tabla inexistente: {tabla}")
+            elif i < creacion[tabla]:
+                problemas.append(f"índice de {tabla} antes de su CREATE TABLE")
+            elif i > linea_commit:
+                problemas.append(f"índice de {tabla} después del COMMIT")
+
+    assert not problemas, "orden de creación inválido: " + "; ".join(problemas)
 
 
 # ---------------------------------------------------------------------------
@@ -162,10 +209,10 @@ def test_paridad_tablas_pg_vs_mssql():
 
 
 def test_migraciones_plegadas_documentadas():
-    """Las 23 migraciones 001-023 existen como archivo (las pliega el WServer).
+    """Las 24 migraciones 001-024 existen como archivo (las pliega el WServer).
 
     ``wserver._sembrar_migraciones_sqlserver`` itera ``migrations/*.sql`` del
-    disco; si el directorio real no tuviera esos 23 archivos, la siembra en
+    disco; si el directorio real no tuviera esos 24 archivos, la siembra en
     SQL Server (N1) registraría menos versiones y el esquema quedaría
     desincronizado respecto a PostgreSQL. Verificar contra el directorio real
     (no contra una constante) evita un test tautológico.
@@ -175,6 +222,6 @@ def test_migraciones_plegadas_documentadas():
         f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
         f"hay {len(archivos)} en {MIGRACIONES_DIR}"
     )
-    # Numeración contigua 001..023 (sin huecos) para que la siembra sea determinista.
+    # Numeración contigua 001..024 (sin huecos) para que la siembra sea determinista.
     for i in range(1, ESPERADAS_MIGRACIONES_PLEGADAS + 1):
         assert any(p.startswith(f"{i:03d}_") for p in archivos), f"falta la migración {i:03d}_*.sql"

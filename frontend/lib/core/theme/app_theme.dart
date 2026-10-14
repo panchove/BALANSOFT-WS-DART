@@ -54,6 +54,20 @@ abstract final class SwsColors {
   static final Color inputFill          = Colors.white.withValues(alpha: 0.06);
 }
 
+/// Ajusta un color de **estado** (`success`/`warning`/`danger`/`info`) para que
+/// sea legible encima de su propio fondo translúcido (p. ej. el tinte al 15 %
+/// que usan los chips) en **ambos** temas.
+///
+/// El color de estado puro como texto o icono sobre ese tinte queda por debajo
+/// de WCAG AA en tema claro (`warning` ≈ 1.5:1, casi ilegible). En claro se
+/// oscurece el tono y en oscuro se aclara, conservando matiz y saturación para
+/// no perder la identidad del color.
+Color colorDeEstadoLegible(BuildContext context, Color base) {
+  final hsl = HSLColor.fromColor(base);
+  final oscuro = Theme.of(context).brightness == Brightness.dark;
+  return hsl.withLightness(oscuro ? 0.78 : 0.32).toColor();
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // TIPOGRAFÍA DEL SISTEMA — familia y tamaño de icono (spec 001, T9)
 // ═════════════════════════════════════════════════════════════════════════

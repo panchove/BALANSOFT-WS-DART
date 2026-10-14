@@ -71,7 +71,7 @@ class ScaleMonitorWidget extends StatefulWidget {
 
 class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
   late double _peso = widget.initialWeight;
-  bool _neto = false;
+  final bool _neto = false;
 
   /// Índice de la fuente seleccionada en [kDisplayFonts].
   int _fontIndex = 0;

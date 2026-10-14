@@ -266,7 +266,7 @@ class TestPesajeEndpoints:
         ).json()
         boleto = created["boleto"]
         params = {
-            "boletos_por_hoja": 3,
+            "copias": 3,
             "tamano_papel": "A4",
             "orientacion": "landscape",
             "mostrar_encabezado": False,
@@ -275,6 +275,45 @@ class TestPesajeEndpoints:
         r = await client.get(f"/api/v1/weighing/{boleto}/pdf", params=params)
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/pdf")
+
+    async def test_pdf_qr_configurable_por_query(self, client, monkeypatch):
+        """``mostrar_qr`` viaja del diseño de ticket de la estación al PDF."""
+        from io import BytesIO
+
+        from pypdf import PdfReader
+
+        # El interruptor GLOBAL de fábrica se prueba aparte; aquí manda la
+        # estación, así que se fija a True para no depender del default.
+        monkeypatch.setattr("app.services.ticket_service.MOSTRAR_QR_EN_REPORTES", True)
+
+        created = (
+            await client.post(
+                "/api/v1/weighing/create",
+                json={
+                    "id_vehiculo": "QR-01",
+                    "transporte_nombre": "T",
+                    "conductor_nombre": "C",
+                    "producto_nombre": "P",
+                    "almacen_nombre": "A",
+                    "balanza_nombre": "B",
+                    "tercero_nombre": "X",
+                    "peso_entrada_vehiculo": "42000",
+                },
+            )
+        ).json()
+        boleto = created["boleto"]
+        etiqueta = "QR - RESUMEN DEL PESAJE"
+
+        # Sin parámetro: se imprime (comportamiento histórico del servidor).
+        por_defecto = await client.get(f"/api/v1/weighing/{boleto}/pdf")
+        texto = PdfReader(BytesIO(por_defecto.content)).pages[0].extract_text()
+        assert etiqueta in texto
+
+        # Con la estación configurada sin QR, el bloque no se dibuja.
+        apagado = await client.get(
+            f"/api/v1/weighing/{boleto}/pdf", params={"mostrar_qr": "false"}
+        )
+        assert etiqueta not in PdfReader(BytesIO(apagado.content)).pages[0].extract_text()
 
     async def test_txt_stream(self, client):
         created = (

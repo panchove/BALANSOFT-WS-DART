@@ -12,10 +12,10 @@ void main() {
       expect(preset.orientacion, 'portrait');
       expect(preset.formatoPredeterminado, 'PDF');
       expect(preset.copias, 1);
-      expect(preset.boletosPorHoja, 1);
       expect(preset.altoBoletoMm, 0.0);
       expect(preset.mostrarEncabezado, isTrue);
       expect(preset.mostrarDetalles, isTrue);
+      expect(preset.mostrarQr, isTrue);
       expect(preset.margenMm, 5.0);
       expect(preset.anchoCustomMm, isNull);
       expect(preset.altoCustomMm, isNull);
@@ -29,10 +29,10 @@ void main() {
         orientacion: 'landscape',
         formatoPredeterminado: 'PDF',
         copias: 2,
-        boletosPorHoja: 3,
         altoBoletoMm: 90.0,
         mostrarEncabezado: false,
         mostrarDetalles: true,
+        mostrarQr: false,
         margenMm: 8.0,
         anchoCustomMm: 215.9,
         altoCustomMm: 279.4,
@@ -44,8 +44,8 @@ void main() {
       expect(json['tamanoPapel'], 'Letter');
       expect(json['orientacion'], 'landscape');
       expect(json['copias'], 2);
-      expect(json['boletosPorHoja'], 3);
       expect(json['mostrarEncabezado'], isFalse);
+      expect(json['mostrarQr'], isFalse);
 
       final deserialized = PrinterPreset.fromJson(json);
       expect(deserialized.nombreImpresora, original.nombreImpresora);
@@ -54,10 +54,10 @@ void main() {
       expect(deserialized.orientacion, original.orientacion);
       expect(deserialized.formatoPredeterminado, original.formatoPredeterminado);
       expect(deserialized.copias, original.copias);
-      expect(deserialized.boletosPorHoja, original.boletosPorHoja);
       expect(deserialized.altoBoletoMm, original.altoBoletoMm);
       expect(deserialized.mostrarEncabezado, original.mostrarEncabezado);
       expect(deserialized.mostrarDetalles, original.mostrarDetalles);
+      expect(deserialized.mostrarQr, original.mostrarQr);
       expect(deserialized.margenMm, original.margenMm);
       expect(deserialized.anchoCustomMm, original.anchoCustomMm);
       expect(deserialized.altoCustomMm, original.altoCustomMm);
@@ -70,21 +70,34 @@ void main() {
       expect(preset.tipoImpresora, 'POS_80');
       expect(preset.tamanoPapel, '80mm');
       expect(preset.copias, 1);
-      expect(preset.boletosPorHoja, 1);
       expect(preset.mostrarEncabezado, isTrue);
       expect(preset.mostrarDetalles, isTrue);
+      expect(preset.mostrarQr, isTrue);
       expect(preset.margenMm, 5.0);
+    });
+
+    test('mostrarQr es retrocompatible y viaja al PDF', () {
+      // Config guardada antes de existir la clave: el QR sigue activo.
+      final antiguo = PrinterPreset.fromJson(const {'copias': 2});
+      expect(antiguo.mostrarQr, isTrue);
+
+      // El usuario lo apaga desde «Diseño de ticket» y sobrevive el guardado.
+      final apagado = const PrinterPreset().copyWith(mostrarQr: false);
+      expect(apagado.mostrarQr, isFalse);
+      expect(PrinterPreset.fromJson(apagado.toJson()).mostrarQr, isFalse);
+      expect(apagado.toJson()['mostrar_qr'], isNull); // la clave es camelCase
+      expect(apagado.copias, 1); // el resto queda intacto
     });
 
     test('copyWith clona y actualiza propiedades específicas', () {
       const base = PrinterPreset();
       final modificado = base.copyWith(
-        boletosPorHoja: 2,
+        copias: 2,
         tamanoPapel: 'A4',
         mostrarEncabezado: false,
       );
 
-      expect(modificado.boletosPorHoja, 2);
+      expect(modificado.copias, 2);
       expect(modificado.tamanoPapel, 'A4');
       expect(modificado.mostrarEncabezado, isFalse);
       expect(modificado.nombreImpresora, base.nombreImpresora);

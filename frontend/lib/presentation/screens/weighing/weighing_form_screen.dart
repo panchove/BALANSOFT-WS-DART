@@ -24,6 +24,7 @@ import '../../../core/utils/save_file_utils.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../domain/entities/weighing.dart';
 import '../../widgets/ticket_preview_dialog.dart';
+import 'editar_boleto_dialog.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/catalog/catalog_bloc.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
@@ -1001,6 +1002,54 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     if (imprimir == true) _imprimirActual();
   }
 
+  /// Aviso tras guardar la ENTRADA.
+  ///
+  /// Reemplaza al diálogo de impresión en el flujo de entrada: una vez pesado
+  /// el camión de entrada se ofrece continuar con la SALIDA del mismo camión
+  /// (cerrar el boleto que se acaba de crear) o registrar la SIGUIENTE ENTRADA.
+  /// Los datos adicionales (Documento, Flete, …) solo se piden al cargar la
+  /// salida, nunca durante la entrada.
+  Future<void> _alertaPostEntrada(String numero) async {
+    _alertaAbierta = true;
+    final cargarSalida = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.output, color: SwsColors.success, size: 36),
+        title: Text(
+          'weighing_entry_saved_title'.tr(),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          AppTranslations.tr('weighing_entry_saved_msg', args: [numero]),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, height: 1.35),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          OutlinedButton.icon(
+            key: const Key('dialogo_siguiente_entrada_btn'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            icon: const Icon(Icons.add, size: 18),
+            label: Text('weighing_next_entry'.tr()),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            key: const Key('dialogo_cargar_salida_btn'),
+            style: FilledButton.styleFrom(backgroundColor: SwsColors.success),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.output, size: 18),
+            label: Text('weighing_load_exit'.tr()),
+          ),
+        ],
+      ),
+    );
+    _alertaAbierta = false;
+    if (cargarSalida == true && mounted) {
+      await _abrirSelectorSalida();
+    }
+  }
+
   /// Resumen de los pesos capturados que se muestra al confirmar el guardado.
   String _resumenCaptura() {
     final modoSalida = _boletoSalida != null;
@@ -1180,7 +1229,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   /// Panel de búsqueda rápida: trae un peso anterior al formulario como copia
-  /// editable. El peso original nunca se sobrescribe.
+  /// editable o permite **editar** el boleto elegido (con justificación).
+  /// El peso original nunca se sobrescribe por la vía de la copia.
   void _abrirBusquedaPesajes() {
     _alertaAbierta = true;
     showDialog<void>(
@@ -1191,8 +1241,30 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           Navigator.of(ctx).pop();
           _cargarPesajeCopia(w);
         },
+        onEditar: (w) {
+          // El diálogo de búsqueda se cierra y se abre el de edición sobre el
+          // boleto elegido; al guardar se refresca el listado del formulario.
+          Navigator.of(ctx).pop();
+          _editarPesaje(w);
+        },
       ),
     ).whenComplete(() => _alertaAbierta = false);
+  }
+
+  /// Abre el diálogo de edición del boleto y, si hubo cambios, recarga el
+  /// boleto abierto en el formulario (cuando es el mismo).
+  Future<void> _editarPesaje(Weighing w) async {
+    final ok = await EditarBoletoDialog.mostrar(context, w);
+    if (!ok || !mounted) return;
+    // Si el boleto editado es el que está abierto en modo salida, se refresca
+    // para no seguir mostrando los datos viejos.
+    if (_boletoSalida?.boleto == w.boleto) {
+      final repo = di.sl<WeighingRepository>();
+      final actualizado = await repo.getWeighingByBoleto(w.boleto);
+      if (actualizado != null && mounted) {
+        setState(() => _boletoSalida = actualizado);
+      }
+    }
   }
 
   /// Resuelve la entidad del catálogo a partir del id guardado en el pesaje.
@@ -1310,16 +1382,42 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _pesoNetoDeclaradoCtrl.text = b.pesoNetoDeclarado != null
           ? b.pesoNetoDeclarado!.toStringAsFixed(2)
           : '';
-      _documentoCtrl.text = b.documento ?? '';
+      // Autocarga: la entrada no captura Documento (se pide solo al cargar la
+      // salida). Si el boleto no trae uno, se propone el número visible de
+      // boleto como identificador editable del documento. Si no hay número
+      // visible (boleto legado) se deja vacío: un UUID no es un documento útil.
+      _documentoCtrl.text = (b.documento?.trim().isNotEmpty ?? false)
+          ? b.documento!
+          : (b.numeroBoleto?.trim() ?? '');
       _guiaSunagroCtrl.text = b.guiaSunagro ?? '';
-      _asignarMedida(ConversionMedida.desdeTexto(b.medida));
+      // DATOS ADICIONALES de la SALIDA: la ENTRADA ya no los persiste, así que
+      // si el boleto no trae medida/densidad se proponen AQUÍ desde el producto
+      // (unidad de medida, densidad estándar y peso por unidad), que es el paso
+      // donde el operador los ve y puede corregirlos antes de cerrar.
+      final producto =
+          _buscarPorId(_catalogos.products, (p) => p.id, b.idProducto);
+      // `desdeUnidadProducto` NUNCA devuelve null (cae a Kilogramos), así que
+      // solo se consulta si el producto está en el catálogo: si no, se deja la
+      // medida del boleto (normalmente vacía) en vez de persistir un default.
+      final medidaProducto = producto == null
+          ? null
+          : ConversionMedida.desdeUnidadProducto(producto.unidadMedida);
+      _asignarMedida(ConversionMedida.desdeTexto(b.medida) ?? medidaProducto);
+      // Siempre se reasigna (también a vacío) para no arrastrar el texto de un
+      // boleto anterior si se carga otra salida sin limpiar el formulario.
+      _pesoUnidadProducto = producto?.pesoUnidad;
+      _pesoUnidadCtrl.text = producto?.pesoUnidad?.toStringAsFixed(2) ?? '';
       _unidadesEditadas = b.unidades != null;
       _observacionesCtrl.text = b.observaciones ?? '';
-      _fleteCtrl.text = b.flete ?? '';
+      // Autocarga: si el boleto no trae Flete, se propone el transporte.
+      _fleteCtrl.text = (b.flete?.trim().isNotEmpty ?? false)
+          ? b.flete!
+          : (b.transporteNombre ?? '');
       _costoFleteCtrl.text =
           b.costoFlete != null ? b.costoFlete!.toStringAsFixed(2) : '';
-      _densidadCtrl.text =
-          b.densidad != null ? b.densidad!.toStringAsFixed(2) : '';
+      _densidadCtrl.text = (b.densidad ?? 0) != 0
+          ? b.densidad!.toStringAsFixed(2)
+          : (producto?.densidadEstandar?.toStringAsFixed(2) ?? '');
       _unidadesCtrl.text =
           b.unidades != null ? b.unidades!.toStringAsFixed(2) : '';
       _tipoTercero = b.tipoTercero ?? 'CLIENTE';
@@ -1413,11 +1511,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           ? await repo.getTicketTxt(boleto, tipoTicket: preset.tipoTicket)
           : await repo.getTicketPdf(
               boleto,
-              boletosPorHoja: preset.boletosPorHoja,
+              copias: preset.copias,
               tamanoPapel: preset.tamanoPapel,
               orientacion: preset.orientacion,
               mostrarEncabezado: preset.mostrarEncabezado,
               mostrarDetalles: preset.mostrarDetalles,
+              mostrarQr: preset.mostrarQr,
               tipoTicket: preset.tipoTicket,
             );
       final bytes = response.data;
@@ -1548,21 +1647,18 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       pesoNetoDeclarado: _pesoNetoDeclaradoCtrl.text.isNotEmpty
           ? double.tryParse(_pesoNetoDeclaradoCtrl.text)
           : null,
-      documento: _documentoCtrl.text.trim().isNotEmpty
-          ? _documentoCtrl.text.trim()
-          : null,
-      guiaSunagro: _guiaSunagroCtrl.text.trim().isNotEmpty
-          ? _guiaSunagroCtrl.text.trim()
-          : null,
-      medida: _medida?.etiquetaPersistida,
-      flete: _fleteCtrl.text.trim().isNotEmpty ? _fleteCtrl.text.trim() : null,
-      costoFlete: double.tryParse(_costoFleteCtrl.text),
-      densidad: double.tryParse(_densidadCtrl.text),
-      litros: _litrosCalculados ??
-          (_medida == UnidadMedida.litros
-              ? double.tryParse(_unidadesCtrl.text)
-              : null),
-      unidades: double.tryParse(_unidadesCtrl.text),
+      // DATOS ADICIONALES: se capturan y persisten al CARGAR LA SALIDA (donde el
+      // operador ve la sección); en ENTRADA la sección está oculta, así que no
+      // se envía nada para no guardar datos invisibles (el documento o el flete
+      // que arrastraba «cargar como copia», valores derivados del producto…).
+      documento: null,
+      guiaSunagro: null,
+      medida: null,
+      flete: null,
+      costoFlete: null,
+      densidad: null,
+      litros: null,
+      unidades: null,
       observaciones: _observacionesCtrl.text.trim().isNotEmpty
           ? _observacionesCtrl.text.trim()
           : null,
@@ -1613,7 +1709,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 duration: const Duration(seconds: 3),
               ),
             );
-            _alertaImprimir(numeroVisible);
+            _alertaPostEntrada(numeroVisible);
           }
         } else if (state is WeighingClosed) {
           final numeroVisible = state.weighing.numeroBoleto ?? 'Boleto';
@@ -1779,12 +1875,16 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 children: _buildLecturaSection(context),
               ),
               const SizedBox(height: 16),
-              _SectionCard(
-                title: 'DATOS ADICIONALES',
-                icon: Icons.description,
-                children: _buildAdicionalesSection(context),
-              ),
-              const SizedBox(height: 16),
+              // DATOS ADICIONALES (Documento, Flete, Medida, …) solo se piden
+              // en modo SALIDA: durante la entrada el operador solo pesa.
+              if (_boletoSalida != null) ...[
+                _SectionCard(
+                  title: 'DATOS ADICIONALES',
+                  icon: Icons.description,
+                  children: _buildAdicionalesSection(context),
+                ),
+                const SizedBox(height: 16),
+              ],
               _SectionCard(
                 title: 'OBSERVACIONES',
                 icon: Icons.notes,
@@ -1855,12 +1955,14 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           icon: Icons.assignment,
           children: _buildDatosSection(context, data, trailers, terceros),
         ),
-        const SizedBox(height: 16),
-        _SectionCard(
-          title: 'DATOS ADICIONALES',
-          icon: Icons.description,
-          children: _buildAdicionalesSection(context),
-        ),
+        if (_boletoSalida != null) ...[
+          const SizedBox(height: 16),
+          _SectionCard(
+            title: 'DATOS ADICIONALES',
+            icon: Icons.description,
+            children: _buildAdicionalesSection(context),
+          ),
+        ],
         const SizedBox(height: 16),
         _SectionCard(
           title: 'OBSERVACIONES',
@@ -2122,9 +2224,11 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           if (p.densidadEstandar != null && _densidadCtrl.text.trim().isEmpty) {
             _densidadCtrl.text = p.densidadEstandar!.toStringAsFixed(2);
           }
-          if (p.pesoUnidad != null) {
-            _pesoUnidadCtrl.text = p.pesoUnidad!.toStringAsFixed(2);
-          }
+          // Campo de solo lectura que SOLO se deriva del producto: se reasigna
+          // siempre (también a vacío) para no arrastrar el factor del producto
+          // anterior cuando el nuevo no declara peso por unidad.
+          _pesoUnidadCtrl.text =
+              p.pesoUnidad == null ? '' : p.pesoUnidad!.toStringAsFixed(2);
           final medidaProducto =
               ConversionMedida.desdeUnidadProducto(p.unidadMedida);
           if (_medida == null) _asignarMedida(medidaProducto);
@@ -3540,7 +3644,8 @@ class _WeightTable extends StatelessWidget {
 /// como borrador editable: nunca se sobrescribe el pesaje original.
 class _BusquedaPesajesDialog extends StatefulWidget {
   final ValueChanged<Weighing> onSelected;
-  const _BusquedaPesajesDialog({required this.onSelected});
+  final ValueChanged<Weighing>? onEditar;
+  const _BusquedaPesajesDialog({required this.onSelected, this.onEditar});
 
   @override
   State<_BusquedaPesajesDialog> createState() => _BusquedaPesajesDialogState();
@@ -3724,17 +3829,48 @@ class _BusquedaPesajesDialogState extends State<_BusquedaPesajesDialog> {
                                     style: const TextStyle(fontSize: 11.5),
                                   ),
                                   isThreeLine: true,
-                                  trailing: FilledButton.icon(
-                                    icon: const Icon(Icons.content_copy,
-                                        size: 16),
-                                    label: Text('weighing_load_copy'.tr(),
-                                        style: const TextStyle(fontSize: 11.5)),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: SwsColors.accent,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 6),
-                                    ),
-                                    onPressed: () => widget.onSelected(w),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Tooltip(
+                                        message: 'bring_ticket_hint'.tr(),
+                                        child: OutlinedButton.icon(
+                                          icon: const Icon(Icons.content_copy,
+                                              size: 15),
+                                          label: Text(
+                                            'bring_ticket_action'.tr(),
+                                            style:
+                                                const TextStyle(fontSize: 11.5),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 6),
+                                          ),
+                                          onPressed: () => widget.onSelected(w),
+                                        ),
+                                      ),
+                                      if (widget.onEditar != null) ...[
+                                        const SizedBox(width: 6),
+                                        FilledButton.icon(
+                                          key: ValueKey(
+                                              'editar_boleto_${w.boleto}'),
+                                          icon: const Icon(Icons.edit,
+                                              size: 15),
+                                          label: Text(
+                                            'edit_ticket_action'.tr(),
+                                            style:
+                                                const TextStyle(fontSize: 11.5),
+                                          ),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: SwsColors.accent,
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 10, vertical: 6),
+                                          ),
+                                          onPressed: () => widget.onEditar!(w),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 );
                               },
@@ -3746,7 +3882,7 @@ class _BusquedaPesajesDialogState extends State<_BusquedaPesajesDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cerrar'),
+          child: Text('close'.tr()),
         ),
       ],
     );

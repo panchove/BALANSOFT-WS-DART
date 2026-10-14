@@ -237,11 +237,15 @@ void main() {
       if (okConf) {
         await tocar(
             tester, find.byKey(const Key('dialogo_confirmar_guardado_btn')));
-        final okImp = await esperar(
-            tester, find.byKey(const Key('dialogo_nuevo_peso_btn')));
-        debugPrint('[T1] diálogo de impresión: $okImp');
-        if (okImp) {
-          await tocar(tester, find.byKey(const Key('dialogo_nuevo_peso_btn')));
+        // Tras guardar la ENTRADA ya no se pregunta por imprimir (el boleto
+        // sigue PENDIENTE): sale `_alertaPostEntrada`, que es modal, así que
+        // hay que cerrarlo con "siguiente entrada" o el harness se cuelga.
+        final okPost = await esperar(
+            tester, find.byKey(const Key('dialogo_siguiente_entrada_btn')));
+        debugPrint('[T1] aviso post-entrada: $okPost');
+        if (okPost) {
+          await tocar(
+              tester, find.byKey(const Key('dialogo_siguiente_entrada_btn')));
         }
       }
       await asentar(tester);

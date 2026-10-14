@@ -369,7 +369,7 @@ def test_asegurar_db_sqlserver_aplica_esquema_y_siembra_migraciones(
 ):
     # Fase 2: sobre una BD SQL Server recién creada (sin tablas), el WServer
     # aplica el T-SQL autocontenido y siembra schema_migrations con las
-    # migraciones plegadas 001-023; el estado final queda "aplicado".
+    # migraciones plegadas 001-024; el estado final queda "aplicado".
     estado = {"aplicado": False}
 
     def respuestas(sql: str) -> tuple:
@@ -412,7 +412,7 @@ def test_asegurar_db_sqlserver_aplica_esquema_y_siembra_migraciones(
     assert db_engine.estado_esquema() == "aplicado"
     salida = capsys.readouterr().out
     assert "Esquema SQL Server aplicado" in salida
-    assert "Migraciones plegadas registradas: 23" in salida
+    assert "Migraciones plegadas registradas: 24" in salida
 
 
 def test_asegurar_db_sqlserver_con_tablas_no_reaplica(monkeypatch, capsys):
