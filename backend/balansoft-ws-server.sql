@@ -65,11 +65,17 @@ CREATE TABLE IF NOT EXISTS dispositivos (
     sistema_operativo VARCHAR(100),
     version_app      VARCHAR(50),
     rol_dispositivo  VARCHAR(20) NOT NULL DEFAULT 'LOCAL', -- LOCAL / SERVIDOR_LOCAL
+    estado           VARCHAR(20) NOT NULL DEFAULT 'APROBADO', -- PENDIENTE / APROBADO / RECHAZADO (RB-12)
+    rol_sesion       VARCHAR(30),                             -- ADMIN / OPERADOR / AUDITOR / TRABAJADOR
     ip_local         VARCHAR(45),
     ultima_conexion  TIMESTAMP,
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_dispositivos_estado CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO')),
+    CONSTRAINT chk_dispositivos_rol_sesion CHECK (
+        rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR')
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_dispositivos_cuenta ON dispositivos (id_cuenta, activo);
@@ -193,6 +199,41 @@ BEGIN
         WHERE table_schema = 'public' AND table_name = 'licencias' AND column_name = 'max_sesiones'
     ) THEN
         ALTER TABLE licencias ADD COLUMN max_sesiones INTEGER;
+    END IF;
+END $$;
+
+-- =====================================================================
+-- Idempotente: RB-12 (aprobación de equipos) en DBs creadas antes
+-- =====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'dispositivos' AND column_name = 'estado'
+    ) THEN
+        -- DEFAULT 'APROBADO': los equipos preexistentes quedan aprobados y no
+        -- se auto-bloquean al desplegar RB-12.
+        ALTER TABLE dispositivos ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'APROBADO';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'dispositivos' AND column_name = 'rol_sesion'
+    ) THEN
+        ALTER TABLE dispositivos ADD COLUMN rol_sesion VARCHAR(30);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_dispositivos_estado' AND conrelid = 'dispositivos'::regclass
+    ) THEN
+        ALTER TABLE dispositivos ADD CONSTRAINT chk_dispositivos_estado
+            CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_dispositivos_rol_sesion' AND conrelid = 'dispositivos'::regclass
+    ) THEN
+        ALTER TABLE dispositivos ADD CONSTRAINT chk_dispositivos_rol_sesion
+            CHECK (rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'));
     END IF;
 END $$;
 

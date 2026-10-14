@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.db_engine import registrar_manejadores_bd
 from app.core.logging_config import configurar_logging
 from app.core.monitoring import MetricsMiddleware, metrics_text
+from app.core.notification_scheduler import get_notification_scheduler
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.scale_session import get_scale_session_manager
 
@@ -48,7 +49,12 @@ async def lifespan(app: FastAPI):
     log.info(
         "Balansoft-WS API iniciando (env=%s, rol=%s)", settings.app_env, settings.app_role
     )
+    # Programador de notificaciones: único proceso que sobrevive al cierre de
+    # la app Flutter, así que él dibuja los avisos del SO cuando corresponde.
+    programador = get_notification_scheduler()
+    programador.iniciar()
     yield
+    await programador.detener()
     # Emparejamiento: cerrar las conexiones persistentes con las balanzas.
     await get_scale_session_manager().cerrar_todas()
     log.info("Balansoft-WS API detenida")

@@ -93,7 +93,21 @@ class Licencia(ServerBase):
 
 
 class Dispositivo(ServerBase):
-    """Máquinas locales autorizadas a sincronizar con la cuenta."""
+    """Máquinas locales autorizadas a sincronizar con la cuenta.
+
+    RB-12 (docs/SESIONES.md): además del rol técnico (``rol_dispositivo``),
+    cada equipo tiene un **estado de aprobación** que gestiona la tutora de la
+    licencia desde ``GET/PATCH /api/v1/auth/sesiones``. Un equipo de una
+    licencia ``CENTRAL`` que no sea el dueño nace ``PENDIENTE`` y no puede
+    abrir sesión hasta que se apruebe; al aprobarlo se le asigna un
+    ``rol_sesion`` (el rol con el que operará).
+    """
+
+    ESTADO_PENDIENTE = "PENDIENTE"
+    ESTADO_APROBADO = "APROBADO"
+    ESTADO_RECHAZADO = "RECHAZADO"
+    ESTADOS = (ESTADO_PENDIENTE, ESTADO_APROBADO, ESTADO_RECHAZADO)
+    ROLES_SESION = ("ADMIN", "OPERADOR", "AUDITOR", "TRABAJADOR")
 
     __tablename__ = "dispositivos"
 
@@ -111,6 +125,13 @@ class Dispositivo(ServerBase):
     sistema_operativo: Mapped[str | None] = mapped_column(String(100), nullable=True)
     version_app: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rol_dispositivo: Mapped[str] = mapped_column(String(20), default="LOCAL")
+    #: Estado de aprobación RB-12 (PENDIENTE/APROBADO/RECHAZADO). El default
+    #: APROBADO no bloquea las filas preexistentes al migrar (compatibilidad).
+    estado: Mapped[str] = mapped_column(
+        String(20), default=ESTADO_APROBADO, server_default=ESTADO_APROBADO
+    )
+    #: Rol con el que opera la sesión (se asigna al aprobar el equipo).
+    rol_sesion: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ip_local: Mapped[str | None] = mapped_column(String(45), nullable=True)
     ultima_conexion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)

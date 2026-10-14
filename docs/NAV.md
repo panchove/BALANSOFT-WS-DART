@@ -3,7 +3,10 @@
 ================================================================================
                       TOP NAVBAR (HEAD / ACCESO RÁPIDO)
 ================================================================================
-[ ☰ Toggle Sidebar ]  [ Logo / Nombre ] [INFORMACION DE LA EMPRESA TITULAR]     [SYNC/LOCAL | 👤 Usuario | 🚪 ]   <--- EL HEAD ES OPCIONAL EN CASO DE QUE SEA TABLET O TELEFONO Y NO SE VEA EL LOGO E INFORMACION DE LA CUENTA EN EL SIDEBAR YA QUE SE OCULTA EN PANTALLAS PEQUEÑAS
+[ ☰ Toggle Sidebar ]  [ Logo / Nombre ] [INFORMACION DE LA EMPRESA TITULAR]     [ 🔔 Notificaciones | SYNC/LOCAL | 👤 Usuario | 🚪 ]   <--- EL HEAD ES OPCIONAL EN CASO DE QUE SEA TABLET O TELEFONO Y NO SE VEA EL LOGO E INFORMACION DE LA CUENTA EN EL SIDEBAR YA QUE SE OCULTA EN PANTALLAS PEQUEÑAS
+
+ La campana 🔔 muestra el contador de avisos no leídos (sonda el backend local) y abre el CENTRO DE NOTIFICACIONES
+ (historial, marcar leídas/archivar). Desde ahí el ADMIN entra a RECORDATORIOS (avisos programados, con hora y recurrencia).
 ────────────────────────────────────────────────────────────────────────────────
  Botones de Acción Rápida:
  [ 📝 Pesaje Manual ]  [ 🤖 Pesaje Auto ]  [ 📦 Ajustes Inv. ]  [ 📥/📤 Movs. ]  [ 🛡️ Auditoría ]  [ ❓ Ayuda ]
@@ -45,6 +48,7 @@
    ├── 🛡️ Seguridad y Accesos (Roles y Permisos)       [Alt + S]
    ├── -----------------------------------------------------------------------
    ├── 🔌 Dispositivos de Campo (Básculas, Periféricos)  [Alt + D]
+   ├── 🖥️ Sesiones y Equipos (Aprobación de la cuenta)
    ├── 📄 Empresa y Documentos
    ├── 🧾 Diseño de Ticket
    ├── -----------------------------------------------------------------------

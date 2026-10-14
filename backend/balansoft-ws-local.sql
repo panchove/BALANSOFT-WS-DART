@@ -528,6 +528,49 @@ CREATE TABLE IF NOT EXISTS permisos_acceso (
 );
 
 -- ============================================================
+-- 13. NOTIFICACIONES Y RECORDATORIOS (centro de avisos)
+-- El programador del backend (app/core/notification_scheduler.py)
+-- evalúa eventos y recordatorios vencidos y crea filas en
+-- `notificaciones`; además dibuja el aviso nativo del SO.
+-- `dedup_key` es única por empresa: da idempotencia al programador.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recordatorios (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa) ON DELETE CASCADE,
+    id_usuario        UUID REFERENCES usuarios(id_usuario),
+    titulo            VARCHAR(200) NOT NULL,
+    mensaje           TEXT,
+    programada_para   TIMESTAMP NOT NULL,
+    recurrencia       VARCHAR(20) NOT NULL DEFAULT 'none',
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    ultima_ejecucion  TIMESTAMP,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notificaciones (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa) ON DELETE CASCADE,
+    tipo              VARCHAR(40) NOT NULL,
+    severidad         VARCHAR(10) NOT NULL DEFAULT 'info',
+    titulo            VARCHAR(200) NOT NULL,
+    mensaje           TEXT,
+    acciones          JSON,
+    estado            VARCHAR(20) NOT NULL DEFAULT 'no_leida',
+    origen            VARCHAR(20) NOT NULL DEFAULT 'evento',
+    id_recordatorio   UUID REFERENCES recordatorios(id) ON DELETE SET NULL,
+    id_referencia     UUID,
+    dedup_key         VARCHAR(150),
+    programada_para   TIMESTAMP,
+    entregada_os_en   TIMESTAMP,
+    leida_en          TIMESTAMP,
+    expira_en         TIMESTAMP,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_notificaciones_empresa_dedup UNIQUE (id_empresa, dedup_key)
+);
+
+-- ============================================================
 -- ÍNDICES
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_boletos_pesaje_fechas    ON boletos_pesaje (fecha_hora_entrada, fecha_hora_salida);
@@ -544,5 +587,8 @@ CREATE INDEX IF NOT EXISTS idx_almacenes_empresa        ON almacenes (id_empresa
 CREATE INDEX IF NOT EXISTS idx_sync_queue_pend          ON sync_queue (pendiente, intentos);
 CREATE INDEX IF NOT EXISTS idx_auditoria_usuario        ON auditoria (id_usuario);
 CREATE INDEX IF NOT EXISTS idx_auditoria_fecha          ON auditoria (created_at);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_estado  ON notificaciones (id_empresa, estado);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_created ON notificaciones (id_empresa, created_at);
+CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa    ON recordatorios (id_empresa, activo, programada_para);
 
 COMMIT;

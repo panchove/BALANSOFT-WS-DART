@@ -136,6 +136,31 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Ticket
         "titulo_boleto": "BALANSOFT WEIGHING TICKET",
         "doc_anulado": "VOIDED DOCUMENT",
+        # Notificaciones (centro de avisos del backend local)
+        "notif_licencia_vencida_titulo": "Licencia vencida",
+        "notif_licencia_vencida_mensaje": (
+            "La licencia venció el {fecha}. Renueva para seguir operando."
+        ),
+        "notif_licencia_por_vencer_titulo": "Licencia por vencer",
+        "notif_licencia_por_vencer_mensaje": (
+            "La licencia vence el {fecha} (quedan {dias} días)."
+        ),
+        "notif_sync_pendiente_titulo": "Sincronización pendiente",
+        "notif_sync_pendiente_mensaje": (
+            "Hay {n} cambio(s) sin sincronizar desde el {fecha}."
+        ),
+        "notif_sync_fallido_titulo": "Sincronización fallida",
+        "notif_sync_fallido_mensaje": (
+            "{n} cambio(s) no pudieron sincronizarse tras varios intentos."
+        ),
+        "notif_boletos_pendientes_titulo": "Boletos pendientes",
+        "notif_boletos_pendientes_mensaje": (
+            "Hay {n} boleto(s) sin cerrar con más de 24 horas."
+        ),
+        "notif_serie_por_agotar_titulo": "Serie por agotar",
+        "notif_serie_por_agotar_mensaje": (
+            "La serie {serie} está por agotar su numeración (límite {limite})."
+        ),
         "doc_anulado_banner": "*** VOIDED DOCUMENT ***",
         "motivo": "Reason",
         "no_especificado": "Not specified",
@@ -264,6 +289,29 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "no_especificado": "Não especificado",
         "lectura_pesos": "LEITURA DE PESOS",
         "datos_adicionales": "DADOS ADICIONAIS",
+        # Notifications (local backend notification center)
+        "notif_licencia_vencida_titulo": "License expired",
+        "notif_licencia_vencida_mensaje": (
+            "The license expired on {fecha}. Renew it to keep operating."
+        ),
+        "notif_licencia_por_vencer_titulo": "License expiring soon",
+        "notif_licencia_por_vencer_mensaje": (
+            "The license expires on {fecha} ({dias} days left)."
+        ),
+        "notif_sync_pendiente_titulo": "Pending sync",
+        "notif_sync_pendiente_mensaje": "{n} change(s) pending sync since {fecha}.",
+        "notif_sync_fallido_titulo": "Sync failed",
+        "notif_sync_fallido_mensaje": (
+            "{n} change(s) could not be synced after several attempts."
+        ),
+        "notif_boletos_pendientes_titulo": "Pending tickets",
+        "notif_boletos_pendientes_mensaje": (
+            "{n} ticket(s) have been open for more than 24 hours."
+        ),
+        "notif_serie_por_agotar_titulo": "Series running out",
+        "notif_serie_por_agotar_mensaje": (
+            "Series {serie} is running out of numbers (limit {limite})."
+        ),
         "observaciones": "OBSERVAÇÕES",
         "peso_neto": "PESO LÍQUIDO",
         "peso_declarado": "PESO DECLARADO",
@@ -392,6 +440,31 @@ def normalizar_idioma(valor: str | None) -> str | None:
     """Normaliza un tag de idioma ('pt-BR', 'en_US', 'ES') a 'es'|'en'|'pt'.
 
     Devuelve ``None`` si no corresponde a un idioma soportado.
+        # Notificações (centro de avisos do backend local)
+        "notif_licencia_vencida_titulo": "Licença vencida",
+        "notif_licencia_vencida_mensaje": (
+            "A licença venceu em {fecha}. Renove para continuar operando."
+        ),
+        "notif_licencia_por_vencer_titulo": "Licença a vencer",
+        "notif_licencia_por_vencer_mensaje": (
+            "A licença vence em {fecha} (restam {dias} dias)."
+        ),
+        "notif_sync_pendiente_titulo": "Sincronização pendente",
+        "notif_sync_pendiente_mensaje": (
+            "Há {n} alteração(ões) sem sincronizar desde {fecha}."
+        ),
+        "notif_sync_fallido_titulo": "Falha na sincronização",
+        "notif_sync_fallido_mensaje": (
+            "{n} alteração(ões) não puderam ser sincronizadas após várias tentativas."
+        ),
+        "notif_boletos_pendientes_titulo": "Bilhetes pendentes",
+        "notif_boletos_pendientes_mensaje": (
+            "Há {n} bilhete(s) abertos há mais de 24 horas."
+        ),
+        "notif_serie_por_agotar_titulo": "Série a esgotar",
+        "notif_serie_por_agotar_mensaje": (
+            "A série {serie} está a esgotar a numeração (limite {limite})."
+        ),
     """
     if not valor:
         return None

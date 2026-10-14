@@ -67,6 +67,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           '(hardware ${info.hardwareTitular}). Para usarla desde este equipo, '
           'reasigne el titular desde el panel del servidor o contacte al distribuidor.',
         ));
+      } else if (esErrorEquipoSinAprobar(e)) {
+        // RB-12: el equipo existe pero aún no fue aprobado por la cuenta.
+        emit(AuthError(
+          '${info.mensaje} Apruébelo desde el equipo titular en '
+          '"Sesiones y Equipos".',
+        ));
       } else {
         emit(AuthError(info.mensaje));
       }

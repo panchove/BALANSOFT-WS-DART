@@ -20,6 +20,10 @@ datas = [
     (str(ROOT / "balansoft-ws-server.sql"), "."),
     (str(ROOT / ".env.plantilla"), "."),
 ]
+# Icono de la app: lo usa el aviso nativo del SO (app/services/notifier.py).
+# Sin él, una estación instalada caería al icono genérico del tema.
+if (ROOT / "assets" / "balansoft-ws.png").exists():
+    datas.append((str(ROOT / "assets" / "balansoft-ws.png"), "assets"))
 for mig in sorted((ROOT / "migrations").glob("*.sql")):
     datas.append((str(mig), "migrations"))
 # Esquema T-SQL de SQL Server (Fase 2): dentro de un subdirectorio para no

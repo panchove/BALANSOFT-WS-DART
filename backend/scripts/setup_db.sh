@@ -12,7 +12,7 @@
 #     ./scripts/setup_db.sh [instalar|aplicar-migraciones|seed]
 #
 # Esquemas canónicos (no existe backend/schema.sql):
-#   rol local  → SCHEMA_FILE=balansoft-ws-local.sql   (por defecto, 24 tablas)
+#   rol local  → SCHEMA_FILE=balansoft-ws-local.sql   (por defecto, 26 tablas)
 #   rol server → SCHEMA_FILE=balansoft-ws-server.sql  (10 tablas)
 #
 # Si DATABASE_URL_SYNC no viene en el entorno, se lee de backend/.env.

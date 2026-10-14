@@ -31,6 +31,20 @@ String mensajeDeError(Object e, {String? fallback}) {
   return fallback ?? 'Ocurrió un error inesperado. Inténtalo de nuevo.';
 }
 
+/// `true` si la excepción es el 403 de RB-12: el equipo no está aprobado
+/// (pendiente o rechazado) y por eso el servidor central no le abre sesión.
+///
+/// Se usa en el login para distinguirlo del 403 del titular de la licencia:
+/// aquí la solución es que la tutora apruebe el equipo, no reasignar hardware.
+bool esErrorEquipoSinAprobar(Object e) {
+  if (e is! DioException || e.response?.statusCode != 403) return false;
+  final data = e.response?.data;
+  if (data is! Map) return false;
+  final detalle = '${data['detail'] ?? ''}'.toLowerCase();
+  return detalle.contains('pendiente de aprobación') ||
+      detalle.contains('rechazado por el administrador');
+}
+
 /// Extrae del 403 del login-central el hardware/equipo titular de la licencia
 /// para que la UI pueda mostrar un mensaje accionable (reasignar titular).
 ///

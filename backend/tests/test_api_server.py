@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -61,9 +61,28 @@ async def server_db(_server_engine) -> AsyncGenerator[AsyncSession, None]:
     )
     async with session_factory() as session:
         yield session
+    await _truncar_server_db(_server_engine)
+
+
+async def _truncar_server_db(engine) -> None:
     tabla = ", ".join(t.name for t in reversed(ServerBase.metadata.sorted_tables))
-    async with _server_engine.begin() as conn:
+    async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE TABLE {tabla} RESTART IDENTITY CASCADE"))
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _aislar_server_db(_server_engine) -> AsyncGenerator[None, None]:
+    """Vacía la BD del servidor tras **cada** test del módulo.
+
+    ``server_db`` solo trunca cuando el test lo recibe, pero varias pruebas
+    crean filas llamando a la API sin pedirlo; esas filas quedaban visibles
+    para el siguiente test y, como ``dispositivos.hardware_id`` es **único
+    global**, dos cuentas distintas que reutilizaban ``HW-TITULAR`` chocaban
+    con ``403 Dispositivo registrado en otra cuenta``. Con el truncado
+    automático el aislamiento deja de depender de que el test pida la sesión.
+    """
+    yield
+    await _truncar_server_db(_server_engine)
 
 
 @pytest.mark.asyncio
@@ -188,6 +207,38 @@ async def _registrar_cuenta(
     return r.json()
 
 
+async def _admin_titular(
+    ac: httpx.AsyncClient, rif: str, email: str, *, hardware: str = "HW-TITULAR"
+) -> tuple[dict, dict]:
+    """Da de alta una cuenta CENTRAL y la activa desde el equipo titular.
+
+    Devuelve ``(alta, login)``. El equipo dueño queda ``SERVIDOR_LOCAL`` y su
+    token es el que usa la tutora para aprobar equipos (RB-12).
+    """
+    alta = await _registrar_cuenta(ac, rif, email)
+    r = await ac.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "pass123456", "hardware_id": hardware},
+    )
+    assert r.status_code == 200, r.text
+    return alta, r.json()
+
+
+async def _operador(server_db, id_cuenta: uuid.UUID, email: str) -> None:
+    """Añade una credencial no-ADMIN (equipo nuevo de la misma cuenta)."""
+    from app.models_server import Credencial
+
+    server_db.add(
+        Credencial(
+            id_cuenta=id_cuenta,
+            email=email,
+            password_hash=hash_password("oper123456"),
+            rol_global="OPERADOR",
+        )
+    )
+    await server_db.commit()
+
+
 @pytest.mark.asyncio
 async def test_primer_dispositivo_queda_como_titular_servidor(_server_engine) -> None:
     """Regla del titular: el PRIMER equipo que valida la cuenta es el dueño de
@@ -213,12 +264,17 @@ async def test_primer_dispositivo_queda_como_titular_servidor(_server_engine) ->
 async def test_segundo_dispositivo_queda_como_trabajador(
     _server_engine, server_db
 ) -> None:
-    """El segundo equipo de la misma cuenta es LOCAL: no puede ser servidor.
+    """Regla del titular: el 2.º equipo es LOCAL y solo opera si se aprueba.
 
-    El ADMIN queda atado al `licencia.hardware_id` del titular, así que el
-    segundo equipo entra con una credencial propia (la que le asigna el admin).
+    RB-12 cambió esta expectativa **a propósito**: en una licencia CENTRAL el
+    equipo que no es el dueño ya no entra directo —nace ``PENDIENTE``— y la
+    tutora debe aprobarlo. Antes de RB-12 esta prueba veía un 200 en el primer
+    intento; ahora el 200 llega solo tras aprobar (la regla del titular
+    —LOCAL, nunca servidor— se comprueba igual).
     """
-    from app.models_server import Credencial
+    from sqlalchemy import select
+
+    from app.models_server import Credencial, Dispositivo
 
     app = _server_app(_server_engine)
     transport = httpx.ASGITransport(app=app)
@@ -226,14 +282,8 @@ async def test_segundo_dispositivo_queda_como_trabajador(
     email = f"dos-{uuid.uuid4().hex[:8]}@test.com"
     email_operador = f"oper-{uuid.uuid4().hex[:8]}@test.com"
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-        alta = await _registrar_cuenta(ac, rif, email)
-
-        r = await ac.post(
-            "/api/v1/auth/login",
-            json={"email": email, "password": "pass123456", "hardware_id": "HW-PRIMERO"},
-        )
-        assert r.status_code == 200, r.text
-        assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+        alta, login_admin = await _admin_titular(ac, rif, email)
+        assert login_admin["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
 
         server_db.add(
             Credencial(
@@ -245,18 +295,532 @@ async def test_segundo_dispositivo_queda_como_trabajador(
         )
         await server_db.commit()
 
-        r = await ac.post(
-            "/api/v1/auth/login",
-            json={
-                "email": email_operador,
-                "password": "oper123456",
-                "hardware_id": "HW-SEGUNDO",
-            },
+        cuerpo = {
+            "email": email_operador,
+            "password": "oper123456",
+            "hardware_id": "HW-SEGUNDO",
+        }
+        # RB-12: bloqueado en el primer intento (equipo nuevo sin aprobar).
+        r = await ac.post("/api/v1/auth/login", json=cuerpo)
+        assert r.status_code == 403, r.text
+        assert "pendiente de aprobación" in r.json()["detail"]
+
+        pendiente = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-SEGUNDO")
+            )
+        ).scalar_one()
+        assert pendiente.estado == "PENDIENTE"
+
+        # La tutora lo aprueba con un rol de sesión.
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{pendiente.id_dispositivo}",
+            headers={"Authorization": f"Bearer {login_admin['access_token']}"},
+            json={"estado": "APROBADO", "rol_sesion": "OPERADOR"},
         )
+        assert r.status_code == 200, r.text
+        assert r.json()["es_dueno"] is False
+
+        r = await ac.post("/api/v1/auth/login", json=cuerpo)
         assert r.status_code == 200, r.text
         disp = r.json()["dispositivo"]
         assert disp["rol"] == "LOCAL"
         assert disp["puede_ser_servidor"] is False
+        assert disp["rol_sesion"] == "OPERADOR"
+
+
+# ---------------------------------------------------------------------------
+# RB-12 · aprobación de equipos (docs/SESIONES.md)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rb12_listado_de_sesiones_y_permisos(_server_engine, server_db) -> None:
+    """``GET /auth/sesiones``: solo ADMIN, con el dueño marcado y el pendiente visible."""
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12l-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12lo-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta, login_admin = await _admin_titular(ac, rif, email)
+        await _operador(server_db, uuid.UUID(alta["cuenta"]["id_cuenta"]), email_oper)
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-PEND"},
+        )
+        assert r.status_code == 403, r.text
+
+        r = await ac.get(
+            "/api/v1/auth/sesiones",
+            headers={"Authorization": f"Bearer {login_admin['access_token']}"},
+        )
+        assert r.status_code == 200, r.text
+        datos = r.json()
+        por_hw = {i["hardware_id"]: i for i in datos["items"]}
+        assert datos["hardware_titular"] == "HW-TITULAR"
+        assert por_hw["HW-TITULAR"]["es_dueno"] is True
+        assert por_hw["HW-TITULAR"]["estado"] == "APROBADO"
+        assert por_hw["HW-TITULAR"]["rol_sesion"] == "ADMIN"
+        assert por_hw["HW-PEND"]["estado"] == "PENDIENTE"
+        assert por_hw["HW-PEND"]["es_dueno"] is False
+        assert por_hw["HW-PEND"]["activo"] is False
+
+        # Aprobar y comprobar que el listado se reflexiona y que un OPERADOR
+        # (no ADMIN) no puede listar ni aprobar equipos.
+        pend = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-PEND")
+            )
+        ).scalar_one()
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{pend.id_dispositivo}",
+            headers={"Authorization": f"Bearer {login_admin['access_token']}"},
+            json={"estado": "APROBADO", "rol_sesion": "TRABAJADOR"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["estado"] == "APROBADO"
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-PEND"},
+        )
+        assert r.status_code == 200, r.text
+        disp_oper = r.json()["dispositivo"]
+        assert disp_oper["estado"] == "APROBADO"
+        assert disp_oper["rol_sesion"] == "TRABAJADOR"
+        cabecera_oper = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        # Solo ADMIN: un OPERADOR no lista ni aprueba equipos.
+        r = await ac.get("/api/v1/auth/sesiones", headers=cabecera_oper)
+        assert r.status_code == 403, r.text
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{pend.id_dispositivo}",
+            headers=cabecera_oper,
+            json={"estado": "RECHAZADO"},
+        )
+        assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_rb12_aprobar_exige_rol_de_sesion(_server_engine, server_db) -> None:
+    """Aprobar sin ``rol_sesion`` es 422; el equipo sigue bloqueado."""
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12r-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12ro-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta, login_admin = await _admin_titular(ac, rif, email)
+        await _operador(server_db, uuid.UUID(alta["cuenta"]["id_cuenta"]), email_oper)
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-R1"},
+        )
+        assert r.status_code == 403, r.text
+        pend = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-R1")
+            )
+        ).scalar_one()
+
+        cabecera = {"Authorization": f"Bearer {login_admin['access_token']}"}
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{pend.id_dispositivo}",
+            headers=cabecera,
+            json={"estado": "APROBADO"},
+        )
+        assert r.status_code == 422, r.text
+        # Sigue bloqueado: aprobar no ocurrió a medias.
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-R1"},
+        )
+        assert r.status_code == 403, r.text
+
+        # Un cuerpo vacío también es 422 (no hay nada que cambiar).
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{pend.id_dispositivo}",
+            headers=cabecera,
+            json={},
+        )
+        assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_rb12_titular_no_es_modificable(_server_engine, server_db) -> None:
+    """El equipo dueño de la licencia no se aprueba, rechaza ni cambia de rol."""
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12t-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        _alta, login_admin = await _admin_titular(ac, rif, email)
+        dueno = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-TITULAR")
+            )
+        ).scalar_one()
+        cabecera = {"Authorization": f"Bearer {login_admin['access_token']}"}
+        for cuerpo in (
+            {"estado": "RECHAZADO"},
+            {"rol_sesion": "TRABAJADOR"},
+            {"estado": "APROBADO", "rol_sesion": "OPERADOR"},
+        ):
+            r = await ac.patch(
+                f"/api/v1/auth/sesiones/{dueno.id_dispositivo}",
+                headers=cabecera,
+                json=cuerpo,
+            )
+            assert r.status_code == 422, r.text
+        # Y sigue siendo el titular operativo.
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-TITULAR"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["dispositivo"]["rol"] == "SERVIDOR_LOCAL"
+
+
+@pytest.mark.asyncio
+async def test_rb12_aislamiento_entre_cuentas(_server_engine, server_db) -> None:
+    """La cuenta B no ve ni modifica los equipos de la cuenta A (404)."""
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        rif_a = f"J-{uuid.uuid4().hex[:10]}".upper()
+        email_a = f"rb12a-{uuid.uuid4().hex[:8]}@test.com"
+        email_oper_a = f"rb12ao-{uuid.uuid4().hex[:8]}@test.com"
+        alta_a, _login_a = await _admin_titular(ac, rif_a, email_a, hardware="HW-A-TITULAR")
+        await _operador(server_db, uuid.UUID(alta_a["cuenta"]["id_cuenta"]), email_oper_a)
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email_oper_a,
+                "password": "oper123456",
+                "hardware_id": "HW-A-PEND",
+            },
+        )
+        assert r.status_code == 403, r.text
+        equipo_a = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-A-PEND")
+            )
+        ).scalar_one()
+
+        # Cuenta B, con su propio titular.
+        rif_b = f"J-{uuid.uuid4().hex[:10]}".upper()
+        email_b = f"rb12b-{uuid.uuid4().hex[:8]}@test.com"
+        _alta_b, login_b = await _admin_titular(ac, rif_b, email_b, hardware="HW-B-TITULAR")
+        cabecera_b = {"Authorization": f"Bearer {login_b['access_token']}"}
+
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{equipo_a.id_dispositivo}",
+            headers=cabecera_b,
+            json={"estado": "APROBADO", "rol_sesion": "OPERADOR"},
+        )
+        assert r.status_code == 404, r.text  # no 403: no se filtra su existencia
+
+        r = await ac.get("/api/v1/auth/sesiones", headers=cabecera_b)
+        assert r.status_code == 200, r.text
+        assert {i["hardware_id"] for i in r.json()["items"]} == {"HW-B-TITULAR"}
+
+        # El equipo de A sigue pendiente (B no lo aprobó).
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email_oper_a,
+                "password": "oper123456",
+                "hardware_id": "HW-A-PEND",
+            },
+        )
+        assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_rb12_rechazar_bloquea_login_y_token_vigente(
+    _server_engine, server_db
+) -> None:
+    """Rechazar un equipo mata su sesión vigente y su próximo login (403)."""
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12x-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12xo-{uuid.uuid4().hex[:8]}@test.com"
+    cuerpo_login = {"email": email_oper, "password": "oper123456", "hardware_id": "HW-X"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta, login_admin = await _admin_titular(ac, rif, email)
+        await _operador(server_db, uuid.UUID(alta["cuenta"]["id_cuenta"]), email_oper)
+        cabecera_admin = {"Authorization": f"Bearer {login_admin['access_token']}"}
+
+        r = await ac.post("/api/v1/auth/login", json=cuerpo_login)
+        assert r.status_code == 403, r.text
+        equipo = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-X")
+            )
+        ).scalar_one()
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{equipo.id_dispositivo}",
+            headers=cabecera_admin,
+            json={"estado": "APROBADO", "rol_sesion": "OPERADOR"},
+        )
+        assert r.status_code == 200, r.text
+
+        r = await ac.post("/api/v1/auth/login", json=cuerpo_login)
+        assert r.status_code == 200, r.text
+        token_oper = r.json()["access_token"]
+        cabecera_oper = {"Authorization": f"Bearer {token_oper}"}
+        r = await ac.get("/api/v1/licencias", headers=cabecera_oper)
+        assert r.status_code == 200, r.text  # el equipo aprobado sí opera
+
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{equipo.id_dispositivo}",
+            headers=cabecera_admin,
+            json={"estado": "RECHAZADO"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["estado"] == "RECHAZADO"
+        assert r.json()["activo"] is False
+
+        # El token que ya tenía deja de servir (defensa en profundidad: el
+        # estado del equipo se re-verifica en cada petición del servidor).
+        r = await ac.get("/api/v1/licencias", headers=cabecera_oper)
+        assert r.status_code == 403, r.text
+        # La tutora sigue operando con normalidad.
+        r = await ac.get("/api/v1/licencias", headers=cabecera_admin)
+        assert r.status_code == 200, r.text
+        # ...y el equipo rechazado no vuelve a entrar.
+        r = await ac.post("/api/v1/auth/login", json=cuerpo_login)
+        assert r.status_code == 403, r.text
+        assert "rechazado" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_rb12_equipo_pendiente_no_es_el_dispositivo_del_sync(
+    _server_engine, server_db
+) -> None:
+    """Un equipo pendiente no compite como dispositivo activo del sync.
+
+    El lote se atribuye al equipo activo (la tutora); si el pendiente contara
+    como activo podría robar la atribución por tener una ``ultima_conexion``
+    más reciente.
+    """
+    from sqlalchemy import select
+
+    from app.models_server import Dispositivo, SyncSesion
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12s-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12so-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta, login_admin = await _admin_titular(ac, rif, email)
+        await _operador(server_db, uuid.UUID(alta["cuenta"]["id_cuenta"]), email_oper)
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-SYNC"},
+        )
+        assert r.status_code == 403, r.text
+        pendiente = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-SYNC")
+            )
+        ).scalar_one()
+        dueno = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-TITULAR")
+            )
+        ).scalar_one()
+
+        r = await ac.post(
+            "/api/v1/sync/server",
+            headers={"Authorization": f"Bearer {login_admin['access_token']}"},
+            json={
+                "tipo": "push",
+                "items": [
+                    {
+                        "entidad": "pesaje",
+                        "operacion": "create",
+                        "entidad_id": "1",
+                        "payload": {"peso": 10},
+                    }
+                ],
+            },
+        )
+        assert r.status_code == 200, r.text
+        # El sync no falla por el equipo pendiente y se atribuye al de la tutora.
+        r = await ac.get(
+            "/api/v1/auth/sesiones",
+            headers={"Authorization": f"Bearer {login_admin['access_token']}"},
+        )
+        assert r.status_code == 200
+        sync_sesion = (await server_db.execute(select(SyncSesion))).scalars().one()
+        assert sync_sesion.id_dispositivo == dueno.id_dispositivo
+        assert sync_sesion.id_dispositivo != pendiente.id_dispositivo
+
+
+@pytest.mark.asyncio
+async def test_rb12_demo_conserva_el_bloqueo_previo(_server_engine, server_db) -> None:
+    """DEMO no estrena el gate de RB-12: ya bloqueaba el 2.º equipo.
+
+    En DEMO el rechazo del segundo equipo lo hace la comprobación de titular
+    (previa a RB-12) y **no** crea una fila de dispositivo: RB-12 no cambia
+    este camino ni deja un equipo pendiente en una licencia de un solo equipo.
+    """
+    from sqlalchemy import select
+
+    from app.models_server import Credencial, Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12d-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12do-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta = await _registrar_cuenta(ac, rif, email, licencia_tier="DEMO")
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-D1"},
+        )
+        assert r.status_code == 200, r.text
+        server_db.add(
+            Credencial(
+                id_cuenta=uuid.UUID(alta["cuenta"]["id_cuenta"]),
+                email=email_oper,
+                password_hash=hash_password("oper123456"),
+                rol_global="OPERADOR",
+            )
+        )
+        await server_db.commit()
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email_oper, "password": "oper123456", "hardware_id": "HW-D2"},
+        )
+        assert r.status_code == 403, r.text
+        # Es el gate de titular previo a RB-12 (DEMO = un solo equipo), no el
+        # de aprobación: el mensaje identifica al equipo titular.
+        assert "equipo titular" in r.json()["detail"]
+        assert r.json()["hardware_titular"] == "HW-D1"
+        # Y no se dejó una fila PENDIENTE colgando en la cuenta.
+        equipos = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-D2")
+            )
+        ).scalar_one_or_none()
+        assert equipos is None
+
+
+@pytest.mark.asyncio
+async def test_rb12_fila_preexistente_sin_estado_sigue_operando(
+    _server_engine, server_db
+) -> None:
+    """Compatibilidad: un equipo creado antes de RB-12 (sin ``estado``) no se
+    auto-bloquea; el DEFAULT de la columna lo deja aprobado."""
+    from sqlalchemy import select
+
+    from app.models_server import Credencial, Dispositivo
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"rb12c-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"rb12co-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta, _login_admin = await _admin_titular(ac, rif, email)
+        id_cuenta = uuid.UUID(alta["cuenta"]["id_cuenta"])
+        # INSERT crudo omitiendo `estado`: así se prueba el DEFAULT del DDL
+        # (lo que hace la migración con las filas que ya existían), no el
+        # default de Python del modelo.
+        await server_db.execute(
+            text(
+                "INSERT INTO dispositivos "
+                "(id_dispositivo, id_cuenta, hardware_id, rol_dispositivo, activo, "
+                " created_at, updated_at) "
+                "VALUES (:id, :cuenta, 'HW-ANTIGUO', 'LOCAL', TRUE, :now, :now)"
+            ),
+            {"id": uuid.uuid4(), "cuenta": id_cuenta, "now": datetime.now(UTC).replace(tzinfo=None)},
+        )
+        server_db.add(
+            Credencial(
+                id_cuenta=id_cuenta,
+                email=email_oper,
+                password_hash=hash_password("oper123456"),
+                rol_global="OPERADOR",
+            )
+        )
+        await server_db.commit()
+        server_db.expire_all()
+
+        antiguo = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-ANTIGUO")
+            )
+        ).scalar_one()
+        assert antiguo.estado == "APROBADO"
+        assert antiguo.activo is True
+
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={
+                "email": email_oper,
+                "password": "oper123456",
+                "hardware_id": "HW-ANTIGUO",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["dispositivo"]["estado"] == "APROBADO"
+
+
+@pytest.mark.asyncio
+async def test_planes_ws_no_admite_monopuesto(_server_engine) -> None:
+    """WS solo ofrece **DEMO** y **CENTRAL**: MONOPUESTO se rechaza al registrar.
+
+    Decisión de producto (docs/PLANES-PAGOS.md §2): una estación de pesaje
+    necesita como mínimo 3 sesiones simultáneas, así que el tier MONOPUESTO del
+    producto ganadero (BALANSOFT SG) **no** aplica a WS y el esquema lo rechaza
+    antes de crear la cuenta. El LM debe emitir solo DEMO|CENTRAL para WS.
+    """
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/v1/auth/register",
+            json={
+                "empresa_nombre": "Monopuesto SA",
+                "empresa_rif": f"J-{uuid.uuid4().hex[:10]}".upper(),
+                "email_admin": f"mono-{uuid.uuid4().hex[:8]}@test.com",
+                "usuario_nombre": "Admin",
+                "password": "pass123456",
+                "licencia_key": f"BWS-{uuid.uuid4().hex[:12].upper()}",
+                "licencia_tier": "MONOPUESTO",
+                "fecha_expira": "2027-12-31T00:00:00Z",
+            },
+        )
+        assert r.status_code == 422, r.text
 
 
 @pytest.mark.asyncio

@@ -169,7 +169,7 @@ Los archivos **autoridad** del esquema son:
 | Archivo | Base | Tablas |
 |---------|------|--------|
 | `backend/balansoft-ws-server.sql` | `balansoft_ws` (producción) / `balansoft_ws_server` (dev) | 10 |
-| `backend/balansoft-ws-local.sql` | `balansoft_ws_local` | 24 |
+| `backend/balansoft-ws-local.sql` | `balansoft_ws_local` | 26 |
 
 Ambos son **idempotentes** (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`), en una transacción, y usan `gen_random_uuid()` (pgcrypto). No usan Alembic: los cambios futuros van como migraciones `backend/migrations/*.sql` hacia adelante.
 
@@ -207,8 +207,18 @@ No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 | `sync_queue` / `sync_logs` | Cola local de sincronización hacia el servidor |
 | `auditoria` / `logs_sistema` | Auditoría operativa y logs |
 | `configuraciones` / `parametros_sistema` | Configuración local |
+| `recordatorios` / `notificaciones` | Avisos de la estación: recordatorios programados por el ADMIN y la bandeja de avisos (idempotente por `dedup_key`). La llena el programador residente del backend (`app/core/notification_scheduler.py`) |
 
-> **Tablas del esquema local (24, verificadas contra el DDL):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `almacenes`, `balanzas`, `boletos_pesaje`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `seguridad_permisos`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`.
+#### Avisos nativos del SO (app Flutter cerrada)
+
+El programador residente del backend local (`app/core/notification_scheduler.py`, intervalo `NOTIFICATIONS_INTERVAL_SECONDS`, 60 s por defecto) evalúa eventos y recordatorios, escribe en `notificaciones` y **dibuja el aviso nativo del SO** (`app/services/notifier.py`) — es lo que permite que la estación avise **con la app Flutter cerrada**: el único proceso vivo es el backend. En rol `server` no arranca (la central no tiene estas tablas).
+
+- **Icono**: el aviso lleva siempre el icono de la app, `backend/assets/balansoft-ws.png` (256×256, copia reducida de `BALANSOFT-WS.png`). `WServer.spec` lo embebe en `assets/`, y `notifier.ruta_icono()` lo resuelve en este orden: `BALANSOFT_ICON_PATH` → `sys._MEIPASS/assets` (binario one-file) → `backend/assets` (repo) → `~/.balansoft-ws/wserver/assets`. Si no lo encuentra cae al icono genérico del tema (`dialog-information`); **nunca falla**.
+- **Linux**: `notify-send -a BALANSOFT-WS -i <icono> -u <severidad>` (libnotify); hace falta un bus de sesión (`DBUS_SESSION_BUS_ADDRESS`), así que en CI/contenedor devuelve `False` sin ruido.
+- **Windows**: toast vía PowerShell; con icono usa la plantilla `ToastGeneric` + `<image placement="appLogoOverride">` (la antigua `ToastText02` no admite logo). El texto va por nodos DOM (`CreateTextNode`), nunca interpolado en el XML.
+- **Bundles**: el icono viaja dentro del binario one-file (`WServer.spec` → `assets/balansoft-ws.png`), por lo que **una estación con un WServer anterior al subsistema de notificaciones no avisa ni aplica la migración `023`**: hay que recompilar (`./scripts/build_wserver.sh`) y redistribuir.
+
+> **Tablas del esquema local (26, verificadas contra el DDL):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `almacenes`, `balanzas`, `boletos_pesaje`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `seguridad_permisos`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`.
 
 ### 6.3 Columnas reservadas (sin semántica definida — no usar)
 
@@ -256,10 +266,20 @@ PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_server \
 PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_local \
   -f backend/balansoft-ws-local.sql
 
-# 3. Verificar (10 tablas en server, 22 en local)
+# 3. Verificar (10 tablas en server, 26 en local)
 PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_server -c "\dt"
 PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_local -c "\dt"
+
+# 4. Solo si la BD local YA existía (no recién creada): aplicar migraciones
+#    pendientes. El WServer las aplica en cada arranque, pero un `uvicorn`
+#    directo de desarrollo NO: sin este paso la API responde 500 en los
+#    endpoints nuevos (p. ej. `notificaciones`/`recordatorios`, migración 023).
+./scripts/setup_db.sh aplicar-migraciones
 ```
+
+> El esquema canónico `balansoft-ws-local.sql` **ya incluye** las 26 tablas, así
+> que una BD recién creada (paso 2) queda al día. `aplicar-migraciones` es un
+> no-op idempotente sobre ella y solo actúa sobre bases antiguas.
 
 - **`balansoft_ws`** (existente) es la BD operativa legacy del backend single-DB; hoy el `.env` de dev usa `balansoft_ws_local`.
 - **`balansoft_ws_server`** es la BD de cuenta/licencia/sync para probar el rol servidor (central local de desarrollo).
@@ -520,7 +540,7 @@ BD local en `empresas.idioma` y el tema es preferencia del dispositivo.
 ### Fase 1: Separación de Backend por Rol (2 semanas)
 
 - [x] Crear `backend/balansoft-ws-server.sql` (10 tablas)
-- [x] Crear `backend/balansoft-ws-local.sql` (24 tablas)
+- [x] Crear `backend/balansoft-ws-local.sql` (26 tablas)
 - [x] Añadir `APP_ROLE` a `config.py` + `.env.example`
 - [x] Implementar routers condicionales en `main.py`
 - [x] Crear endpoint `/auth/login-local`
@@ -665,7 +685,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 **Qué hace la estación con `motor=sqlserver` (modo degradado):**
 
-- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (27 tablas = 24 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 27 PK, 37 FK, 33 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 22 migraciones plegadas (`001.sql`…`022.sql`) → marca el caché en `aplicado`. Las migraciones **023+ aún no son dual-dialecto** (futuro).
+- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (29 tablas = 26 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 29 PK, 41 FK, 37 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 23 migraciones plegadas (`001.sql`…`023.sql`) → marca el caché en `aplicado`. Las migraciones **024+ aún no son dual-dialecto** (futuro).
 - **`GET /api/v1/entorno`** añade la clave `"motor"`; la clave `"postgres"` **no se renombra** (contrato con la app Flutter) y su SQL por motor sale de `sql_conteo_tablas()`.
 - **Esquema ausente o servidor caído → HTTP 503, no 500**: `manejador_error_bd` clasifica el error (`42S02`/«invalid object name» → `codigo=esquema_mssql_pendiente`; SQLSTATE `08*` → `codigo=sqlserver_sin_conexion`) y cualquier otro error sube tal cual (500, idéntico al de hoy en PG). Antes de cada consulta `asegurar_esquema_listo` consulta `sys.tables`/`pg_tables` con caché (60 s mientras esté `pendiente`); **si esa consulta falla, la caché vuelve a su valor inicial antes de propagar**, para que un corte no deje un `pendiente` caduco (LOW-001).
 - **Sin drivers ODBC el WServer arranca igual (Opción B)**: `database._registrar_drivers_faltantes` **no lanza** — siembra el flag global `drivers_faltantes()` en `db_engine` y deja los engines en `None` (bind nominal, nunca usado porque el gate lanza antes). Cualquier endpoint de BD responde 503 con **`codigo=sqlserver_sin_drivers`** y el mensaje accionable (`MENSAJE_SIN_DRIVERS`: «uv sync --extra sqlserver» + «Microsoft ODBC Driver 18 for SQL Server»); `/api/v1/health` sigue en 200 para que la app Flutter pueda mostrar el aviso (el instalador no da rojo en el paso 8 por un extra cancelado). El flag se limpia con `reiniciar_estado_esquema()` (reinicio de la guardia).
@@ -677,7 +697,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 **Tests:** suite T8 en `backend/tests/` con tres niveles (marcador `mssql`):
 - `test_sqlserver_tsql_n0.py` (11, **siempre corre**): anti-GO, conteos 27/27/37, guards idempotentes, `NVARCHAR≤255` en columnas indexadas y paridad de nombres de tablas contra `balansoft-ws-local.sql` (PG).
-- `test_sqlserver_mssql_n1.py` (2, requiere `MSSQL_TEST_URL_SYNC`): aplica el T-SQL a una BD dedicada, verifica 27/27/37 en `sys.*`, idempotencia (re-aplicación), siembra 22 migraciones sin duplicar y `asegurar_db` Fase 2 sobre BD nueva.
+- `test_sqlserver_mssql_n1.py` (2, requiere `MSSQL_TEST_URL_SYNC`): aplica el T-SQL a una BD dedicada, verifica 29/29/41 en `sys.*`, idempotencia (re-aplicación), siembra 23 migraciones sin duplicar y `asegurar_db` Fase 2 sobre BD nueva.
 - `test_sqlserver_mssql_n2.py` (1, requiere `MSSQL_TEST_URL_SYNC`): flujo funcional — serie activa `TA-` emite `TA-00000001…3` con `siguiente=4` (FOR UPDATE/UPDLOCK), `monthly` cuenta solo los `CERRADO` del mes y `peso_rango` distribuye buckets (regresión del error 8120) ignorando `ANULADO`.
 - Sin `MSSQL_TEST_URL_SYNC` (o sin SQL Server alcanzable) N1/N2 se **saltan**, no fallan → CI sin SQL Server queda verde (528 rápidos + 34 E2E). Ejecutar con: `MSSQL_TEST_URL_SYNC='mssql+pyodbc://…' uv run pytest -m mssql` (**3 tests**: N1 2 + N2 1); para los **14** completos (11 N0 + 2 N1 + 1 N2) correr los tres archivos `tests/test_sqlserver_tsql_n0.py tests/test_sqlserver_mssql_n1.py tests/test_sqlserver_mssql_n2.py`.
 
@@ -689,7 +709,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 | `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/trabajador) y preferencias persistidas |
 | `BALANZAS_SOPORTADAS.md` | Vigente | Matriz de compatibilidad de indicadores reales (Yaohua, Torrey, Keli, Rice Lake, Syneria/Ichiban, Excel) y configuración recomendada por marca |
 | `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
-| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (24 tablas) |
+| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (26 tablas) |
 | `ARCH.md` | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE` |
 | `PRD.md` | Requiere actualización | 1 empresa/máquina; licencia fuera de BD local |
 | `IMPLEMENTADO.md` | Requiere actualización | Tablas por rol; endpoints condicionales |
@@ -826,6 +846,34 @@ override de usuario del `config.json` **conservando el rol** (solo acepta si
 Las banderas del wizard antiguo (`setup_preferencias_completado`, `modo_estacion`,
 `licencia_verificada`, `es_titular_licencia`, `empresa_setup_capturado`) se
 **eliminaron** de la app; la migración las limpia al escribir el override.
+
+### 13.5 Aprobación de equipos (RB-12)
+
+El **servidor central** (`dispositivos`) lleva el estado de aprobación de cada
+equipo de la cuenta, además de su rol de dispositivo:
+
+| Columna | Valores | Semántica |
+|---------|---------|-----------|
+| `estado` | `PENDIENTE` / `APROBADO` / `RECHAZADO` (default `APROBADO`) | Aprobación de la tutora. Las filas **antiguas** sin valor se leen como `APROBADO`. |
+| `rol_sesion` | `ADMIN` / `OPERADOR` / `AUDITOR` / `TRABAJADOR`, o `NULL` | Rol con el que opera la sesión del equipo (NULL hasta aprobar). |
+
+- **Quién nace pendiente**: solo un equipo de licencia **`CENTRAL`** que **no**
+  sea el titular; nace `PENDIENTE` (y `activo=false`, no consume cupo). El
+  titular nace `APROBADO` con `rol_sesion=ADMIN`; `DEMO` conserva el
+  comportamiento previo (`docs/SESIONES.md` §4).
+- **Gate de login**: un equipo `PENDIENTE`/`RECHAZADO` responde `403`; la fila se
+  persiste **antes** de responder para que la tutora la vea en
+  `GET /api/v1/auth/sesiones`. `get_server_credencial` re-verifica el estado en
+  cada petición, así que un equipo rechazado deja de sincronizar sin esperar a
+  que caduque su token.
+- **Titularidad derivada**: `es_dueno` no se persiste; se calcula comparando
+  `dispositivos.hardware_id` con `licencias.hardware_id` (13.1). El titular no
+  puede rechazarse ni cambiársele el rol.
+- **La cuenta sale del token**, nunca de un parámetro del cliente (multi-tenancy)
+  y cada cambio deja traza en `auditoria` (`sesion_aprobada` /
+  `sesion_rechazada` / `sesion_+rol`).
+- Detalle funcional, contrato de `GET/PATCH /api/v1/auth/sesiones` y la UI de
+  Flutter (`Sesiones y Equipos`): **`docs/SESIONES.md`**.
 
 ---
 

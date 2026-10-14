@@ -21,6 +21,7 @@ import 'presentation/providers/bloc/auth/auth_bloc.dart';
 import 'presentation/providers/bloc/weighing/weighing_bloc.dart';
 import 'presentation/providers/bloc/license/license_bloc.dart';
 import 'presentation/providers/bloc/sync/sync_bloc.dart';
+import 'presentation/providers/bloc/notifications/notifications_cubit.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/auth/forgot_password_screen.dart';
@@ -269,6 +270,12 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
         ),
         BlocProvider<SyncBloc>(
           create: (_) => di.sl<SyncBloc>()..add(SyncStatusEvent()),
+        ),
+        // Centro de notificaciones: el contador de la campana se refresca por
+        // sondeo; la bandeja y los avisos nativos los genera el WServer
+        // (residente, aunque esta app esté cerrada).
+        BlocProvider<NotificationsCubit>(
+          create: (_) => di.sl<NotificationsCubit>()..iniciar(),
         ),
       ],
       child: AnimatedBuilder(

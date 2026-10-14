@@ -9,6 +9,7 @@ import '../../injection.dart' as di;
 import '../providers/bloc/auth/auth_bloc.dart';
 import '../providers/bloc/sync/sync_bloc.dart' hide SyncWeighingsEvent;
 import '../providers/bloc/weighing/weighing_bloc.dart';
+import 'notification_bell.dart';
 
 /// Top navbar (HEAD) según docs/NAV.md.
 /// Responsive: en móvil oculta texto de usuario/rol y el toggle sidebar.
@@ -156,6 +157,8 @@ class _TopRow extends StatelessWidget {
               context.read<WeighingBloc>().add(SyncWeighingsEvent());
             },
           ),
+
+          const NotificationBell(),
 
           const SizedBox(width: 4),
 

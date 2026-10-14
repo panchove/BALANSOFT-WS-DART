@@ -33,6 +33,7 @@ import '../empresa/documentos_empresa_screen.dart';
 import '../kardex/kardex_screen.dart';
 import '../reports/reports_screen.dart';
 import '../seguridad/seguridad_screen.dart';
+import '../sesiones/sesiones_screen.dart';
 import '../settings/initial_setup_screen.dart';
 import '../settings/license_admin_screen.dart';
 import '../settings/settings_screen.dart';
@@ -481,6 +482,8 @@ class _HomeShellState extends State<HomeShell> {
         _abrirAjustesInventario();
       case 'auditoria':
         _abrirAuditoria();
+      case 'sesiones':
+        _abrirSesiones();
       case 'diagnostico':
         _abrirDiagnostico();
       case 'licencia':
@@ -720,6 +723,13 @@ class _HomeShellState extends State<HomeShell> {
   void _abrirAuditoria() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AuditoriaScreen()),
+    );
+  }
+
+  /// RB-12: equipos de la cuenta (aprobación contra el servidor central).
+  void _abrirSesiones() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SesionesScreen()),
     );
   }
 

@@ -6,9 +6,9 @@ se saltan; nunca fallan en CI que no tiene SQL Server.
 
 Cubre:
 - ``wserver.crear_bd_si_falta`` + ``_asegurar_db_sqlserver`` (Fase 2):
-  aplica el T-SQL, siembra ``schema_migrations`` (21).
+  aplica el T-SQL, siembra ``schema_migrations`` (23).
 - Idempotencia: una segunda pasada no vuelve a aplicar nada ni revienta.
-- Paridad: 27 tablas / 27 PK / 37 FK contra el T-SQL canónico (N0).
+- Paridad: 29 tablas / 29 PK / 41 FK contra el T-SQL canónico (N0).
 """
 
 from __future__ import annotations
@@ -120,18 +120,18 @@ def test_esquema_aplicado_idempotente_y_siembra(disponibilidad):
         conn.commit()
         _verificar_paridad(cur)
 
-        # schema_migrations vacía → siembra las 001-021 reales, sin duplicar al repetir.
+        # schema_migrations vacía → siembra las 001-023 reales, sin duplicar al repetir.
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
         assert cur.fetchone()[0] == 0, "schema_migrations debe partir vacía"
         mig_dir = Path(__file__).resolve().parents[1] / "migrations"
         versiones = sorted(p.name for p in mig_dir.glob("*.sql")) if mig_dir.exists() else []
-        assert len(versiones) == 21, f"se esperaban 21 migraciones plegadas, hay {len(versiones)}"
+        assert len(versiones) == 23, f"se esperaban 23 migraciones plegadas, hay {len(versiones)}"
         wserver._sembrar_migraciones_sqlserver(conn, versiones)
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 21
+        assert cur.fetchone()[0] == 23
         wserver._sembrar_migraciones_sqlserver(conn, versiones)
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 21
+        assert cur.fetchone()[0] == 23
     finally:
         if conn is not None:
             conn.close()
@@ -160,7 +160,7 @@ def test_asegurar_db_fase2(disponibilidad):
         cur.execute("SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = N'dbo'")
         assert cur.fetchone()[0] == 27
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 21
+        assert cur.fetchone()[0] == 23
     finally:
         if conn is not None:
             conn.close()
@@ -171,16 +171,16 @@ def test_asegurar_db_fase2(disponibilidad):
 
 
 def _verificar_paridad(cur) -> None:
-    """Paridad canónica del esquema: 27 tablas / 27 PK / 37 FK."""
+    """Paridad canónica del esquema: 29 tablas / 29 PK / 41 FK."""
     cur.execute("SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = N'dbo'")
-    assert cur.fetchone()[0] == 27, "se esperaban 27 tablas"
+    assert cur.fetchone()[0] == 29, "se esperaban 29 tablas"
     cur.execute(
         "SELECT COUNT(*) FROM sys.key_constraints "
         "WHERE type = 'PK' AND SCHEMA_NAME(schema_id) = N'dbo'"
     )
-    assert cur.fetchone()[0] == 27, "se esperaban 27 PK"
+    assert cur.fetchone()[0] == 29, "se esperaban 29 PK"
     cur.execute(
         "SELECT COUNT(*) FROM sys.foreign_keys "
         "WHERE SCHEMA_NAME(schema_id) = N'dbo'"
     )
-    assert cur.fetchone()[0] == 37, "se esperaban 37 FK"
+    assert cur.fetchone()[0] == 41, "se esperaban 41 FK"

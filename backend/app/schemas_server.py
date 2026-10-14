@@ -99,6 +99,48 @@ class ServerTokenResponse(BaseModel):
     expires_in: int
 
 
+# --- RB-12: aprobación de equipos (docs/SESIONES.md) -----------------------
+
+
+class SesionEquipoOut(BaseModel):
+    """Equipo registrado en la cuenta, con su estado de aprobación RB-12."""
+
+    id_dispositivo: uuid.UUID
+    hardware_id: str
+    nombre_equipo: str | None = None
+    sistema_operativo: str | None = None
+    version_app: str | None = None
+    rol_dispositivo: str = "LOCAL"
+    rol_sesion: str | None = None
+    estado: str = "APROBADO"
+    activo: bool = True
+    #: True para el equipo dueño de la licencia (``licencias.hardware_id``):
+    #: es el único que no puede rechazarse ni cambiarse de rol.
+    es_dueno: bool = False
+    ultima_conexion: datetime | None = None
+    created_at: datetime | None = None
+
+
+class SesionesResponse(BaseModel):
+    items: list[SesionEquipoOut] = Field(default_factory=list)
+    max_equipos: int | None = None
+    max_sesiones: int | None = None
+    hardware_titular: str | None = None
+
+
+class SesionUpdateRequest(BaseModel):
+    """Aprueba/rechaza un equipo y/o le asigna rol de sesión.
+
+    ``PENDIENTE`` no es un destino válido: un equipo ya aprobado no vuelve a
+    quedar a la espera (se rechaza y se vuelve a aprobar si hiciera falta).
+    """
+
+    estado: str | None = Field(None, pattern="^(APROBADO|RECHAZADO)$")
+    rol_sesion: str | None = Field(
+        None, pattern="^(ADMIN|OPERADOR|AUDITOR|TRABAJADOR)$"
+    )
+
+
 class PanelLoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -154,6 +196,10 @@ class PanelDispositivoOut(BaseModel):
     hardware_id: str
     nombre_equipo: str | None = None
     rol_dispositivo: str = "LOCAL"
+    #: RB-12: estado de aprobación y rol de sesión (visible en el panel del
+    #: proveedor para soporte; la gestión la hace la propia cuenta).
+    estado: str = "APROBADO"
+    rol_sesion: str | None = None
     activo: bool = True
     ultima_conexion: datetime | None = None
 

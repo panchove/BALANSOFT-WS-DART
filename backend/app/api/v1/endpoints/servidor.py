@@ -62,6 +62,9 @@ from app.schemas_server import (
     ServerSyncUsersRequest,
     ServerSyncUsersResponse,
     ServerTokenResponse,
+    SesionEquipoOut,
+    SesionesResponse,
+    SesionUpdateRequest,
 )
 
 router = APIRouter()
@@ -71,6 +74,10 @@ log = logging.getLogger(__name__)
 
 #: Rol del dispositivo dueño de la licencia (único que puede ser SERVIDOR).
 ROL_SERVIDOR_LOCAL = "SERVIDOR_LOCAL"
+
+#: RB-12: solo el tier CENTRAL admite varios equipos, así que solo él exige
+#: aprobación de la tutora. DEMO (un equipo) conserva el comportamiento previo.
+TIER_CON_APROBACION = "CENTRAL"
 
 
 @overload
@@ -126,6 +133,53 @@ _ESTADOS_LICENCIA_VIGENTES = ("ACTIVA", "AVAILABLE")
 
 def _licencia_vigente(estado: str | None) -> bool:
     return (estado or "").strip().upper() in _ESTADOS_LICENCIA_VIGENTES
+
+
+# ---------------------------------------------------------------------------
+# RB-12 · aprobación de equipos (docs/SESIONES.md)
+# ---------------------------------------------------------------------------
+
+
+def _tier_exige_aprobacion(tier: str | None) -> bool:
+    """¿El tier de la licencia obliga a aprobar cada equipo nuevo?"""
+    return (tier or "").strip().upper() == TIER_CON_APROBACION
+
+
+def _estado_equipo(disp: Dispositivo) -> str:
+    """Estado de aprobación normalizado (las filas antiguas son APROBADO)."""
+    return (disp.estado or Dispositivo.ESTADO_APROBADO).strip().upper()
+
+
+def _es_equipo_dueno(licencia: Licencia, hardware_id: str) -> bool:
+    """¿Este equipo es la máquina a la que quedó atada la licencia?
+
+    El dueño es la única fuente de verdad de la titularidad (no se persiste un
+    ``es_dueno``): se deriva de ``licencias.hardware_id`` (docs/MANEJO_DB.md §13).
+    """
+    return bool(licencia.hardware_id) and licencia.hardware_id == hardware_id
+
+
+def _exigir_admin(cred: Credencial) -> None:
+    if cred.rol_global != "ADMIN":
+        raise HTTPException(status_code=403, detail="Se requiere rol ADMIN global")
+
+
+async def _revocar_sesiones_dispositivo(
+    db: AsyncSession, id_dispositivo: uuid.UUID
+) -> None:
+    """Cierra las sesiones abiertas de un equipo (al rechazarlo)."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    sesiones = (
+        await db.execute(
+            select(Sesion).where(
+                Sesion.id_dispositivo == id_dispositivo,
+                Sesion.revocada == false(),
+                Sesion.expira > now,
+            )
+        )
+    ).scalars().all()
+    for sen in sesiones:
+        sen.revocada = True
 
 
 def _normalizar_estado_lm(estado: str | None) -> str:
@@ -277,7 +331,15 @@ async def _dispositivo(
     hardware_id: str,
     payload: ServerLoginRequest,
     hardware_titular: str | None = None,
+    estado_inicial: str | None = None,
+    rol_sesion_inicial: str | None = None,
 ) -> Dispositivo:
+    """Registra/actualiza el equipo y devuelve su fila.
+
+    ``estado_inicial``/``rol_sesion_inicial`` solo se aplican al **crear** la
+    fila: el estado de un equipo ya registrado lo gobierna la tutora vía
+    ``PATCH /api/v1/auth/sesiones/{id}`` (RB-12), no un login posterior.
+    """
     result = await db.execute(
         select(Dispositivo).where(Dispositivo.hardware_id == hardware_id)
     )
@@ -288,6 +350,7 @@ async def _dispositivo(
         # licencia es SERVIDOR_LOCAL; el resto, Local/trabajadores. El rol se
         # corrige abajo contra `licencias.hardware_id`, que es la fuente de
         # verdad, para no depender del orden de inserción de las filas.
+        estado_creacion = estado_inicial or Dispositivo.ESTADO_APROBADO
         disp = Dispositivo(
             id_cuenta=id_cuenta,
             hardware_id=hardware_id,
@@ -295,6 +358,12 @@ async def _dispositivo(
             sistema_operativo=payload.sistema_operativo,
             version_app=payload.version_app,
             rol_dispositivo="LOCAL",
+            estado=estado_creacion,
+            # Un equipo pendiente NO está activo: así no consume cupo de
+            # `max_equipos` ni puede recibir la atribución de una
+            # sincronización antes de que la tutora lo apruebe (RB-12).
+            activo=estado_creacion == Dispositivo.ESTADO_APROBADO,
+            rol_sesion=rol_sesion_inicial,
             ultima_conexion=now,
         )
         db.add(disp)
@@ -387,6 +456,27 @@ async def get_server_credencial(
     ).scalar_one_or_none()
     if cred is None:
         raise HTTPException(status_code=404, detail="Credencial no encontrada")
+    # RB-12 (defensa en profundidad): los tokens emitidos tras RB-12 llevan el
+    # equipo, así que su estado de aprobación se re-verifica en cada petición.
+    # Un equipo rechazado deja de operar contra el servidor de inmediato, sin
+    # esperar a que caduque su token. Los tokens antiguos no traen ``disp`` y
+    # se aceptan igual (compatibilidad).
+    disp_id = payload.get("disp")
+    if disp_id:
+        try:
+            id_dispositivo = uuid.UUID(str(disp_id))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Token inválido") from None
+        dispositivo = await db.get(Dispositivo, id_dispositivo)
+        if dispositivo is None or dispositivo.id_cuenta != cred.id_cuenta:
+            raise HTTPException(
+                status_code=401, detail="La sesión de este equipo ya no es válida"
+            )
+        if _estado_equipo(dispositivo) != Dispositivo.ESTADO_APROBADO:
+            raise HTTPException(
+                status_code=403,
+                detail="Este equipo fue rechazado por el administrador de la cuenta",
+            )
     return cred
 
 
@@ -561,13 +651,45 @@ async def server_login(
                     ),
                 },
             )
+    # RB-12 (docs/SESIONES.md): en una licencia CENTRAL un equipo nuevo que no
+    # sea el dueño nace PENDIENTE y no abre sesión hasta que la tutora lo
+    # apruebe. El dueño nace aprobado; una licencia aún sin titular
+    # (hardware_id NULL) no bloquea a nadie: el primer equipo que la use queda
+    # como titular (docs/MANEJO_DB.md §13). DEMO conserva el comportamiento
+    # previo (licencia de un solo equipo).
+    es_dueno = _es_equipo_dueno(licencia, payload.hardware_id)
+    exige_aprobacion = _tier_exige_aprobacion(licencia.licencia_tier) and bool(
+        licencia.hardware_id
+    )
     disp = await _dispositivo(
         db,
         cuenta.id_cuenta,
         payload.hardware_id,
         payload,
         hardware_titular=licencia.hardware_id,
+        estado_inicial=(
+            Dispositivo.ESTADO_PENDIENTE
+            if (exige_aprobacion and not es_dueno)
+            else Dispositivo.ESTADO_APROBADO
+        ),
+        rol_sesion_inicial="ADMIN" if es_dueno else None,
     )
+    # Gate RB-12: un equipo pendiente o rechazado no abre sesión. La fila se
+    # persiste ANTES de responder para que la tutora la vea en
+    # GET /auth/sesiones (si no, el alta se perdería en el rollback de la
+    # petición y el equipo quedaría invisible para siempre).
+    estado_equipo = _estado_equipo(disp)
+    if estado_equipo != Dispositivo.ESTADO_APROBADO:
+        await db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Este equipo está pendiente de aprobación por el administrador "
+                "de la cuenta: apruébelo desde el equipo titular."
+                if estado_equipo == Dispositivo.ESTADO_PENDIENTE
+                else "Este equipo fue rechazado por el administrador de la cuenta."
+            ),
+        )
     if licencia.max_equipos is not None:
         equipo_count = (
             await db.execute(
@@ -626,7 +748,13 @@ async def server_login(
             )
 
     cred.ultimo_login = now
-    access = create_access_token(str(cred.id_credencial), extra={"rol": cred.rol_global})
+    # ``disp`` permite que get_server_credencial verifique el estado del equipo
+    # en cada petición (defensa en profundidad RB-12: un equipo rechazado deja
+    # de sincronizar sin esperar a que caduque su token).
+    access = create_access_token(
+        str(cred.id_credencial),
+        extra={"rol": cred.rol_global, "disp": str(disp.id_dispositivo)},
+    )
     refresh = create_refresh_token(str(cred.id_credencial))
     db.add(
         Sesion(
@@ -662,6 +790,11 @@ async def server_login(
             "id_dispositivo": str(disp.id_dispositivo),
             "hardware_id": disp.hardware_id,
             "rol": disp.rol_dispositivo,
+            # RB-12: estado de aprobación y rol de sesión (la app muestra el
+            # resultado de la aprobación y puede aprender su rol efectivo).
+            "estado": _estado_equipo(disp),
+            "rol_sesion": disp.rol_sesion,
+            "es_dueno": es_dueno,
             "activo": disp.activo,
             # Solo el titular de la licencia puede instalar la estación como
             # SERVIDOR; el resto de equipos son trabajadores (docs §13).
@@ -695,11 +828,17 @@ async def server_refresh_token(
     cred = await db.get(Credencial, cred_id)
     if cred is None or not cred.activo:
         raise HTTPException(status_code=401, detail="Credencial no encontrada")
-    access = create_access_token(str(cred.id_credencial), extra={"rol": cred.rol_global})
+    # RB-12: si la sesión rotada tiene equipo, el token nuevo lo conserva para
+    # que get_server_credencial siga verificando su estado de aprobación.
+    extra_acc: dict[str, str] = {"rol": cred.rol_global}
+    if sen is not None and sen.id_dispositivo is not None:
+        extra_acc["disp"] = str(sen.id_dispositivo)
+    access = create_access_token(str(cred.id_credencial), extra=extra_acc)
     new_refresh = create_refresh_token(str(cred.id_credencial))
     db.add(
         Sesion(
             id_credencial=cred.id_credencial,
+            id_dispositivo=(sen.id_dispositivo if sen is not None else None),
             token_hash=_token_digest(new_refresh),
             expira=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7),
         )
@@ -711,9 +850,125 @@ async def server_refresh_token(
 
 
 # ---------------------------------------------------------------------------
-# Licencias (consulta y alta)
+# RB-12 · aprobación de equipos (docs/SESIONES.md)
 # ---------------------------------------------------------------------------
 
+
+def _sesion_equipo_out(disp: Dispositivo, hardware_titular: str | None) -> SesionEquipoOut:
+    """Vista de un equipo. ``es_dueno`` se deriva de ``licencias.hardware_id``."""
+    return SesionEquipoOut(
+        id_dispositivo=disp.id_dispositivo,
+        hardware_id=disp.hardware_id,
+        nombre_equipo=disp.nombre_equipo,
+        sistema_operativo=disp.sistema_operativo,
+        version_app=disp.version_app,
+        rol_dispositivo=disp.rol_dispositivo,
+        rol_sesion=disp.rol_sesion,
+        estado=_estado_equipo(disp),
+        activo=disp.activo,
+        es_dueno=bool(hardware_titular) and disp.hardware_id == hardware_titular,
+        ultima_conexion=disp.ultima_conexion,
+        created_at=disp.created_at,
+    )
+
+
+@router.get("/api/v1/auth/sesiones", response_model=SesionesResponse)
+async def server_sesiones(
+    cred: Credencial = Depends(get_server_credencial),
+    db: AsyncSession = Depends(get_server_db),
+) -> SesionesResponse:
+    """Equipos de la cuenta con su estado de aprobación (solo ADMIN global).
+
+    Es la vista desde la que la tutora aprueba o rechaza los equipos que
+    intentan abrir sesión. La cuenta sale SIEMPRE de la credencial autenticada
+    (multi-tenancy): el cliente no elige el tenant.
+    """
+    _exigir_admin(cred)
+    licencia = await _licencia_activa(db, cred.id_cuenta)
+    dispositivos = (
+        await db.execute(
+            select(Dispositivo)
+            .where(Dispositivo.id_cuenta == cred.id_cuenta)
+            .order_by(Dispositivo.created_at.asc())
+        )
+    ).scalars().all()
+    return SesionesResponse(
+        items=[_sesion_equipo_out(d, licencia.hardware_id) for d in dispositivos],
+        max_equipos=licencia.max_equipos,
+        max_sesiones=licencia.max_sesiones,
+        hardware_titular=licencia.hardware_id,
+    )
+
+
+@router.patch(
+    "/api/v1/auth/sesiones/{id_dispositivo}", response_model=SesionEquipoOut
+)
+async def server_actualizar_sesion(
+    id_dispositivo: uuid.UUID,
+    payload: SesionUpdateRequest,
+    cred: Credencial = Depends(get_server_credencial),
+    db: AsyncSession = Depends(get_server_db),
+) -> SesionEquipoOut:
+    """Aprueba/rechaza un equipo y/o le asigna su rol de sesión (solo ADMIN).
+
+    - Aprobar exige un ``rol_sesion`` (el que tendrá la sesión del equipo).
+    - Rechazar deja el equipo inactivo y revoca sus sesiones abiertas: deja de
+      sincronizar de inmediato (además de no poder volver a entrar).
+    - El equipo **titular** de la licencia no se modifica nunca (es la tutora).
+    - Un equipo de otra cuenta responde 404 (no se filtra su existencia).
+    """
+    _exigir_admin(cred)
+    disp = await db.get(Dispositivo, id_dispositivo)
+    if disp is None or disp.id_cuenta != cred.id_cuenta:
+        raise HTTPException(status_code=404, detail="Equipo no encontrado")
+    licencia = await _licencia_activa(db, cred.id_cuenta)
+    if _es_equipo_dueno(licencia, disp.hardware_id):
+        raise HTTPException(
+            status_code=422,
+            detail="El equipo titular de la licencia no puede modificarse",
+        )
+    if payload.estado is None and payload.rol_sesion is None:
+        raise HTTPException(status_code=422, detail="Indique estado y/o rol_sesion")
+    if (
+        payload.estado == Dispositivo.ESTADO_APROBADO
+        and payload.rol_sesion is None
+        and not disp.rol_sesion
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Aprobar un equipo exige asignarle un rol de sesión",
+        )
+
+    acciones: list[str] = []
+    if payload.rol_sesion is not None:
+        disp.rol_sesion = payload.rol_sesion
+        acciones.append("rol")
+    if payload.estado is not None:
+        disp.estado = payload.estado
+        if payload.estado == Dispositivo.ESTADO_APROBADO:
+            disp.activo = True
+            acciones.append("aprobada")
+        else:
+            disp.activo = False
+            await _revocar_sesiones_dispositivo(db, disp.id_dispositivo)
+            acciones.append("rechazada")
+    await _auditar(
+        db,
+        f"sesion_{'+'.join(acciones)}",
+        id_cuenta=cred.id_cuenta,
+        id_credencial=cred.id_credencial,
+        entidad="dispositivo",
+        entidad_id=disp.hardware_id,
+        detalle={"estado": disp.estado, "rol_sesion": disp.rol_sesion},
+    )
+    await db.commit()
+    await db.refresh(disp)
+    return _sesion_equipo_out(disp, licencia.hardware_id)
+
+
+# ---------------------------------------------------------------------------
+# Licencias (consulta y alta)
+# ---------------------------------------------------------------------------
 
 @router.get("/api/v1/licencias")
 async def listar_licencias(

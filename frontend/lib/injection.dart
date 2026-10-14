@@ -12,6 +12,8 @@ import 'data/datasources/local/database_helper.dart';
 import 'core/config/app_config.dart';
 import 'core/security/secure_storage_service.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/notification_repository.dart';
+import 'data/repositories/sesiones_repository.dart';
 import 'data/repositories/weighing_repository.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/accesos_repository.dart';
@@ -23,6 +25,7 @@ import 'domain/usecases/catalog_usecases.dart';
 import 'domain/usecases/kardex_usecases.dart';
 import 'domain/usecases/license_usecases.dart';
 import 'presentation/providers/bloc/kardex/kardex_bloc.dart';
+import 'presentation/providers/bloc/notifications/notifications_cubit.dart';
 import 'data/services/scale_api_client.dart';
 import 'data/services/scale_tcp_client.dart';
 import 'data/datasources/remote/scale_api_datasource.dart';
@@ -69,6 +72,11 @@ Future<void> init() async {
         apiClient: sl(),
         localStorage: sl(),
       ));
+  sl.registerLazySingleton<NotificationRepository>(
+      () => NotificationRepository(apiClient: sl()));
+  // RB-12: aprobación de equipos de la cuenta (contra el servidor central).
+  sl.registerLazySingleton<SesionesRepository>(
+      () => SesionesRepository(apiClient: sl()));
 
   // Use cases
   sl.registerLazySingleton<LoginUseCase>(
@@ -159,6 +167,8 @@ Future<void> init() async {
       () => KardexBloc(detalleUseCase: sl<KardexDetalleUseCase>()));
   sl.registerFactory<CatalogCrudCubit>(
       () => CatalogCrudCubit(sl<ApiClient>()));
+  sl.registerFactory<NotificationsCubit>(
+      () => NotificationsCubit(repo: sl<NotificationRepository>()));
   sl.registerLazySingleton<ScaleTcpClient>(() => ScaleTcpClient());
   sl.registerLazySingleton<ScaleApiClient>(
       () => ScaleApiClient(datasource: ScaleApiDatasource(sl<ApiClient>())));

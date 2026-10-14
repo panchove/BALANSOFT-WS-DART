@@ -804,6 +804,151 @@ Future<Response> getMonthlyReport(int year, int month) async {
 
   /// Resuelve una URL relativa del servidor (`/media/...`) a una URL completa
   /// apuntando a la API actual.
+  /// Bandeja de notificaciones de la estación (más recientes primero).
+  Future<List<Map<String, dynamic>>> listNotificaciones({
+    String? estado,
+    String? tipo,
+    bool soloNoLeidas = false,
+    int skip = 0,
+    int limit = 50,
+  }) async {
+    final response = await getList(
+      ApiConstants.notificaciones,
+      queryParameters: {
+        if (estado != null && estado.isNotEmpty) 'estado': estado,
+        if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
+        if (soloNoLeidas) 'solo_no_leidas': true,
+        'skip': skip,
+        'limit': limit,
+      },
+    );
+    return (response.data as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  /// Contadores para el badge de la campana del navbar.
+  Future<Map<String, dynamic>> resumenNotificaciones() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.notificacionesResumen}');
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> marcarNotificacionLeida(String id) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.notificacionLeer(id)}');
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> archivarNotificacion(String id) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.notificacionArchivar(id)}');
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<int> marcarTodasLeidas() async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.notificacionesLeerTodas}');
+    final data = (response.data as Map).cast<String, dynamic>();
+    return (data['actualizadas'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<Map<String, dynamic>> probarNotificacion() async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.notificacionesProbar}');
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  // ── Recordatorios (solo ADMIN) ──────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> listRecordatorios({
+    bool incluirInactivos = true,
+  }) async {
+    final response = await getList(
+      ApiConstants.recordatorios,
+      queryParameters: {'incluir_inactivos': incluirInactivos},
+    );
+    return (response.data as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> crearRecordatorio(Map<String, dynamic> body) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.recordatorios}', data: body);
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> actualizarRecordatorio(
+      String id, Map<String, dynamic> body) async {
+    final response = await _dio.patch(
+      '$_baseUrl${ApiConstants.recordatorio(id)}',
+      data: body,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<void> eliminarRecordatorio(String id) async {
+    await _dio.delete('$_baseUrl${ApiConstants.recordatorio(id)}');
+  }
+
+  Future<Map<String, dynamic>> probarRecordatorio(String id) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.recordatorioProbar(id)}');
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  // ── RB-12: sesiones/equipos de la cuenta (servidor central) ─────────────
+
+  /// Lista los equipos de la cuenta con su estado de aprobación (RB-12).
+  ///
+  /// Se consulta al **servidor central** con la credencial global
+  /// (`_serverToken`, obtenida en el `serverLogin`): la cuenta sale del token,
+  /// nunca de un parámetro. Sin token lanza [StateError] para que la UI pida
+  /// volver a iniciar sesión.
+  Future<Map<String, dynamic>> listarSesionesEquipo({String? serverUrl}) async {
+    final url = _serverBase(serverUrl);
+    final token = _serverToken;
+    if (url.isEmpty) throw StateError('Servidor central no configurado');
+    if (token == null) {
+      throw StateError('Sin credencial del servidor central');
+    }
+    final response = await _dio.get(
+      '$url${ApiConstants.sesionesEquipo}',
+      options: Options(
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {'Authorization': 'Bearer $token'},
+      ),
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  /// Aprueba/rechaza un equipo y/o le asigna su rol de sesión (RB-12).
+  Future<Map<String, dynamic>> actualizarSesionEquipo(
+    String idDispositivo, {
+    String? estado,
+    String? rolSesion,
+    String? serverUrl,
+  }) async {
+    final url = _serverBase(serverUrl);
+    final token = _serverToken;
+    if (url.isEmpty) throw StateError('Servidor central no configurado');
+    if (token == null) {
+      throw StateError('Sin credencial del servidor central');
+    }
+    final response = await _dio.patch(
+      '$url${ApiConstants.sesionEquipo(idDispositivo)}',
+      data: {
+        if (estado != null) 'estado': estado,
+        if (rolSesion != null) 'rol_sesion': rolSesion,
+      },
+      options: Options(
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {'Authorization': 'Bearer $token'},
+      ),
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   String mediaUrl(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     final base = _baseUrl.endsWith('/')

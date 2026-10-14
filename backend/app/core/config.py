@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     max_offline_days: int = 30
     max_sync_retries: int = 3
 
+    # Notificaciones / avisos (subsistema del backend residente, ver
+    # app/core/notification_scheduler.py). `notifications_os_enabled` decide si
+    # se dibuja además el aviso nativo del SO (notify-send / toast Windows);
+    # en un entorno sin canal simplemente se omite.
+    notifications_enabled: bool = True
+    notifications_os_enabled: bool = True
+    #: Cada cuántos segundos el programador evalúa eventos y recordatorios.
+    notifications_interval_seconds: int = 60
+    #: Días de antelación del aviso «licencia por vencer».
+    notifications_license_warning_days: int = 15
+
     # Límites de licencia
     demo_max_records: int = 10
     monopuesta_max_users: int = 1

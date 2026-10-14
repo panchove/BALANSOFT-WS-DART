@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     flota,
     identity,
     inventario,
+    notificaciones,
     pesajes,
     reports,
     seguridad,
@@ -48,6 +49,8 @@ API_ROUTERS = [
     usuarios.router,
     seguridad.router,
     series.router,
+    notificaciones.router,
+    notificaciones.router_recordatorios,
 ]
 
 SERVER_ROUTERS = [

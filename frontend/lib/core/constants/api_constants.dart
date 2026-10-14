@@ -44,6 +44,24 @@ class ApiConstants {
   // Auditoría
   static const String auditoria = '$apiPrefix/auditoria';
 
+  // Notificaciones (bandeja de la estación) y recordatorios
+  static const String notificaciones = '$apiPrefix/notificaciones';
+  static const String notificacionesResumen = '$apiPrefix/notificaciones/resumen';
+  static const String notificacionesLeerTodas = '$apiPrefix/notificaciones/leer-todas';
+  static const String notificacionesProbar = '$apiPrefix/notificaciones/probar';
+  static String notificacionLeer(String id) =>
+      '$apiPrefix/notificaciones/$id/leer';
+  static String notificacionArchivar(String id) =>
+      '$apiPrefix/notificaciones/$id/archivar';
+  static const String recordatorios = '$apiPrefix/recordatorios';
+  static String recordatorio(String id) => '$apiPrefix/recordatorios/$id';
+  static String recordatorioProbar(String id) =>
+      '$apiPrefix/recordatorios/$id/probar';
+
+  // RB-12: sesiones/equipos de la cuenta (servidor central, token de servidor).
+  static const String sesionesEquipo = '/api/v1/auth/sesiones';
+  static String sesionEquipo(String id) => '/api/v1/auth/sesiones/$id';
+
   // Flota
   static const String camiones = '$apiPrefix/camiones';
   static String camion(String id) => '$apiPrefix/camiones/$id';

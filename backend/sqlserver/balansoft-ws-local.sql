@@ -1,6 +1,7 @@
 -- BALANSOFT-WS - Esquema canónico SQL Server (T-SQL)
 -- Generado a partir del pg_dump --schema-only de la BD local migrada.
--- 27 tablas: 26 de negocio + schema_migrations. Idempotente: cada
+-- 29 tablas: 26 canónicas + password_reset_tokens + series_numeracion +
+-- schema_migrations. Idempotente: cada
 -- objeto se crea solo si no existe. Prohibido GO: el migrador ejecuta
 -- por lotes separados por ';'.
 --
@@ -311,6 +312,31 @@ IF OBJECT_ID(N'dbo.modelos_camion', N'U') IS NULL BEGIN
     );
 END
 
+IF OBJECT_ID(N'dbo.notificaciones', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[notificaciones] (
+        [id] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [tipo] NVARCHAR(40) NOT NULL,
+        [severidad] NVARCHAR(10) DEFAULT N'info' NOT NULL,
+        [titulo] NVARCHAR(200) NOT NULL,
+        [mensaje] NVARCHAR(MAX),
+        [acciones] NVARCHAR(MAX),
+        [estado] NVARCHAR(20) DEFAULT N'no_leida' NOT NULL,
+        [origen] NVARCHAR(20) DEFAULT N'evento' NOT NULL,
+        [id_recordatorio] UNIQUEIDENTIFIER,
+        [id_referencia] UNIQUEIDENTIFIER,
+        [dedup_key] NVARCHAR(150),
+        [programada_para] DATETIME2(6),
+        [entregada_os_en] DATETIME2(6),
+        [leida_en] DATETIME2(6),
+        [expira_en] DATETIME2(6),
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [notificaciones_pkey] PRIMARY KEY (id),
+        CONSTRAINT [notificaciones_estado_check] CHECK ([estado] IN (N'no_leida', N'leida', N'archivado'))
+    );
+END
+
 IF OBJECT_ID(N'dbo.parametros_sistema', N'U') IS NULL BEGIN
     CREATE TABLE [dbo].[parametros_sistema] (
         [parametro] NVARCHAR(100) NOT NULL,
@@ -362,6 +388,24 @@ IF OBJECT_ID(N'dbo.productos', N'U') IS NULL BEGIN
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         CONSTRAINT [productos_pkey] PRIMARY KEY (id_producto)
+    );
+END
+
+IF OBJECT_ID(N'dbo.recordatorios', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[recordatorios] (
+        [id] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [id_usuario] UNIQUEIDENTIFIER,
+        [titulo] NVARCHAR(200) NOT NULL,
+        [mensaje] NVARCHAR(MAX),
+        [programada_para] DATETIME2(6) NOT NULL,
+        [recurrencia] NVARCHAR(20) DEFAULT N'none' NOT NULL,
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [ultima_ejecucion] DATETIME2(6),
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [recordatorios_pkey] PRIMARY KEY (id),
+        CONSTRAINT [recordatorios_recurrencia_check] CHECK ([recurrencia] IN (N'none', N'daily', N'weekly', N'monthly'))
     );
 END
 
@@ -571,6 +615,12 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'modelos_camion_marca_id_fkey' ) BEGIN
     ALTER TABLE [dbo].[modelos_camion] ADD CONSTRAINT [modelos_camion_marca_id_fkey] FOREIGN KEY (marca_id) REFERENCES [dbo].[marcas] (id_marca);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'notificaciones_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[notificaciones] ADD CONSTRAINT [notificaciones_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa) ON DELETE CASCADE;
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'notificaciones_id_recordatorio_fkey' ) BEGIN
+    ALTER TABLE [dbo].[notificaciones] ADD CONSTRAINT [notificaciones_id_recordatorio_fkey] FOREIGN KEY (id_recordatorio) REFERENCES [dbo].[recordatorios] (id) ON DELETE SET NULL;
+END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'password_reset_tokens_id_usuario_fkey' ) BEGIN
     ALTER TABLE [dbo].[password_reset_tokens] ADD CONSTRAINT [password_reset_tokens_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario) ON DELETE CASCADE;
 END
@@ -582,6 +632,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'productos_id_catego
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'productos_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[productos] ADD CONSTRAINT [productos_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'recordatorios_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[recordatorios] ADD CONSTRAINT [recordatorios_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa) ON DELETE CASCADE;
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'recordatorios_id_usuario_fkey' ) BEGIN
+    ALTER TABLE [dbo].[recordatorios] ADD CONSTRAINT [recordatorios_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'remolques_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[remolques] ADD CONSTRAINT [remolques_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
@@ -653,6 +709,15 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_modelos_marca' ) BEGIN
     CREATE INDEX [idx_modelos_marca] ON [dbo].[modelos_camion] (marca_id);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_notificaciones_empresa_created' ) BEGIN
+    CREATE INDEX [idx_notificaciones_empresa_created] ON [dbo].[notificaciones] (id_empresa, created_at);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_notificaciones_empresa_estado' ) BEGIN
+    CREATE INDEX [idx_notificaciones_empresa_estado] ON [dbo].[notificaciones] (id_empresa, estado);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_recordatorios_empresa' ) BEGIN
+    CREATE INDEX [idx_recordatorios_empresa] ON [dbo].[recordatorios] (id_empresa, activo, programada_para);
+END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_password_reset_usuario' ) BEGIN
     CREATE INDEX [idx_password_reset_usuario] ON [dbo].[password_reset_tokens] (id_usuario, usado);
 END
@@ -697,6 +762,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_marcas_empresa_nombre
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_modelos_empresa_nombre' ) BEGIN
     CREATE UNIQUE INDEX [uq_modelos_empresa_nombre] ON [dbo].[modelos_camion] (id_empresa, nombre);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_notificaciones_empresa_dedup' ) BEGIN
+    CREATE UNIQUE INDEX [uq_notificaciones_empresa_dedup] ON [dbo].[notificaciones] (id_empresa, dedup_key) WHERE (dedup_key IS NOT NULL);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_series_numeracion_activa_empresa' ) BEGIN
     CREATE UNIQUE INDEX [uq_series_numeracion_activa_empresa] ON [dbo].[series_numeracion] (id_empresa) WHERE (activa = 1);

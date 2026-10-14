@@ -269,6 +269,16 @@ class _AppSidebarState extends State<AppSidebar> {
           shortcut: 'Alt+D',
           rolesPermitidos: {'ADMIN'},
         ),
+        // RB-12: aprobación de los equipos de la cuenta. Es una hoja-acción
+        // (como Auditoría): su autoridad es el servidor central, así que no
+        // entra en la matriz de módulos locales.
+        MenuNode(
+          label: 'Sesiones y Equipos',
+          icon: Icons.verified_user_outlined,
+          activeIcon: Icons.verified_user,
+          accion: 'go:sesiones',
+          rolesPermitidos: {'ADMIN'},
+        ),
         MenuNode(
           label: 'Empresa y Documentos',
           icon: Icons.business_outlined,
@@ -442,6 +452,7 @@ class _AppSidebarState extends State<AppSidebar> {
       'MANTENIMIENTO': 'menu_mantenimiento',
       'Usuarios del Sistema': 'menu_usuarios',
       'Dispositivos de Campo': 'menu_dispositivos',
+      'Sesiones y Equipos': 'menu_sesiones',
       'Seguridad y Accesos': 'menu_seguridad',
       'Empresa y Documentos': 'menu_documentos_empresa',
       'Diseño de Ticket': 'menu_diseno_ticket',

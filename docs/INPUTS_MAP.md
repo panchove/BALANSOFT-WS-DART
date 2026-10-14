@@ -398,6 +398,15 @@ Diseñado para operar directamente desde la fila superior del teclado en la term
 > comandos de tara/cero, que dependen del fabricante. Hoy `F4` guarda; el
 > monitor aplica el flag de peso neto con el botón `T`.
 
+### 1.0.1 Diálogo de impresión (previsualización del boleto)
+
+La estación es teclado-céntrica: el operador no debe soltar el teclado para imprimir.
+
+| Tecla | Acción |
+|---|---|
+| **`Enter`** / **`Enter` numérico** | Confirma e imprime con el preset mostrado, **igual que el botón *Imprimir*** (y acepta el aviso posterior *«¿Desea imprimir?»* si lo hay). Se ignora mientras el preset carga o ya hay una impresión en curso. |
+| **`Esc`** | Cierra el diálogo sin imprimir. |
+
 ### 1.1 Captura guiada cabina → remolque (obligatoria)
 
 | Paso | Acción del operador | Resultado en pantalla |
@@ -485,7 +494,7 @@ Sin PND o tolerancia se muestra `-` en vez de `#¡DIV/0!` / `#¡VALOR!`.
 
 Comandos rápidos disponibles para escribir en la paleta:
 
-* **Navegación:** `go:wm` (Pesaje Manual), `go:wa` (Pesaje Auto), `go:in` (Entradas), `go:out` (Salidas), `go:fleet` (Flota), `cfg:dev` (Dispositivos).
+* **Navegación:** `go:wm` (Pesaje Manual), `go:wa` (Pesaje Auto), `go:in` (Entradas), `go:out` (Salidas), `go:fleet` (Flota), `cfg:dev` (Dispositivos), `go:sesiones` (Sesiones y Equipos, solo ADMIN).
 * **Creación:** `new:ticket` / `w:in` (Nuevo ticket), `new:truck` / `add:camion` (Nuevo vehículo), `new:driver` / `add:chofer` (Nuevo conductor).
 * **Búsqueda rápida:**
   * `t:#123` → Busca ticket número 123.

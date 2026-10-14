@@ -16,6 +16,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -758,6 +759,95 @@ class PermisoAcceso(Base):
     rol: Mapped[str] = mapped_column(String(30), primary_key=True)
     modulo: Mapped[str] = mapped_column(String(50), primary_key=True)
     acceso: Mapped[str] = mapped_column(String(20), default="ver")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Notificaciones y recordatorios
+# ---------------------------------------------------------------------------
+
+
+class Recordatorio(Base):
+    """Recordatorio de la estación (texto libre + hora de disparo).
+
+    El programador del backend (`app/core/notification_scheduler.py`) crea una
+    ``Notificacion`` cuando ``programada_para`` vence; ``recurrencia``
+    (``none|daily|weekly|monthly``) reprograma el recordatorio en vez de
+    desactivarlo. ``id_usuario`` es informativo (quién lo creó); la
+    notificación generada es de la empresa.
+    """
+
+    RECURRENCIAS = ("none", "daily", "weekly", "monthly")
+
+    __tablename__ = "recordatorios"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa", ondelete="CASCADE")
+    )
+    id_usuario: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id_usuario"), nullable=True
+    )
+    titulo: Mapped[str] = mapped_column(String(200))
+    mensaje: Mapped[str | None] = mapped_column(Text, nullable=True)
+    programada_para: Mapped[datetime] = mapped_column(DateTime)
+    recurrencia: Mapped[str] = mapped_column(String(20), default="none", server_default="none")
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ultima_ejecucion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class Notificacion(Base):
+    """Aviso del centro de notificaciones (campana + notificación nativa del SO).
+
+    La crea el programador del backend (``origen='evento'``), un recordatorio
+    vencido (``origen='recordatorio'``) o un anuncio manual
+    (``origen='sistema'``). ``dedup_key`` (única por empresa) hace idempotente
+    al programador: re-evaluar el mismo día no duplica el aviso.
+    """
+
+    ESTADO_NO_LEIDA = "no_leida"
+    ESTADO_LEIDA = "leida"
+    ESTADO_ARCHIVADO = "archivado"
+    SEVERIDADES = ("info", "media", "alta", "critica")
+
+    __tablename__ = "notificaciones"
+    __table_args__ = (
+        UniqueConstraint("id_empresa", "dedup_key", name="uq_notificaciones_empresa_dedup"),
+        Index("ix_notificaciones_empresa_estado", "id_empresa", "estado"),
+        Index("ix_notificaciones_empresa_created", "id_empresa", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa", ondelete="CASCADE")
+    )
+    tipo: Mapped[str] = mapped_column(String(40))
+    severidad: Mapped[str] = mapped_column(String(10), default="info")
+    titulo: Mapped[str] = mapped_column(String(200))
+    mensaje: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acciones: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    estado: Mapped[str] = mapped_column(String(20), default="no_leida")
+    origen: Mapped[str] = mapped_column(String(20), default="evento")
+    id_recordatorio: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("recordatorios.id", ondelete="SET NULL"), nullable=True
+    )
+    id_referencia: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    dedup_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    programada_para: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    entregada_os_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leida_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expira_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
     )
