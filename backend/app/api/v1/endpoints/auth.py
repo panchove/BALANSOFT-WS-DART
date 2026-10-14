@@ -377,7 +377,7 @@ async def login_central(
             # Propagar los campos informativos del 403 de titular para que la
             # app Flutter pueda mostrar un mensaje accionable (equipo titular +
             # hardware) en vez de un texto genérico.
-            for k in ("hardware_titular", "nombre_equipo_titular"):
+            for k in ("hardware_titular", "hardware_recibido", "nombre_equipo_titular"):
                 if datos.get(k) is not None:
                     extra[k] = datos[k]
         except Exception:  # noqa: BLE001 - respuesta no JSON del central

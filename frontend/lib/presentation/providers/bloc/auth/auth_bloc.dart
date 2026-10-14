@@ -62,10 +62,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final info = parsearErrorTitular(e);
       if (info.hardwareTitular != null) {
         final nombre = info.nombreEquipoTitular ?? info.hardwareTitular!;
+        // La huella de ESTE equipo ayuda a soporte a reconciliar el titular
+        // (incidente 2026-10-14): sin ella no se sabe qué envió la estación.
+        final propio = info.hardwareRecibido == null
+            ? ''
+            : ' Huella de este equipo: ${info.hardwareRecibido}.';
         emit(AuthError(
           'Esta cuenta ADMIN está activada en el equipo titular "$nombre" '
           '(hardware ${info.hardwareTitular}). Para usarla desde este equipo, '
-          'reasigne el titular desde el panel del servidor o contacte al distribuidor.',
+          'reasigne el titular desde el panel del servidor o contacte al '
+          'distribuidor.$propio',
         ));
       } else if (esErrorEquipoSinAprobar(e)) {
         // RB-12: el equipo existe pero aún no fue aprobado por la cuenta.

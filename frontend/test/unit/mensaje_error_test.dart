@@ -64,4 +64,37 @@ void main() {
       expect(mensajeDeError(e, fallback: 'X'), contains('No se pudo conectar'));
     });
   });
+
+  group('parsearErrorTitular', () {
+    test('extrae titular, nombre y la huella recibida del 403', () {
+      final e = _error(403, {
+        'detail': 'La cuenta ADMIN está activada en otro equipo titular.',
+        'hardware_titular': 'HW-TITULAR-001',
+        'hardware_recibido': 'HW-ESTE-EQUIPO',
+        'nombre_equipo_titular': 'PC-Titular',
+      });
+      final info = parsearErrorTitular(e);
+      expect(info.hardwareTitular, 'HW-TITULAR-001');
+      expect(info.hardwareRecibido, 'HW-ESTE-EQUIPO');
+      expect(info.nombreEquipoTitular, 'PC-Titular');
+      expect(info.mensaje, contains('otro equipo titular'));
+    });
+
+    test('hardware_recibido ausente queda en null (central anterior)', () {
+      final e = _error(403, {
+        'detail': 'La cuenta ADMIN está activada en otro equipo titular.',
+        'hardware_titular': 'HW-TITULAR-001',
+      });
+      final info = parsearErrorTitular(e);
+      expect(info.hardwareTitular, 'HW-TITULAR-001');
+      expect(info.hardwareRecibido, isNull);
+    });
+
+    test('un 403 sin hardware_titular no es de titular', () {
+      final e = _error(403, {'detail': 'Equipo pendiente de aprobación.'});
+      final info = parsearErrorTitular(e);
+      expect(info.hardwareTitular, isNull);
+      expect(info.hardwareRecibido, isNull);
+    });
+  });
 }

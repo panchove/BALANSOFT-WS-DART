@@ -638,6 +638,17 @@ async def server_login(
                     )
                 )
             ).scalar_one_or_none()
+            # Diagnóstico: sin la huella que ENVÍA la estación no se puede
+            # reconciliar el titular (incidente 2026-10-14). Se devuelve y se
+            # registra; no es un dato sensible.
+            log.warning(
+                "Login ADMIN rechazado: hardware recibido %r != titular %r "
+                "(cuenta %s, licencia %s)",
+                payload.hardware_id,
+                licencia.hardware_id,
+                cuenta.id_cuenta,
+                licencia.licencia_key,
+            )
             return JSONResponse(
                 status_code=403,
                 content={
@@ -646,6 +657,7 @@ async def server_login(
                         "No se permite abrir la sesión de administrador desde este dispositivo."
                     ),
                     "hardware_titular": licencia.hardware_id,
+                    "hardware_recibido": payload.hardware_id,
                     "nombre_equipo_titular": (
                         disp_titular.nombre_equipo if disp_titular else None
                     ),

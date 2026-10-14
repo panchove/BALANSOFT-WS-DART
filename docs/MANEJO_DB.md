@@ -1,7 +1,7 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.6
-**Fecha:** 2026-10-08
+**Versión:** 2.7
+**Fecha:** 2026-10-14
 **Estado:** Vigente
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
@@ -783,6 +783,34 @@ del cliente cambió) lo hace el proveedor desde el panel, sin tocar la BD:
   `hardware_titular`, para ver quién quedó como titular.
 - En la UI (`panel/js/panel.js`) es el botón **"Designar titular"** del detalle
   de cuenta.
+
+**Cuando el equipo titular no está registrado** (el panel solo designa equipos
+que **ya** existen en `dispositivos`, y devuelve `404` para una huella
+desconocida), hay que re-identificar la huella desde el servidor:
+
+```bash
+cd backend
+CUENTA=<uuid de la cuenta> HW_NUEVO="$(cat /etc/machine-id)" \
+  ./scripts/reconcile_titular.sh            # ENSAYO (no cambia nada)
+CUENTA=<uuid> HW_NUEVO="$(cat /etc/machine-id)" APPLY=1 \
+  ./scripts/reconcile_titular.sh            # aplica
+```
+
+El script (`scripts/reconcile_titular.sh` + `reconcile_titular.sql`) es
+**idempotente** y trabaja en una sola transacción: re-identifica la fila del
+titular viejo (preserva `id_dispositivo` → sesiones/sync), o la crea si no
+existe, promueve la huella nueva a `SERVIDOR_LOCAL/APROBADO/ADMIN`, reata la
+licencia activa y degrada cualquier otro `SERVIDOR_LOCAL`. **Nunca borra filas**.
+Es la vía para el caso "el equipo se reinstaló y su `/etc/machine-id` cambió"
+(misma máquina física, huella distinta).
+
+**Diagnóstico del 403 de titular**: el `403` de `POST /api/v1/auth/login`
+(rol `server`) devuelve, además de `hardware_titular` y `nombre_equipo_titular`,
+la clave **`hardware_recibido`** con la huella que **envió** la estación, y deja
+el mismo dato en el log (`logging.warning`). `login-central` (rol `local`)
+propaga los tres campos al cliente. Con eso, el `hardware_id` real de una
+estación se obtiene sin adivinar (basta leer el cuerpo del `403` o el log del
+central); ese valor es el que se pasa como `HW_NUEVO` a `reconcile_titular.sh`.
 
 ### 13.2 Regla de instalación en la app
 

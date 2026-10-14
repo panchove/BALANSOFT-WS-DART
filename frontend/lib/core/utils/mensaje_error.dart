@@ -49,18 +49,27 @@ bool esErrorEquipoSinAprobar(Object e) {
 /// para que la UI pueda mostrar un mensaje accionable (reasignar titular).
 ///
 /// Devuelve `null` en `hardwareTitular` si el error no es un 403 de titular.
-({String mensaje, String? hardwareTitular, String? nombreEquipoTitular})
-    parsearErrorTitular(Object e, {String? fallback}) {
+/// `hardwareRecibido` es la huella que **envió** esta estación (la añade el
+/// backend desde 2026-10-14) y sirve para reconciliar el titular sin adivinar.
+({
+  String mensaje,
+  String? hardwareTitular,
+  String? hardwareRecibido,
+  String? nombreEquipoTitular,
+}) parsearErrorTitular(Object e, {String? fallback}) {
   if (e is DioException) {
     final data = e.response?.data;
     if (data is Map) {
       final hw = data['hardware_titular'];
+      final hwRecibido = data['hardware_recibido'];
       final nombre = data['nombre_equipo_titular'];
       final detalle = (data['detail'] as String?)?.trim() ?? '';
       if (hw is String && hw.isNotEmpty) {
         return (
           mensaje: detalle.isNotEmpty ? detalle : (fallback ?? ''),
           hardwareTitular: hw,
+          hardwareRecibido:
+              (hwRecibido is String && hwRecibido.isNotEmpty) ? hwRecibido : null,
           nombreEquipoTitular:
               (nombre is String && nombre.isNotEmpty) ? nombre : null,
         );
@@ -70,6 +79,7 @@ bool esErrorEquipoSinAprobar(Object e) {
   return (
     mensaje: mensajeDeError(e, fallback: fallback),
     hardwareTitular: null,
+    hardwareRecibido: null,
     nombreEquipoTitular: null,
   );
 }

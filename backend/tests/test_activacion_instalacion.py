@@ -245,3 +245,41 @@ async def test_login_normal_sin_modo_solicitado_no_se_bloquea(
             },
         )
     assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_403_del_central_propaga_hardware_recibido(app, db, monkeypatch) -> None:
+    """El 403 de titular del central viaja al cliente con la huella RECIBIDA.
+
+    Incidente 2026-10-14: la app solo veía un 502 genérico y no había forma de
+    saber qué `hardware_id` enviaba la estación para reconciliar el titular.
+    """
+    _parchear_central(
+        monkeypatch,
+        {
+            "detail": (
+                "La cuenta ADMIN está activada en otro equipo titular. "
+                "No se permite abrir la sesión de administrador desde este dispositivo."
+            ),
+            "hardware_titular": "HW-TITULAR-CENTRAL",
+            "hardware_recibido": "HW-LOCAL-1",
+            "nombre_equipo_titular": "PC-Titular",
+        },
+        status=403,
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/v1/auth/login-central",
+            json={
+                "email": "admin@cliente.com",
+                "password": "pass123456",
+                "server_url": "http://central.test",
+            },
+        )
+    assert r.status_code == 403, r.text
+    body = r.json()
+    assert body["hardware_titular"] == "HW-TITULAR-CENTRAL"
+    assert body["hardware_recibido"] == "HW-LOCAL-1"
+    assert body["nombre_equipo_titular"] == "PC-Titular"

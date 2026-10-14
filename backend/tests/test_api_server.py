@@ -725,6 +725,9 @@ async def test_rb12_demo_conserva_el_bloqueo_previo(_server_engine, server_db) -
         # de aprobación: el mensaje identifica al equipo titular.
         assert "equipo titular" in r.json()["detail"]
         assert r.json()["hardware_titular"] == "HW-D1"
+        # Diagnóstico: el 403 dice qué huella ENVIÓ este equipo, para poder
+        # reconciliar el titular sin adivinar (incidente 2026-10-14).
+        assert r.json()["hardware_recibido"] == "HW-D2"
         # Y no se dejó una fila PENDIENTE colgando en la cuenta.
         equipos = (
             await server_db.execute(
