@@ -16,7 +16,7 @@ from typing import Any, overload
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import false, select, true, update
+from sqlalchemy import false, func, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -979,6 +979,28 @@ async def server_actualizar_sesion(
         if payload.estado == Dispositivo.ESTADO_APROBADO:
             disp.activo = True
             acciones.append("aprobada")
+            # Validar límite de equipos aprobados vs max_equipos (B1)
+            if licencia.max_equipos is not None:
+                aprobados = (
+                    await db.execute(
+                        select(func.count(Dispositivo.id_dispositivo)).where(
+                            Dispositivo.id_cuenta == cred.id_cuenta,
+                            Dispositivo.estado == Dispositivo.ESTADO_APROBADO,
+                            Dispositivo.activo == true(),
+                            Dispositivo.hardware_id != licencia.hardware_id,
+                            Dispositivo.id_dispositivo != disp.id_dispositivo,
+                        )
+                    )
+                ).scalar() or 0
+                if aprobados + 1 > licencia.max_equipos:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            "No se puede aprobar el equipo: supera el límite "
+                            f"máximo de equipos ({licencia.max_equipos}) "
+                            "autorizados por la licencia."
+                        ),
+                    )
         else:
             disp.activo = False
             await _revocar_sesiones_dispositivo(db, disp.id_dispositivo)
