@@ -376,7 +376,7 @@ async def _evaluar_series(db: AsyncSession, empresa: Empresa, ahora: datetime) -
             mensaje=t("notif_serie_por_agotar_mensaje", idioma).format(
                 serie=serie.nombre, limite=limite - 1
             ),
-            dedup_key=f"serie-por-agotar:{serie.id_serie}",
+            dedup_key=f"serie-por-agotar:{serie.id_serie}:{_ymd(ahora)}",
         )
     return creadas
 

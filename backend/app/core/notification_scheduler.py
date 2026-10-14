@@ -113,6 +113,7 @@ class NotificationScheduler:
         async with AsyncSessionLocal() as db:
             try:
                 creadas = await evaluar_eventos(db)
+                await db.commit()
                 enviados = await despachar_os_pendientes(db)
                 await db.commit()
             except Exception:

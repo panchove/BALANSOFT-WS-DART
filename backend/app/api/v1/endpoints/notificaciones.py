@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -210,17 +210,22 @@ async def leer_todas(
 
 @router.post("/probar", response_model=NotificacionOut)
 async def probar_notificacion(
+    request: Request,
+    idioma: str | None = None,
     _admin: Usuario = Depends(require_admin),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> NotificacionOut:
     """Genera un aviso de prueba (ADMIN) para validar el canal del SO."""
+    from app.core.i18n import resolve_lang, t
+
+    lang = resolve_lang(request, idioma, empresa.idioma)
     nueva = await crear_notificacion(
         db,
         id_empresa=empresa.id_empresa,
         tipo="prueba",
-        titulo="Prueba de notificación",
-        mensaje="Si ves este aviso, el canal de notificaciones funciona.",
+        titulo=t("notif_prueba_titulo", lang),
+        mensaje=t("notif_prueba_mensaje", lang),
         severidad="info",
         origen="manual",
         dedup_key=f"prueba:{uuid.uuid4()}",
