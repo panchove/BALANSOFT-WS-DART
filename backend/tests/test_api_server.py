@@ -1669,3 +1669,160 @@ def _server_app(engine):
     application.dependency_overrides[get_server_db] = _get_server_db
     application.include_router(server_router)
     return application
+
+@pytest.mark.asyncio
+async def test_refresh_token_sin_sesion_o_caducado_no_renueva(
+    _server_engine, server_db
+) -> None:
+    """M1 (auditoría): un refresh no renueva si su sesión no existe o caducó.
+
+    Antes se rotaba a ciegas: bastaba con presentar un refresh firmado para
+    acuñar una sesión nueva con 7 días más, aunque su fila no existiera (token
+    fabricado) o estuviera caducada.
+    """
+    from sqlalchemy import select, update
+
+    from app.core.security import create_refresh_token
+    from app.models_server import Credencial, Sesion
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"m1a-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        _alta, login = await _admin_titular(ac, rif, email)
+
+        # Refresh firmado y válido pero SIN fila de sesión (fabricado o purgado).
+        cred = (
+            await server_db.execute(
+                select(Credencial).where(Credencial.email == email)
+            )
+        ).scalar_one()
+        huerfano = create_refresh_token(str(cred.id_credencial))
+        r = await ac.post(
+            "/api/v1/auth/refresh-token", json={"refresh_token": huerfano}
+        )
+        assert r.status_code == 401, r.text
+
+        # Sesión caducada: tampoco renueva.
+        await server_db.execute(
+            update(Sesion)
+            .where(Sesion.id_credencial == cred.id_credencial)
+            .values(expira=datetime(2020, 1, 1))
+        )
+        await server_db.commit()
+        r = await ac.post(
+            "/api/v1/auth/refresh-token",
+            json={"refresh_token": login["refresh_token"]},
+        )
+        assert r.status_code == 401, r.text
+
+        # Y un refresh con firma inválida sigue siendo 401.
+        r = await ac.post(
+            "/api/v1/auth/refresh-token", json={"refresh_token": "no-es-un-jwt"}
+        )
+        assert r.status_code == 401, r.text
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_reutilizado_revoca_la_cadena(
+    _server_engine, server_db
+) -> None:
+    """M1 (auditoría): reusar un refresh ya rotado mata la cadena entera.
+
+    La rotación normal revoca la sesión usada y emite otra. Si alguien vuelve a
+    presentar la usada (robo), se revocan TODAS las sesiones de la credencial,
+    incluida la recién emitida, para que el atacante no pueda mantener viva la
+    cadena renovando indefinidamente.
+    """
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"m1b-{uuid.uuid4().hex[:8]}@test.com"
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        _alta, login = await _admin_titular(ac, rif, email)
+        viejo = login["refresh_token"]
+
+        r = await ac.post("/api/v1/auth/refresh-token", json={"refresh_token": viejo})
+        assert r.status_code == 200, r.text
+        nuevo = r.json()["refresh_token"]
+        assert nuevo != viejo
+
+        # Reuso del viejo → 401 y la cadena cae (el nuevo deja de servir).
+        r = await ac.post("/api/v1/auth/refresh-token", json={"refresh_token": viejo})
+        assert r.status_code == 401, r.text
+        r = await ac.post("/api/v1/auth/refresh-token", json={"refresh_token": nuevo})
+        assert r.status_code == 401, r.text
+
+        # El usuario vuelve a iniciar sesión y recupera el acceso con normalidad.
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-TITULAR"},
+        )
+        assert r.status_code == 200, r.text
+        r = await ac.post(
+            "/api/v1/auth/refresh-token",
+            json={"refresh_token": r.json()["refresh_token"]},
+        )
+        assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_rb12_licencia_virgen_no_aprueba_al_primer_equipo_no_admin(
+    _server_engine, server_db
+) -> None:
+    """M2 (auditoría): sin titular, el primer equipo no-ADMIN nace PENDIENTE.
+
+    Con `hardware_id` NULL nadie exigía aprobación, así que si el primer login
+    de una licencia CENTRAL virgen no era el del ADMIN (el único que amarra la
+    licencia) ese equipo nacía APROBADO y saltaba RB-12 para siempre.
+    """
+    from sqlalchemy import select, update
+
+    from app.models_server import Dispositivo, Licencia
+
+    app = _server_app(_server_engine)
+    transport = httpx.ASGITransport(app=app)
+    rif = f"J-{uuid.uuid4().hex[:10]}".upper()
+    email = f"m2-{uuid.uuid4().hex[:8]}@test.com"
+    email_oper = f"m2o-{uuid.uuid4().hex[:8]}@test.com"
+    cuerpo_oper = {"email": email_oper, "password": "oper123456", "hardware_id": "HW-M2"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        alta = await _registrar_cuenta(ac, rif, email)
+        id_cuenta = uuid.UUID(alta["cuenta"]["id_cuenta"])
+        await server_db.execute(
+            update(Licencia)
+            .where(Licencia.id_cuenta == id_cuenta)
+            .values(licencia_status="AVAILABLE", hardware_id=None)
+        )
+        await server_db.commit()
+        await _operador(server_db, id_cuenta, email_oper)
+
+        # Primer login de la licencia virgen y NO es el del ADMIN → pendiente.
+        r = await ac.post("/api/v1/auth/login", json=cuerpo_oper)
+        assert r.status_code == 403, r.text
+        assert "pendiente" in r.json()["detail"].lower()
+        equipo = (
+            await server_db.execute(
+                select(Dispositivo).where(Dispositivo.hardware_id == "HW-M2")
+            )
+        ).scalar_one()
+        assert equipo.estado == "PENDIENTE"
+
+        # El ADMIN amarra la licencia (es el dueño) y entra.
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "pass123456", "hardware_id": "HW-TITULAR"},
+        )
+        assert r.status_code == 200, r.text
+        cabecera = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        # El equipo no-ADMIN sigue pendiente; tras aprobarlo, entra.
+        r = await ac.patch(
+            f"/api/v1/auth/sesiones/{equipo.id_dispositivo}",
+            headers=cabecera,
+            json={"estado": "APROBADO", "rol_sesion": "OPERADOR"},
+        )
+        assert r.status_code == 200, r.text
+        r = await ac.post("/api/v1/auth/login", json=cuerpo_oper)
+        assert r.status_code == 200, r.text

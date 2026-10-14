@@ -16,7 +16,7 @@ from typing import Any, overload
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import false, select, true
+from sqlalchemy import false, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -653,14 +653,20 @@ async def server_login(
             )
     # RB-12 (docs/SESIONES.md): en una licencia CENTRAL un equipo nuevo que no
     # sea el dueño nace PENDIENTE y no abre sesión hasta que la tutora lo
-    # apruebe. El dueño nace aprobado; una licencia aún sin titular
-    # (hardware_id NULL) no bloquea a nadie: el primer equipo que la use queda
-    # como titular (docs/MANEJO_DB.md §13). DEMO conserva el comportamiento
-    # previo (licencia de un solo equipo).
+    # apruebe. El dueño nace aprobado; con la licencia aún sin titular
+    # (hardware_id NULL) quien la amarra es el ADMIN en su primer login
+    # (docs/MANEJO_DB.md §13) y los demás equipos quedan a la espera de esa
+    # aprobación. DEMO conserva el comportamiento previo (licencia de un solo
+    # equipo).
     es_dueno = _es_equipo_dueno(licencia, payload.hardware_id)
-    exige_aprobacion = _tier_exige_aprobacion(licencia.licencia_tier) and bool(
-        licencia.hardware_id
-    )
+    #
+    # Auditoría (M2): el tier con aprobación exige aprobación SIEMPRE, tenga o
+    # no titular la licencia. Antes, con `hardware_id` NULL cualquier equipo
+    # nacía APROBADO; si el primer login no era el del ADMIN —el único que
+    # amarra la licencia— ese equipo quedaba aprobado de por vida y saltaba
+    # RB-12. Con la licencia virgen el ADMIN amarra el hardware antes de este
+    # cálculo y sigue naciendo dueño (APROBADO); el resto espera aprobación.
+    exige_aprobacion = _tier_exige_aprobacion(licencia.licencia_tier)
     disp = await _dispositivo(
         db,
         cuenta.id_cuenta,
@@ -813,14 +819,39 @@ async def server_refresh_token(
     if payload is None or payload.get("type") != "refresh" or "sub" not in payload:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
-    # Revocar la sesión previa (por huella del refresh) y emitir un par nuevo.
+    # M1 (auditoría): el refresh SOLO renueva si su sesión existe, está vigente
+    # y no fue revocada. Antes se rotaba a ciegas: un refresh token robado se
+    # auto-renovaba indefinidamente porque cada rotación le daba 7 días nuevos.
+    ahora = datetime.now(UTC).replace(tzinfo=None)
     sen = (
         await db.execute(
             select(Sesion).where(Sesion.token_hash == _token_digest(refresh))
         )
     ).scalar_one_or_none()
-    if sen is not None:
-        sen.revocada = True
+    if sen is None or sen.revocada or (sen.expira is not None and sen.expira < ahora):
+        if sen is not None:
+            # Reuso de un refresh ya rotado (posible robo): se revoca toda la
+            # cadena de la credencial; su dueño vuelve a iniciar sesión.
+            log.warning(
+                "Refresh token reutilizado o caducado (sesión %s): se revocan "
+                "las sesiones de la credencial %s",
+                sen.id_sesion,
+                sen.id_credencial,
+            )
+            await db.execute(
+                update(Sesion)
+                .where(
+                    Sesion.id_credencial == sen.id_credencial,
+                    Sesion.revocada == false(),
+                )
+                .values(revocada=True)
+            )
+            await db.commit()
+        raise HTTPException(status_code=401, detail="Sesión expirada o revocada")
+
+    # Rotación: la sesión usada queda revocada y el token nuevo hereda el
+    # dispositivo.
+    sen.revocada = True
     try:
         cred_id = uuid.UUID(payload["sub"])
     except (ValueError, TypeError):

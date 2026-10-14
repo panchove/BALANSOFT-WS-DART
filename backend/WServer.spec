@@ -54,6 +54,31 @@ hiddenimports = collect_submodules("app") + [
     "psycopg2",
 ]
 
+# reportlab: las simbologías del código de barras se cargan por ``exec`` dentro
+# de ``reportlab/graphics/barcode/widgets.py`` (``_BCW`` hace
+# ``from reportlab.graphics.barcode.<modulo> import <Clase>``) y
+# ``barcode/__init__.py::_reset`` importa ``eanbc`` y ``qr``; PyInstaller no ve
+# esos imports (sus únicos hooks de reportlab son ``lib.utils`` y
+# ``pdfbase._fontdata``) y el binario moría al arrancar con
+# ``ModuleNotFoundError: No module named 'reportlab.graphics.barcode.code128'``
+# —lo dispara el import del QR del boleto—. Se listan las que usa ``_reset``;
+# quedan fuera ``dmtx`` (exige pylibdmtx) y ``test``.
+hiddenimports += [
+    f"reportlab.graphics.barcode.{modulo}"
+    for modulo in (
+        "common",
+        "widgets",
+        "code128",
+        "code39",
+        "code93",
+        "eanbc",
+        "ecc200datamatrix",
+        "usps",
+        "usps4s",
+        "qr",
+    )
+]
+
 # Drivers ODBC de SQL Server (extra `uv sync --extra sqlserver`): solo se
 # empaquetan si están instalados en el entorno de build; los builds de
 # PostgreSQL quedan exactamente igual que antes.
