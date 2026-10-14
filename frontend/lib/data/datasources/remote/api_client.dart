@@ -802,8 +802,6 @@ Future<Response> getMonthlyReport(int year, int month) async {
     return response;
   }
 
-  /// Resuelve una URL relativa del servidor (`/media/...`) a una URL completa
-  /// apuntando a la API actual.
   /// Bandeja de notificaciones de la estación (más recientes primero).
   Future<List<Map<String, dynamic>>> listNotificaciones({
     String? estado,
@@ -949,6 +947,8 @@ Future<Response> getMonthlyReport(int year, int month) async {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// Resuelve una URL relativa del servidor (`/media/...`) a una URL completa
+  /// apuntando a la API actual.
   String mediaUrl(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     final base = _baseUrl.endsWith('/')

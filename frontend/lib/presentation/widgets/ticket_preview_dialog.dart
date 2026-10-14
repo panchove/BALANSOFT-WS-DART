@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/number_utils.dart';
@@ -260,12 +261,12 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     final numBoleto = w.numeroBoleto ?? w.boleto;
 
     if (_loadingPreset) {
-      return const AlertDialog(
+      return _conAtajoEnter(const AlertDialog(
         content: SizedBox(
           height: 100,
           child: Center(child: CircularProgressIndicator()),
         ),
-      );
+      ));
     }
 
     final isTermico = _preset.tamanoPapel == '80mm' || _preset.tamanoPapel == '58mm';
@@ -277,7 +278,7 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
     final anchoBase = isLandscape ? 720.0 : 520.0;
     final anchoPreview = isTermico ? 340.0 : anchoBase * (140 / 195.9);
 
-    return AlertDialog(
+    return _conAtajoEnter(AlertDialog(
       title: Row(
         children: [
           const Icon(Icons.print, color: SwsColors.accent),
@@ -488,7 +489,25 @@ class _TicketPreviewDialogState extends State<TicketPreviewDialog> {
           onPressed: _imprimiendo ? null : _imprimir,
         ),
       ],
+    ));
+  }
+
+  /// Enter (o Enter del teclado numérico) confirma la impresión igual que el
+  /// botón «Imprimir». La estación es teclado-céntrica: el operador teclea y
+  /// pulsa Enter sin tocar el ratón.
+  Widget _conAtajoEnter(Widget child) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): _onEnter,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): _onEnter,
+      },
+      child: Focus(autofocus: true, child: child),
     );
+  }
+
+  void _onEnter() {
+    if (_loadingPreset || _imprimiendo) return;
+    _imprimir();
   }
 
   Widget _buildSingleTicketBlock(Weighing w, bool isTermico, String formato) {

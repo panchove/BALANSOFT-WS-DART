@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:balansoft_ws/core/i18n/translations.dart';
 import 'package:balansoft_ws/domain/entities/printer_preset.dart';
@@ -255,5 +256,43 @@ void main() {
 
     expect(find.text('demo_company'.tr()), findsOneWidget);
     expect(find.textContaining('Previsualización del Boleto: TA-00000001'), findsOneWidget);
+  });
+
+  testWidgets('Enter imprime sin usar el ratón', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    String? formato;
+    PrinterPreset? preset;
+    await tester.pumpWidget(createWidgetUnderTest(
+      initialPreset: const PrinterPreset(copias: 2),
+      onConfirmPrint: (f, p) {
+        formato = f;
+        preset = p;
+      },
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(formato, equals('PDF'));
+    expect(preset?.copias, equals(2));
+  });
+
+  testWidgets('Enter del teclado numérico también imprime', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    var confirmaciones = 0;
+    await tester.pumpWidget(createWidgetUnderTest(
+      onConfirmPrint: (_, __) => confirmaciones++,
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+    await tester.pump();
+
+    expect(confirmaciones, equals(1));
   });
 }
