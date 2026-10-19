@@ -1,5 +1,11 @@
 # BALANZAS SOPORTADAS — Matriz de compatibilidad de indicadores reales
 
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 17025 / OIML R 76-1
+**Fuente:** Sistema BALANSOFT-WS
+
 | Versión | Fecha | Estado | Autor | Norma | Fuente |
 |---------|-------|--------|-------|-------|--------|
 | 1.0 | 2026-10-12 | Vigente | ENCARGADO BALANSOFT-WS | AGENTS.md v3.21 | `app/core/scale_parser.py`, `app/core/scale_hal.py`, manuales de protocolo públicos |

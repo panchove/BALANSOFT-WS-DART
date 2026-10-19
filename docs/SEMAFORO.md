@@ -1,3 +1,14 @@
+# semáforo
+
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+
+
 ```mermaid
 graph TD
     A([Vehículo se aproxima a la báscula]) --> B{¿Báscula en Cero y Despejada?}

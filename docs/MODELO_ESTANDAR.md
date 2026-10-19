@@ -1,3 +1,12 @@
+# modelo-estandar
+
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010, ISO/IEC 17025
+**Fuente:** Sistema BALANSOFT-WS
+
+
 ### Estatus de Transacciones
 
 * **Pendiente:** Pesaje de entrada realizado; esperando el pesaje de salida para completar el proceso.

@@ -46,9 +46,29 @@ SECRET_LEGACY=(
   "com.balansoft.sg.secureStorage"
 )
 
-BUNDLE="$ROOT/frontend/build/linux/x64/release/bundle"
-WSERVER_BIN="$ROOT/backend/dist/WServer"
-WSERVER_ICON="$ROOT/wserver_icon.jpeg"
+if [[ -d "$ROOT/src/frontend" ]]; then
+  FRONTEND_DIR="$ROOT/src/frontend"
+else
+  FRONTEND_DIR="$ROOT/frontend"
+fi
+
+BUNDLE="$FRONTEND_DIR/build/linux/x64/release/bundle"
+
+if [[ -f "$ROOT/src/backend/dist/WServer" ]]; then
+  WSERVER_BIN="$ROOT/src/backend/dist/WServer"
+elif [[ -f "$ROOT/backend/dist/WServer" ]]; then
+  WSERVER_BIN="$ROOT/backend/dist/WServer"
+else
+  WSERVER_BIN="$ROOT/src/backend/dist/WServer"
+fi
+
+if [[ -f "$ROOT/src/backend/assets/wserver_icon.jpeg" ]]; then
+  WSERVER_ICON="$ROOT/src/backend/assets/wserver_icon.jpeg"
+elif [[ -f "$ROOT/backend/assets/wserver_icon.jpeg" ]]; then
+  WSERVER_ICON="$ROOT/backend/assets/wserver_icon.jpeg"
+else
+  WSERVER_ICON="$ROOT/wserver_icon.jpeg"
+fi
 
 DBS_VIRGEN=("balansoft_ws" "balansoft_ws_local" "balansoft_ws_server")
 
@@ -301,7 +321,7 @@ BUILD_OK=1
 if [[ "$DO_BUILD" == "1" ]]; then
   info "Reconstruyendo bundle de release... "
   if [[ ! -x "$WSERVER_BIN" ]]; then
-    err "No existe el binario del WServer. Compílalo primero: backend/scripts/build_wserver.sh"
+    err "No existe el binario del WServer. Compílalo primero: src/backend/scripts/build_wserver.sh"
     BUILD_OK=0
   else
     # `flutter clean` borra .dart_tool y obliga a resolver dependencias (necesita
@@ -309,7 +329,7 @@ if [[ "$DO_BUILD" == "1" ]]; then
     # build incremental es mucho más rápido. Usa --clean si lo necesitas.
     set +e
     (
-      cd "$ROOT/frontend" || exit 1
+      cd "$FRONTEND_DIR" || exit 1
       if [[ "$CLEAN_BUILD" == "1" ]]; then
         flutter clean >/dev/null
       fi
@@ -320,8 +340,8 @@ if [[ "$DO_BUILD" == "1" ]]; then
 
     if [[ "$BUILD_RC" != "0" ]] || [[ ! -x "$BUNDLE/balansoft_ws" ]]; then
       err "Falló 'flutter build linux --release' (código $BUILD_RC)."
-      if [[ "$CLEAN_BUILD" == "0" ]] && [[ ! -f "$ROOT/frontend/.dart_tool/package_config.json" ]]; then
-        err "Faltan las dependencias: ejecuta 'flutter pub get' en frontend/ (revisa la red)."
+      if [[ "$CLEAN_BUILD" == "0" ]] && [[ ! -f "$FRONTEND_DIR/.dart_tool/package_config.json" ]]; then
+        err "Faltan las dependencias: ejecuta 'flutter pub get' en src/frontend/ (revisa la red)."
       else
         err "Prueba otra vez, o usa --no-build y valida con 'flutter run -d linux'."
       fi
@@ -355,7 +375,7 @@ if [[ "$DO_BUILD" == "1" && "$BUILD_OK" == "1" ]]; then
   echo "    $BUNDLE/balansoft_ws"
 elif [[ "$DO_BUILD" == "1" ]]; then
   echo "  Para dejar el bundle listo:"
-  echo "    cd $ROOT/frontend && flutter pub get && flutter build linux --release"
+  echo "    cd $FRONTEND_DIR && flutter pub get && flutter build linux --release"
   echo "    install -Dm755 $WSERVER_BIN $BUNDLE/WServer"
   echo "  (o vuelve a ejecutar este script)"
 else

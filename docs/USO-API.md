@@ -1,3 +1,14 @@
+# uso-api
+
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+
+
 # Integración del Software Cliente - Sistema de Licencias
 
 Explicación del flujo completo desde el lado del software cliente (basada en `docs/integracion-software-cliente.md`, que refleja el código de `app/api/validation.py` y del repo `Inventariodeproductos`).

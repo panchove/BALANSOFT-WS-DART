@@ -1,8 +1,10 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.7
-**Fecha:** 2026-10-14
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
 **Estado:** Vigente
+**Norma:** ISO/IEC 25010, ISO/IEC 17025
+**Fuente:** Sistema BALANSOFT-WS
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
 

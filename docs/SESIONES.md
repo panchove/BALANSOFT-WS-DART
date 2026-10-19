@@ -1,3 +1,14 @@
+# sesiones
+
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+
+
 # BALANSOFT-WS: Sesiones y Equipos de la Cuenta (RB-12)
 
 Modelo de **sesiones = dispositivos** del servidor central y el flujo de
@@ -12,26 +23,26 @@ del alcance.
 
 ## Encabezado editorial
 
-| Campo | Valor |
-|-------|-------|
-| Versión | 1.0 |
-| Fecha | 2026-10-13 |
-| Estado | Vigente |
-| Autor | Equipo BALANSOFT |
-| Norma | REQ-FN-NNN (funcional), REQ-NF-<área>-NNN (no funcional), UX-NNN (interacción) |
-| Fuente | `backend/app/api/v1/endpoints/servidor.py`, `backend/app/schemas_server.py`, `backend/balansoft-ws-server.sql`, `frontend/lib/domain/entities/sesion_equipo.dart`, `docs/MANEJO_DB.md` §13 |
+| Campo   | Valor                                                                                                                                                                                      |
+|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Versión | 1.0                                                                                                                                                                                        |
+| Fecha   | 2026-10-13                                                                                                                                                                                 |
+| Estado  | Vigente                                                                                                                                                                                    |
+| Autor   | Equipo BALANSOFT                                                                                                                                                                           |
+| Norma   | REQ-FN-NNN (funcional), REQ-NF-<área>-NNN (no funcional), UX-NNN (interacción)                                                                                                             |
+| Fuente  | `backend/app/api/v1/endpoints/servidor.py`, `backend/app/schemas_server.py`, `backend/balansoft-ws-server.sql`, `frontend/lib/domain/entities/sesion_equipo.dart`, `docs/MANEJO_DB.md` §13 |
 
 ---
 
 ## 1. Alcance y terminología
 
-| Término | Significado en WS |
-|---------|-------------------|
-| **Sesión** | Una **sesión abierta** de un dispositivo contra la API (`dispositivos` + `sesiones` en la BD del servidor). |
-| **Equipo** | Un dispositivo físico identificado por su `hardware_id` (fila de `dispositivos`). Una sesión pertenece a un equipo. |
-| **Titular / dueño / tutora** | El equipo al que quedó atada la licencia: `licencias.hardware_id`. Es el único que puede aprobar o rechazar a los demás. |
-| **Rol de dispositivo** | `SERVIDOR_LOCAL` (el titular) o `LOCAL` (operador). Decide si el equipo levanta su propio WServer. `docs/MANEJO_DB.md` §13.1. |
-| **Rol de sesión** | `ADMIN \| OPERADOR \| AUDITOR`. El rol con el que opera **esa sesión**, asignado al aprobar el equipo. |
+| Término                      | Significado en WS                                                                                                             |
+|------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| **Sesión**                   | Una **sesión abierta** de un dispositivo contra la API (`dispositivos` + `sesiones` en la BD del servidor).                   |
+| **Equipo**                   | Un dispositivo físico identificado por su `hardware_id` (fila de `dispositivos`). Una sesión pertenece a un equipo.           |
+| **Titular / dueño / tutora** | El equipo al que quedó atada la licencia: `licencias.hardware_id`. Es el único que puede aprobar o rechazar a los demás.      |
+| **Rol de dispositivo**       | `SERVIDOR_LOCAL` (el titular) o `LOCAL` (operador). Decide si el equipo levanta su propio WServer. `docs/MANEJO_DB.md` §13.1. |
+| **Rol de sesión**            | `ADMIN \| OPERADOR \| AUDITOR`. El rol con el que opera **esa sesión**, asignado al aprobar el equipo.                        |
 
 > Nota de nomenclatura: «Sesiones y Equipos» (navegación Flutter) es el listado
 > de **equipos de la cuenta**. No confundir con «Dispositivos de Campo», que en
@@ -51,23 +62,23 @@ consulta la API del central con la **credencial global** (`_serverToken`,
 obtenida en el `serverLogin` del login central-first) y la cuenta sale siempre
 del token, nunca de un parámetro del cliente (multi-tenancy).
 
-| Tabla (server) | Papel en RB-12 |
-|----------------|----------------|
+| Tabla (server) | Papel en RB-12                                                                       |
+|----------------|--------------------------------------------------------------------------------------|
 | `dispositivos` | Fila por equipo: `hardware_id`, `rol_dispositivo`, `rol_sesion`, `estado`, `activo`. |
-| `licencias` | `hardware_id` = titular; `max_equipos` / `max_sesiones` según tier. |
-| `sesiones` | Sesiones abiertas; se revocan al rechazar el equipo. |
-| `auditoria` | Registra `sesion_aprobada` / `sesion_rechazada` / `sesion_+rol`. |
-| `credenciales` | `rol_global` (ADMIN/…) de la credencial del servidor. |
+| `licencias`    | `hardware_id` = titular; `max_equipos` / `max_sesiones` según tier.                  |
+| `sesiones`     | Sesiones abiertas; se revocan al rechazar el equipo.                                 |
+| `auditoria`    | Registra `sesion_aprobada` / `sesion_rechazada` / `sesion_+rol`.                     |
+| `credenciales` | `rol_global` (ADMIN/…) de la credencial del servidor.                                |
 
 Columnas relevantes de `dispositivos` (migración plegada en
 `balansoft-ws-server.sql`):
 
-| Columna | Tipo | Semántica |
-|---------|------|-----------|
-| `estado` | `VARCHAR` `CHECK (estado IN ('PENDIENTE','APROBADO','RECHAZADO'))` | Estado de aprobación. **Las filas antiguas sin valor se leen como `APROBADO`** (`_estado_equipo`). |
-| `rol_sesion` | `VARCHAR` NULL, `CHECK (rol_sesion IN ('ADMIN','OPERADOR','AUDITOR'))` | Rol que tendrá la sesión. NULL mientras no se apruebe. |
-| `rol_dispositivo` | `TEXT` | `SERVIDOR_LOCAL` \| `LOCAL` (recalculado en cada login). |
-| `activo` | `BOOLEAN` | `false` en un equipo `PENDIENTE`/`RECHAZADO` (no consume cupo). |
+| Columna           | Tipo                                                                   | Semántica                                                                                          |
+|-------------------|------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `estado`          | `VARCHAR` `CHECK (estado IN ('PENDIENTE','APROBADO','RECHAZADO'))`     | Estado de aprobación. **Las filas antiguas sin valor se leen como `APROBADO`** (`_estado_equipo`). |
+| `rol_sesion`      | `VARCHAR` NULL, `CHECK (rol_sesion IN ('ADMIN','OPERADOR','AUDITOR'))` | Rol que tendrá la sesión. NULL mientras no se apruebe.                                             |
+| `rol_dispositivo` | `TEXT`                                                                 | `SERVIDOR_LOCAL` \| `LOCAL` (recalculado en cada login).                                           |
+| `activo`          | `BOOLEAN`                                                              | `false` en un equipo `PENDIENTE`/`RECHAZADO` (no consume cupo).                                    |
 
 ---
 
@@ -131,13 +142,13 @@ estado_inicial = PENDIENTE if (exige_aprobacion and not es_dueno) else APROBADO
 
 ## 5. Gates en el login (`POST /api/v1/auth/login`)
 
-| Momento | Comprobación | Respuesta |
-|---------|--------------|-----------|
-| Alta del equipo | estado calculado en `_dispositivo` | la fila se persiste **antes** de responder (si no, la tutora no la vería) |
-| Estado | `_estado_equipo(disp) != APROBADO` | `403` «pendiente de aprobación» o «rechazado por el administrador de la cuenta» |
-| Cupo de equipos (`DEMO`) | equipos activos > `licencia.max_equipos` | `403` «La licencia no autoriza más equipos para sincronizar» |
-| Cupo de sesiones | nº de sesiones activas ≥ `licencia.max_sesiones` | `403` «Límite de sesiones de la licencia alcanzado» |
-| Sync / push-pull | `get_server_credencial` **re-verifica** el estado en cada petición | `403` si el equipo fue rechazado después de abrir sesión |
+| Momento                  | Comprobación                                                       | Respuesta                                                                       |
+|--------------------------|--------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| Alta del equipo          | estado calculado en `_dispositivo`                                 | la fila se persiste **antes** de responder (si no, la tutora no la vería)       |
+| Estado                   | `_estado_equipo(disp) != APROBADO`                                 | `403` «pendiente de aprobación» o «rechazado por el administrador de la cuenta» |
+| Cupo de equipos (`DEMO`) | equipos activos > `licencia.max_equipos`                           | `403` «La licencia no autoriza más equipos para sincronizar»                    |
+| Cupo de sesiones         | nº de sesiones activas ≥ `licencia.max_sesiones`                   | `403` «Límite de sesiones de la licencia alcanzado»                             |
+| Sync / push-pull         | `get_server_credencial` **re-verifica** el estado en cada petición | `403` si el equipo fue rechazado después de abrir sesión                        |
 
 El 403 por pendiente se detecta en Flutter con
 `esErrorEquipoSinAprobar()` (`frontend/lib/core/utils/mensaje_error.dart`) para
@@ -185,14 +196,14 @@ sale **siempre** del token (`cred.id_cuenta`), no de un parámetro.
 { "estado": "APROBADO", "rol_sesion": "OPERADOR" }
 ```
 
-| Regla | Respuesta |
-|-------|-----------|
-| Aprobar sin `rol_sesion` (y sin rol previo) | `422` |
-| `estado` fuera de `APROBADO\|RECHAZADO`, o rol fuera de los 4 válidos | `422` (schema) |
-| Sin `estado` ni `rol_sesion` | `422` |
-| Equipo titular | `422` «El equipo titular de la licencia no puede modificarse» |
-| Equipo de otra cuenta | `404` (no se filtra su existencia) |
-| Credencial no ADMIN | `403` |
+| Regla                                                                 | Respuesta                                                     |
+|-----------------------------------------------------------------------|---------------------------------------------------------------|
+| Aprobar sin `rol_sesion` (y sin rol previo)                           | `422`                                                         |
+| `estado` fuera de `APROBADO\|RECHAZADO`, o rol fuera de los 4 válidos | `422` (schema)                                                |
+| Sin `estado` ni `rol_sesion`                                          | `422`                                                         |
+| Equipo titular                                                        | `422` «El equipo titular de la licencia no puede modificarse» |
+| Equipo de otra cuenta                                                 | `404` (no se filtra su existencia)                            |
+| Credencial no ADMIN                                                   | `403`                                                         |
 
 Aprobar pone `activo=true`; rechazar lo pone `false` y **revoca** las sesiones
 abiertas. Cada llamada deja traza en `auditoria`

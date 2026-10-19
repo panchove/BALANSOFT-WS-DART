@@ -2,35 +2,36 @@
   "$schema": "https://opencode.ai/schema/opencode.json",
   "name": "BALANSOFT-WS",
   "description": "Sistema de pesaje industrial multi-empresa: FastAPI + Flutter + WServer runtime + HAL básculas",
-  "version": "3.25",
+  "version": "0.4.2-dev.56",
   "language": "es",
   "instructions": [
     "AGENTS.md",
-    ".agents/rules/iso-iec-compliance.md",
-    ".agents/rules/industrial-weighing-safety.md",
-    ".agents/rules/hardware-io-concurrency.md",
-    ".agents/rules/ticket-layout-parity.md"
+    ".opencode/rules/bls-ws-iso-iec-compliance.md",
+    ".opencode/rules/bls-ws-industrial-weighing-safety.md",
+    ".opencode/rules/bls-ws-hardware-io-concurrency.md",
+    ".opencode/rules/bls-ws-ticket-layout-parity.md"
   ],
   "mcpServers": {
     "balansoft-hardware": {
       "command": "python3",
-      "args": ["backend/scripts/mcp_hardware_server.py"],
+      "args": ["src/backend/scripts/mcp_hardware_server.py"],
       "env": {
-        "PYTHONPATH": "backend"
+        "PYTHONPATH": "src/backend"
       }
     }
   },
   "scripts": {
-    "backend:test": "cd backend && .venv/bin/python -m pytest -q -m 'not e2e'",
-    "backend:test-e2e": "cd backend && .venv/bin/python -m pytest tests/e2e",
-    "backend:lint": "cd backend && .venv/bin/ruff check app tests",
-    "backend:dev": "cd backend && .venv/bin/uvicorn app.main:app --port 8000 --reload",
-    "backend:mcp": "cd backend && .venv/bin/python scripts/mcp_hardware_server.py",
-    "frontend:analyze": "cd frontend && flutter analyze",
-    "frontend:test": "cd frontend && flutter test",
-    "frontend:e2e-ui": "cd frontend && flutter test integration_test/pesaje_flow_test.dart -d linux",
-    "db:verify": "cd backend && ./scripts/verify.sh",
-    "db:reset": "cd backend && ./scripts/reset_db.sh"
+    "backend:test": "cd src/backend && uv run pytest -q -m 'not e2e'",
+    "backend:test-e2e": "cd src/backend && uv run pytest tests/e2e -q",
+    "backend:lint": "cd src/backend && uv run ruff check app tests",
+    "backend:typecheck": "cd src/backend && uv run mypy tests/",
+    "backend:dev": "cd src/backend && uv run uvicorn app.main:app --port 8000 --reload",
+    "backend:mcp": "cd src/backend && uv run python scripts/mcp_hardware_server.py",
+    "frontend:analyze": "cd src/frontend && flutter analyze",
+    "frontend:test": "cd src/frontend && flutter test",
+    "frontend:e2e-ui": "cd src/frontend && flutter test integration_test/pesaje_flow_test.dart -d linux",
+    "db:verify": "cd src/backend && ./scripts/verify.sh",
+    "db:reset": "cd src/backend && ./scripts/reset_db.sh"
   },
   "domain": {
     "weighing": {

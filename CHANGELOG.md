@@ -8,28 +8,109 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ---
 
-## Historial de versiones
+## [v0.4.2-dev.56] — 2026-10-19
 
-- **v1.4.1** — 2026-10-06 — **Eliminado el asistente de instalación de Flutter.** El rol de la estación lo decide ahora el **instalador** (`BALANSOFT-INSTALLER`, repo aparte) y queda fijo en `config.json` (exactamente `api_base_url` + `rol`, sin degradación ni fallback). La app WS arranca **siempre en `/login`**: `_rutaInicial()` ya no reanuda ningún wizard (fuera `/setup_preferences`, `/mode_selection`, `/setup`, `/db_config`, `/activation`, `/worker_connection` y `/company_setup`). El nuevo `frontend/lib/core/config/station_config.dart` lee el `config.json` — override de usuario `~/.config/balansoftws/config.json` (0600, prioritario) sobre el de sistema (`/etc/balansoftws` en Linux, `%ProgramData%\BalansoftWS` en Windows) — con **error duro** si el archivo es inválido y **migración única** del legado de preferencias del wizard; si no hay archivo ni legado, `main()` muestra `PantallaErrorConfig` y la app no opera. `AppConfig` pierde las banderas de instalación (`modoEstacion`, `licenciaVerificada`, `esTitularLicencia`, `empresaSetupCapturado`, `empresaConfigPendiente`, etc.) y gana `rol`/`configError`/`instalacionValida`; `onWindowClose` solo detiene el WServer si `esServidor`; **Conexiones** ahora guarda la URL con `StationConfigWriter` **conservando el rol**. Se conservan `CompanySetupForm` y `CompanyDraft` (el borrador lo aplica `AuthRepository.login()` al primer `ADMIN`). Borrados: `presentation/screens/setup/`, `activacion_repository.dart`, `cuenta_activada.dart` y sus tests (+ `instalacion_estacion_test.dart`). Nuevos ~25 tests en `test/unit/station_config_test.dart`; frontend **234/234** unit/widget y **1/1** E2E de UI en verde; `flutter analyze` limpio; backend sin cambios (457/457). E2E seed usa `AppConfig.rol = StationRole.servidor`. Docs: `MANEJO_DB.md §9.6/§13`, `I18N_Y_ONBOARDING.md`, `AGENTS.md`.
-- **v1.4.0** — 2026-10-02 — **CI en verde por primera vez (4/4 jobs).** El job `Frontend` estaba rojo desde el commit `30eff14` y el job `E2E Flutter` **nunca había corrido con éxito**: ambos fallos estaban encadenados y el segundo estaba enmascarado porque `Frontend` fallaba antes y dejaba `E2E Flutter` en `skipped`. Al resolver el warning del análisis aparecieron dos defectos reales: (1) el workflow **no instalaba `libsecret-1-dev`**, dependencia obligatoria de `flutter_secure_storage_linux`, por lo que la compilación de Linux moría con «Unable to generate build files» antes de lanzar un solo test; (2) un **desbordamiento de 4,3 px** en el desplegable «Tipo de Tercero», que al compartir fila con «Razón Social» desborda su Row interno. Se resolvió con `isExpanded: true`, el mismo tratamiento que ya tenía el campo hermano «Medida» del mismo archivo. Ninguno de los dos era cosmético: el primero hacía que el E2E de UI fuera inejecutable en CI, y el segundo era una excepción que hacía fallar el test.
-- **v1.3.9** — 2026-10-02 — Corrige el job `Frontend` de CI, que estaba **en rojo**: `flutter analyze` trata los warnings como error (código de salida 1), y una variable muerta (`esRojo`) en `scale_monitor_widget.dart` tumbaba el análisis estático completo desde el commit `30eff14`. La documentación lo reportaba como «warning preexistente» sin advertir que rompía la build. La variable no se usaba (el ternario de color resuelve con `esVerde`/`esAmarillo` y cae a `danger` por abandono), así que se eliminó sin cambio de comportamiento. `flutter analyze` ahora da `No issues found!` y los 158 tests unit/widget pasan.
-- **v1.3.8** — 2026-10-02 — Cierre de la columna inerte y corrección de H14. `multi_despacho_recepcion` queda **documentada como reservada** en `MANEJO_DB.md` §6.3 con su estado real (inerte, cero consultas, sin semántica definida) y cuatro reglas explícitas para quien la toque: no usarla, no borrarla del esquema, **no quitarla del round-trip de sincronización** y no implementarla sin decisión de negocio. Se descartó quitar el campo del sync pese a que el round-trip es technically innecesario: ahorraría ~35 bytes por boleto (~17,5 MB acumulados en una década) a cambio de escribir `FALSE` encima si alguna estación tuviera el flag en `true` — una pérdida de dato real a cambio de ruido estadístico. **H14 (Redoc) se cierra de verdad**: estaba marcada como hecha, pero `.env.plantilla` traía `API_DOCS_ENABLED=false`, así que toda estación instalada respondía **404 en `/docs` y `/redoc`** mientras `/openapi.json` publicaba las 82 rutas sin hindrance (`openapi_url` es independiente de la bandera). Se pagaba la ausencia de documentación sin obtener seguridad. Ahora la plantilla habilita la documentación y la exposición queda **explícita y documentada** (§11.4), con la recomendación de que cualquier restricción futura se haga **autenticando** esas rutas, no reactivando la bandera. Verificado en ejecución: `/redoc` 200 (HTML), `/docs` 200, `/openapi.json` 200 (136 KB). El cambio solo afecta a instalaciones nuevas. De paso se corrigió el conteo de tablas del §6 de MANEJO_DB (22 → 24), donde la corrección D6 no había llegado.
-- **v1.3.7** — 2026-10-02 — P2c (concurrencia y costo real de autenticación) y P2b cerrado por falsación. `scripts/benchmark_concurrencia.py` mide los 11 endpoints contra un servidor real con **JWT auténtico y un solo worker**, igual que la estación (`wserver.py` lanza `uvicorn.run` sin `workers`). El sobrecoste real de JWT + TCP es **~20 ms**, no los 5-15 ms que se suponía; `/weighing/list` queda en 39,8 ms p50 con un operador y **alcanza su umbral de 200 ms p95 con 10 operadores concurrentes**. Bajo saturación el rendimiento se plafona en **~40-45 req/s** y la latencia crece linealmente (1133 ms p50 con 50 operadores), aunque **sin un solo 5xx**: la estación degrada con latencia, no con caídas. Se investigó `multi_despacho_recepcion` y resultó ser una **columna inerte** — se persiste en el esquema, los modelos, el create y la sincronización, y Flutter la copia, pero **ninguna consulta la lee**, ninguna UI la expone y ningún documento define qué debe hacer. Marcados 10 000 boletos con el flag, los tiempos no se movieron (`reports/daily` 4,0→4,6 ms; `reports/monthly` 3,9→3,9 ms), lo que demuestra que la degradación que se temía no puede ocurrir porque la feature no está implementada. La columna **no se borra ni se implementa**: borrarla rompe clientes y sincronizaciones, e implementarla requiere una decisión de negocio sobre la semántica del multi-despacho que no está tomada. Queda documentado en `docs/evidencia/volumen-analisis.md` §7.
-- **v1.3.6** — 2026-10-02 — P2 (prueba de volumen) cerrado, con **un bug real de producción corregido**: `/weighing/list` y `/weighing/pendientes` llamaban a `_enriquecer_pesaje_ticket` **por registro**, y esa función (pensada para un boleto: ticket impreso, PDF, cierre) lanza hasta 10 consultas. Una página de 100 boletos costaba ~1 000 idas y vueltas a PostgreSQL; medido con 50 000 boletos, ambos endpoints rondaban 450 ms p50, y con `limit=1000` se habrían ido a ~10 000 consultas, bloqueando el event loop del WServer. No era un problema de índices: el SQL del listado era 0,6 ms y el `COUNT` de paginación 4,7 ms de los 450 ms. Se agrega `_enriquecer_pesajes_lista`, que resuelve los catálogos **una vez por página** (7 consultas, constante respecto al `limit`): **445 → 20 ms** y **462 → 13 ms**, con los 11 escenarios medidos dentro de umbral. El ticket AVANZADO no cambia: sigue usando el enriquecimiento por boleto. Efecto secundario favorable: la versión por lotes filtra todos los catálogos por `id_empresa` (antes solo el camión y el kardex). Se añaden `scripts/seed_volumen.py` (50 000 boletos reproducibles en `balansoft_ws_volumen`, con series de numeración y 10 invariantes de negocio verificados), `scripts/benchmark_volumen.py` (11 endpoints con p50/p95/p99 y umbrales) y 3 tests de regresión (`TestListadoNoEsNMasUno`) verificados en negativo: reintroducir el N+1 los hace fallar. **No** se creó la migración de índices prevista, porque la hipótesis inicial (falta un índice compuesto por `id_empresa`) no se confirmó con datos. Evidencia en `docs/evidencia/volumen-analisis.md`.
-- **v1.3.5** — 2026-10-01 — H6 (andamiaje): observabilidad lista para usar sobre las métricas que el backend ya exponía. `backend/deploy/observability/` con la configuración de scrape de Prometheus, 8 reglas de alerta (caída de la API, latencia p95 alta y crítica, 5xx, 4xx, errores de licencia, estación sin uso, pesajes detenidos), Alertmanager con receptor vacío en desarrollo y silenciado de síntomas cuando la API está caída, y un dashboard de Grafana provisionado de 7 paneles (tráfico por status y por endpoint, p50/p95/p99 de latencia, errores de licencia, pesajes por estatus, sesiones activas y disponibilidad). Documento vigente `docs/OBSERVABILIDAD.md`. La suite nueva de `tests/test_monitoring.py` verifica que el andamiaje esté completo, que los YAML y el JSON sean válidos y que ninguna alerta ni panel referencie una métrica que el backend no expone (una alerta que nunca dispara es peor que no tenerla). Sin métricas nuevas y sin tocar la lógica de negocio.
-- **v1.3.4** — 2026-10-01 — H2b cerrado: E2E de UI del flujo real de pesaje (`frontend/integration_test/pesaje_flow_test.dart`): login → Reportes → Entradas → entrada → salida → verificación del boleto `CERRADO` en el historial, con dos modos (seed hermético para CI y estación instalada con `--dart-define`). Se añade `backend/scripts/e2e_flutter.sh` (`up`/`down`/`status`) que crea una BD aislada, aplica el esquema y las migraciones, siembra empresa y admin sin báscula, y levanta el stub firmante del LM y la API; y el job `e2e-flutter` en CI con `xvfb`. Keys estables para el test (`menu_*`, `boleto_pendiente_*`, `boleto_fila_*`, `capturar_peso_button`; el modo seed no escribe en las preferencias reales) y dos correcciones de bugs reales detectados por el E2E: sin báscula el peso tecleado no se podía fijar (botón **Capturar peso** deshabilitado y confirmación saltada) y `AutocompleteCreatable` llamaba `setState` durante el build.
-- **v1.3.3** — 2026-10-01 — H2 cerrado: stub del License Manager firmante con Ed25519 (`backend/scripts/lm_stub.py`, modos `valid`/`invalid`/`expired`/`tamper`/`unreachable`), 34 pruebas E2E reales (`backend/tests/e2e/`: contrato firmado, flujo de licencia por API y ciclo offline push/status/pull) y job `e2e` en CI con claves generadas en el runner. El E2E descubrió y corrigió un bug real: `POST /api/v1/sync/push` insertaba fechas con offset en columnas `TIMESTAMP WITHOUT TIME ZONE` (asyncpg `DataError`, lote caído); ahora normaliza a UTC naive.
-- **v1.3.2** — 2026-10-01 — Tanda `/update-all`: auditoría con volcado completo de la tabla `auditoria` (usuario, IP, entidad, detalle, timestamp UTC) desde la UI; sincronización de Ajustes conectada al `SyncBloc`; paginación de catálogos; compresión de fotos; logging JSON rotado; CI en GitHub Actions; validación fail-fast de entorno de producción.
-- **v1.3.1** — 2026-09-30 — Pesaje: conversión de unidades (kg → Litros/Galones/Toneladas/Unidades) en DATOS ADICIONALES, captura guiada de dos pesos con remolque y báscula por defecto separada para entradas y salidas.
-- **v1.3.0** — 2026-09-30 — Navegación y atajos alineados con `docs/NAV.md` y `docs/INPUTS_MAP.md`: entradas faltantes en el menú (pesajes, ajustes de inventario, auditoría, ayuda), grupos colapsables, atajos de función y búsquedas dirigidas en la paleta.
-- **v1.2.9** — 2026-09-30 — Ajustes: "Diagnóstico del Sistema" propio (API local, BD, licencia, sincronización y versión) en lugar del asistente de instalación.
-- **v1.2.8** — 2026-09-29 — Reportes de boleto (PDF/TXT): el AVANZADO muestra todos los campos del formulario y el BÁSICO marca el peso escrito manualmente.
-- **v1.2.7** — 2026-09-28 — `reset_total.sh` ya respalda las BD (`pg_dump -Fc`) antes de borrarlas; recuperada la operación demo de la estación (camiones/boletos) vía seed.
-- **v1.2.6** — 2026-09-28 — Datos del camión en el pesaje con nombre (nunca UUID) y fotos con aviso de fallo.
-- **v1.2.5** — 2026-09-28 — Navegación Android: bottom bar por rol (sin sidebar) y arranque en teléfono.
-- **v1.2.4** — 2026-09-28 — Adiós al bucle infinito de "sincronizando" tras POST/navegación.
-- **v1.2.3** — 2026-09-28 — Encabezado horizontal del boleto, export respeta PrinterPreset, fix refresh infinito.
-- **v1.2.2** — 2026-09-28 — Código interno/personalizado único por empresa (migración 018).
+### Gobernanza Agéntica y Homologación ISO/IEC 25010 / 27001 / 42001 (AIMS)
+- Reestructuración de la topología agéntica del repositorio: definición de un único agente orquestador principal (`bls-ws-lead-architect`, `mode: primary`) y 11 subagentes especializados (`mode: subagent`) con control de acceso basado en roles (RBAC) y principio de menor privilegio (`deny edit/write` para `bls-ws-test-qa`).
+- Incorporación de los subagentes especializados:
+  - `bls-ws-hardware-specialist`: control de protocolos de báscula (Toledo, Yaohua, Rice Lake, Keli, MT-SICS), canales serial/TCP/BLE y paridad de tickets canónicos de 5 columnas (ESC/POS y ESC/P matricial).
+  - `bls-ws-mermaid-diagrammer`: modelado visual estricto en Mermaid para diagramas de flujo de pesaje, secuencias C4, entidad-relación y máquinas de estado.
+- Adopción formal de la norma internacional **ISO/IEC 42001:2023** (Sistemas de Gestión de Inteligencia Artificial - AIMS) para la gobernanza del ciclo de vida de los agentes, trazabilidad y salvaguarda metrológica (prohibición de inferencia probabilística sobre pesajes legales).
+- Saneamiento del catálogo de skills en `.opencode/skills/`: eliminación de 16 subarchivos no indexables sin frontmatter YAML, purga de 8 scripts huérfanos sueltos e implementación de 14 skills estandarizados con rutas canónicas a `src/backend/` y `src/frontend/` sobre el stack `uv` (incluyendo `bls-ws-mssql.md` para SQL Server Fase 1).
+- Homologación de rutas e instrucciones en `opencode.json` y `.opencode/mcp_config.json`.
+- Normalización editorial al 100% de los 23 documentos `.md` de `docs/` bajo la plantilla de gobernanza ISO y versionado unificado `0.4.2-dev.56`.
+- Documentación formal de auditoría y trazabilidad en `docs/AGENTS_SKILLS_ISO_AUDIT.md`.
+
+---
+
+## [v1.4.1] — 2026-10-06
+
+### Eliminado el asistente de instalación de Flutter
+- El rol de la estación lo decide ahora el **instalador** (`BALANSOFT-INSTALLER`, repo aparte) y queda fijo en `config.json` (exactamente `api_base_url` + `rol`, sin degradación ni fallback).
+- La app WS arranca **siempre en `/login`**: `_rutaInicial()` ya no reanuda ningún wizard (fuera `/setup_preferences`, `/mode_selection`, `/setup`, `/db_config`, `/activation`, `/worker_connection` y `/company_setup`).
+- El nuevo `frontend/lib/core/config/station_config.dart` lee el `config.json` — override de usuario `~/.config/balansoftws/config.json` (0600, prioritario) sobre el de sistema (`/etc/balansoftws` en Linux, `%ProgramData%\BalansoftWS` en Windows) — con **error duro** si el archivo es inválido y **migración única** del legado de preferencias del wizard; si no hay archivo ni legado, `main()` muestra `PantallaErrorConfig` y la app no opera.
+- `AppConfig` pierde las banderas de instalación (`modoEstacion`, `licenciaVerificada`, `esTitularLicencia`, `empresaSetupCapturado`, `empresaConfigPendiente`, etc.) y gana `rol`/`configError`/`instalacionValida`; `onWindowClose` solo detiene el WServer si `esServidor`.
+- **Conexiones** ahora guarda la URL con `StationConfigWriter` **conservando el rol**. Se conservan `CompanySetupForm` y `CompanyDraft` (el borrador lo aplica `AuthRepository.login()` al primer `ADMIN`).
+- Borrados: `presentation/screens/setup/`, `activacion_repository.dart`, `cuenta_activada.dart` y sus tests (+ `instalacion_estacion_test.dart`). Nuevos ~25 tests en `test/unit/station_config_test.dart`; frontend **234/234** unit/widget y **1/1** E2E de UI en verde; `flutter analyze` limpio; backend sin cambios (457/457). E2E seed usa `AppConfig.rol = StationRole.servidor`. Docs: `MANEJO_DB.md §9.6/§13`, `I18N_Y_ONBOARDING.md`, `AGENTS.md`.
+
+---
+
+## [v1.4.0] — 2026-10-02
+
+### CI en verde por primera vez (4/4 jobs)
+- El job `Frontend` estaba rojo desde el commit `30eff14` y el job `E2E Flutter` **nunca había corrido con éxito**: ambos fallos estaban encadenados y el segundo estaba enmascarado porque `Frontend` fallaba antes y dejaba `E2E Flutter` en `skipped`.
+- Al resolver el warning del análisis aparecieron dos defectos reales:
+  1. El workflow **no instalaba `libsecret-1-dev`**, dependencia obligatoria de `flutter_secure_storage_linux`, por lo que la compilación de Linux moría con «Unable to generate build files» antes de lanzar un solo test.
+  2. Un **desbordamiento de 4,3 px** en el desplegable «Tipo de Tercero», que al compartir fila con «Razón Social» desborda su Row interno. Se resolvió con `isExpanded: true`, el mismo tratamiento que ya tenía el campo hermano «Medida» del mismo archivo.
+- Ninguno de los dos era cosmético: el primero hacía que el E2E de UI fuera inejecutable en CI, y el segundo era una excepción que hacía fallar el test.
+
+---
+
+## [v1.3.9] — 2026-10-02
+
+### Corrección del análisis de Frontend en CI
+- Corrige el job `Frontend` de CI, que estaba **en rojo**: `flutter analyze` trata los warnings como error (código de salida 1), y una variable muerta (`esRojo`) en `scale_monitor_widget.dart` tumbaba el análisis estático completo desde el commit `30eff14`.
+- La documentación lo reportaba como «warning preexistente» sin advertir que rompía la build. La variable no se usaba (el ternario de color resuelve con `esVerde`/`esAmarillo` y cae a `danger` por abandono), así que se eliminó sin cambio de comportamiento. `flutter analyze` ahora da `No issues found!` y los 158 tests unit/widget pasan.
+
+---
+
+## [v1.3.8] — 2026-10-02
+
+### Cierre de columna inerte y corrección H14
+- `multi_despacho_recepcion` queda **documentada como reservada** en `MANEJO_DB.md` §6.3 con su estado real (inerte, cero consultas, sin semántica definida) y cuatro reglas explícitas para quien la toque: no usarla, no borrarla del esquema, **no quitarla del round-trip de sincronización** y no implementarla sin decisión de negocio.
+- **H14 (Redoc) se cierra de verdad**: estaba marcada como hecha, pero `.env.plantilla` traía `API_DOCS_ENABLED=false`, así que toda estación instalada respondía **404 en `/docs` y `/redoc`** mientras `/openapi.json` publicaba las 82 rutas sin hindrance (`openapi_url` es independiente de la bandera).
+- Ahora la plantilla habilita la documentación y la exposición queda **explícita y documentada** (§11.4), con la recomendación de que cualquier restricción futura se haga **autenticando** esas rutas, no reactivando la bandera. Verificado en ejecución: `/redoc` 200 (HTML), `/docs` 200, `/openapi.json` 200 (136 KB). De paso se corrigió el conteo de tablas del §6 de MANEJO_DB (22 → 24).
+
+---
+
+## [v1.3.7] — 2026-10-02
+
+### P2c (Concurrencia y costo real de autenticación) y P2b cerrado por falsación
+- `scripts/benchmark_concurrencia.py` mide los 11 endpoints contra un servidor real con **JWT auténtico y un solo worker**, igual que la estación (`wserver.py` lanza `uvicorn.run` sin `workers`).
+- El sobrecoste real de JWT + TCP es **~20 ms**, no los 5-15 ms que se suponía; `/weighing/list` queda en 39,8 ms p50 con un operador y **alcanza su umbral de 200 ms p95 con 10 operadores concurrentes**. Bajo saturación el rendimiento se plafona en **~40-45 req/s** y la latencia crece linealmente (1133 ms p50 con 50 operadores), aunque **sin un solo 5xx**: la estación degrada con latencia, no con caídas.
+- Se investigó `multi_despacho_recepcion` y resultó ser una **columna inerte** — se persiste en el esquema, los modelos, el create y la sincronización, y Flutter la copia, pero **ninguna consulta la lee**, ninguna UI la expone y ningún documento define qué debe hacer. Marcados 10 000 boletos con el flag, los tiempos no se movieron (`reports/daily` 4,0→4,6 ms; `reports/monthly` 3,9→3,9 ms). Queda documentado en `docs/evidencia/volumen-analisis.md` §7.
+
+---
+
+## [v1.3.6] — 2026-10-02
+
+### P2 (Prueba de volumen) cerrado y corrección de N+1
+- `/weighing/list` y `/weighing/pendientes` llamaban a `_enriquecer_pesaje_ticket` **por registro**, y esa función lanza hasta 10 consultas. Una página de 100 boletos costaba ~1 000 idas y vueltas a PostgreSQL; medido con 50 000 boletos, ambos endpoints rondaban 450 ms p50.
+- Se agrega `_enriquecer_pesajes_lista`, que resuelve los catálogos **una vez por página** (7 consultas, constante respecto al `limit`): **445 → 20 ms** y **462 → 13 ms**, con los 11 escenarios medidos dentro de umbral.
+- Se añaden `scripts/seed_volumen.py` (50 000 boletos reproducibles en `balansoft_ws_volumen`), `scripts/benchmark_volumen.py` (11 endpoints con p50/p95/p99 y umbrales) y 3 tests de regresión (`TestListadoNoEsNMasUno`). Evidencia en `docs/evidencia/volumen-analisis.md`.
+
+---
+
+## [v1.3.5] — 2026-10-01
+
+### H6 (Andamiaje de Observabilidad)
+- Observabilidad lista para usar sobre las métricas que el backend ya exponía. `backend/deploy/observability/` con configuración de scrape de Prometheus, 8 reglas de alerta (caída de API, latencia p95 alta/crítica, 5xx, 4xx, errores de licencia, etc.), Alertmanager y dashboard de Grafana provisionado de 7 paneles.
+- Documento vigente `docs/OBSERVABILIDAD.md`. Suite nueva de `tests/test_monitoring.py` verifica que el andamiaje esté completo y sin referencias a métricas inexistentes.
+
+---
+
+## [v1.3.4] — 2026-10-01
+
+### H2b cerrado: E2E de UI de flujo real de pesaje
+- E2E de UI del flujo real de pesaje (`frontend/integration_test/pesaje_flow_test.dart`): login → Reportes → Entradas → entrada → salida → verificación del boleto `CERRADO` en el historial.
+- Se añade `backend/scripts/e2e_flutter.sh` (`up`/`down`/`status`) que levanta el entorno hermético con BD aislada y stub del LM, y el job `e2e-flutter` en CI con `xvfb`.
+- Correcciones de bugs reales detectados por el E2E: sin báscula el peso manual no se podía fijar (botón **Capturar peso** deshabilitado) y `AutocompleteCreatable` llamaba `setState` durante el build.
+
+---
+
+## [v1.3.3] — 2026-10-01
+
+### H2 cerrado: Stub del License Manager y pruebas E2E
+- Stub del License Manager firmante con Ed25519 (`backend/scripts/lm_stub.py`, modos `valid`/`invalid`/`expired`/`tamper`/`unreachable`), 34 pruebas E2E reales (`backend/tests/e2e/`: contrato firmado, flujo de licencia por API y ciclo offline push/status/pull) y job `e2e` en CI con claves generadas en el runner.
+- Corrección de bug real: `POST /api/v1/sync/push` insertaba fechas con offset en columnas `TIMESTAMP WITHOUT TIME ZONE` (asyncpg `DataError`); ahora normaliza a UTC naive.
+
+---
+
+## [v1.3.2] — 2026-10-01
+
+### Auditoría completa y mejoras operativas
+- Auditoría con volcado completo de la tabla `auditoria` (usuario, IP, entidad, detalle, timestamp UTC) desde la UI.
+- Sincronización de Ajustes conectada al `SyncBloc`, paginación de catálogos, compresión de fotos, logging JSON rotado y validación fail-fast de entorno de producción.
 
 ---
 
@@ -506,7 +587,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [v1.1.0] — 2026-09-11
 
-> Iteración de cierre según `ACTUAR.md` (B1–B6 y M1–M4). Frontend verificado:
+> Iteración de cierre según `TODO.md` (B1–B6 y M1–M4). Frontend verificado:
 > `flutter test` (52/52) ✓, `flutter analyze` ✓ y `flutter build linux --release` ✓.
 > Pendiente de entorno con PostgreSQL: `uv run pytest -q` (backend) y smoke test.
 

@@ -1,5 +1,11 @@
 # Análisis de volumen P2 — 50k boletos
 
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010 / ISO/IEC 17025
+**Fuente:** Sistema BALANSOFT-WS
+
 **Fecha**: 2026-10-02
 **Estado**: cerrado
 **Base**: `balansoft_ws_volumen` (37 MB, 50 000 boletos + 8 470 asientos de kardex)

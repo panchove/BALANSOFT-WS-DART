@@ -1,9 +1,20 @@
+# observabilidad
+
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
+**Estado:** Vigente
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
+
+
 # Observabilidad de BALANSOFT-WS
 
 Métricas de la estación y del servidor central: qué expone el backend, cómo se
 consume y qué alertas hay. Documento vigente del alcance.
 
-**Ver también**: [`backend/deploy/observability/README.md`](../backend/deploy/observability/README.md) (cómo levantar el stack) y `app/core/monitoring.py` (implementación).
+**Ver también**: [`backend/deploy/observability/README.md`](src/backend/deploy/observability/README.md) (cómo levantar el stack) y `app/core/monitoring.py` (implementación).
 
 ---
 

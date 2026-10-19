@@ -1,8 +1,10 @@
 # BALANSOFT-WS: Internacionalización (es/en/pt) y Onboarding de Primera Instalación
 
-**Versión:** 1.2
-**Fecha:** 2026-09-25
+**Versión:** 0.4.2-dev.56
+**Fecha:** 2026-10-19
 **Estado:** Vigente
+**Norma:** ISO/IEC 25010
+**Fuente:** Sistema BALANSOFT-WS
 **Autor:** Equipo BALANSOFT
 **Norma:** REQ-FN-NNN (funcional), REQ-NF-<área>-NNN (no funcional), UX-NNN (interacción)
 **Fuente:** `backend/app/core/i18n.py`, `frontend/lib/core/i18n/`, `backend/app/api/v1/endpoints/empresa.py`, `backend/app/api/v1/endpoints/servidor.py`, `docs/MANEJO_DB.md` §9.6 y §13
