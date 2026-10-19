@@ -33,7 +33,6 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
     ('Administrador', 'ADMIN'),
     ('Operador', 'OPERADOR'),
     ('Auditor', 'AUDITOR'),
-    ('Trabajador', 'TRABAJADOR'),
   ];
 
   @override
@@ -374,7 +373,6 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
     ('Administrador', 'configuración total del sistema, catálogos, usuarios, anulaciones y peso manual', 'ADMIN'),
     ('Operador', 'entrada y salida de pesajes, catálogos operativos e impresión de tickets', 'OPERADOR'),
     ('Auditor', 'consulta de boletos, catálogos y reportes; sin edición', 'AUDITOR'),
-    ('Trabajador', 'consulta básica de inicio autorizada', 'TRABAJADOR'),
   ];
 
   static String _abreviarRol(String nombre, String codigo) {
@@ -382,7 +380,6 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
       'ADMIN' => 'Admin',
       'OPERADOR' => 'Operador',
       'AUDITOR' => 'Auditor',
-      'TRABAJADOR' => 'Trabajador',
       _ => codigo,
     };
   }

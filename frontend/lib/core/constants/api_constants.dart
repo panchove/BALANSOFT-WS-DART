@@ -127,6 +127,9 @@ class ApiConstants {
   static const String usuarios = '$apiPrefix/usuarios';
   static String usuario(String id) => '$apiPrefix/usuarios/$id';
 
+  // Llaves de activación de un solo uso (estaciones OPERADOR).
+  static const String llavesActivacion = '$apiPrefix/activacion/llaves';
+
   // Sync de usuarios (cola local -> servidor central)
   static const String syncUsuariosPendientes = '$apiPrefix/sync/usuarios/pendientes';
   static const String syncUsuariosEntregados = '$apiPrefix/sync/usuarios/entregados';

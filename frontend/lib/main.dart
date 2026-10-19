@@ -54,6 +54,11 @@ void main() async {
     // El manejador de ventana DEBE inicializarse antes de runApp para que
     // funcionen los atajos F9 (maximizar/restaurar) y F11 (pantalla completa).
     await windowManager.ensureInitialized();
+    // El título de la ventana lo fija el runner nativo al crearla
+    // (`MaterialApp.title` **no** lo cambia en escritorio), así que se vuelve a
+    // poner aquí: el runner lleva el nombre del binario, no el de la estación
+    // (REQ-FN-020).
+    await windowManager.setTitle(AppConfig.windowTitle);
     await windowManager.setPreventClose(true);
     // La estación arranca maximizada (el operador no debe redimensionar).
     // El `center: true` de las opciones se aplica al mostrar la ventana, así
@@ -80,6 +85,15 @@ void main() async {
     runApp(PantallaErrorConfig(error: AppConfig.configError));
     return;
   }
+
+  // Arranque automático del WServer activado por defecto: la API de la
+  // estación debe estar viva aunque nadie abra la app (Ajustes → WServer). Se
+  // materializa sin esperar, para no retrasar el arranque, y solo en la
+  // estación SERVIDOR: el OPERADOR es cliente delgado de la titular.
+  if (AppConfig.esServidor && AppConfig.wserverAutostart) {
+    unawaited(WServerManager.asegurarAutostart());
+  }
+
   await themeController.load();
   await di.init();
   localeController = di.sl<LocaleController>();
@@ -211,14 +225,13 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
       final salir = await _confirmarCierreConDatos();
       if (salir != true) return;
     }
-    // Solo la estación SERVIDOR gestiona el WServer (el TRABAJADOR es cliente
+    // Solo la estación SERVIDOR gestiona el WServer (el OPERADOR es cliente
     // delgado y jamás levanta backend local): no tiene nada que detener.
+    // Al cerrar la ventana se detiene únicamente el proceso lanzado por esta
+    // app; el servicio del sistema (systemd/tarea programada) sigue corriendo
+    // para que las estaciones OPERADOR de la LAN no pierdan el backend.
     if (AppConfig.esServidor) {
-      final autostart =
-          await WServerManager.autostartActivo() || AppConfig.wserverAutostart;
-      if (!autostart) {
-        await WServerManager.detener();
-      }
+      await WServerManager.detenerSoloProcesoLocal();
     }
     await windowManager.destroy();
   }
@@ -286,7 +299,9 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
         builder: (context, _) => MaterialApp(
           key: ValueKey(localeController.activeLanguageCode),
           navigatorKey: navigatorKey,
-          title: 'Balansoft-WS',
+          // Título de la app (el de la ventana nativa lo fija `window_manager`
+          // en `main()`, igual que el de `PantallaErrorConfig`).
+          title: AppConfig.windowTitle,
           debugShowCheckedModeBanner: false,
           theme: buildLightTheme(
             familia: _typography.familiaUiFontFamily,

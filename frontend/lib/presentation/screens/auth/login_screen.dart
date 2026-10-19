@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
+import '../../../core/services/os_notifications.dart';
 import '../../../core/services/wserver_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
@@ -32,9 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // El trabajador es cliente delgado: su API vive en la estación titular, así
-    // que no debe levantar un WServer propio (docs/MANEJO_DB.md §13).
-    if (AppConfig.esTrabajador) return;
+    // La estación OPERADOR es cliente delgado: su API vive en la estación
+    // titular, así que no debe levantar un WServer propio (docs/MANEJO_DB.md §13).
+    if (AppConfig.esOperador) return;
     // Si ya hay una conexión local configurada, asegura que el WServer esté
     // levantado antes de intentar el login (p. ej. tras un reinicio del
     // equipo sin autostart activo). Best-effort: no bloquea la pantalla.
@@ -90,6 +93,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               );
             } else if (state is AuthAuthenticated) {
+              // Aviso de bienvenida del SO: una sola vez por estación, en el
+              // primer arranque de la app. No se espera: el aviso es
+              // best-effort y no debe retrasar ni condicionar el login.
+              unawaited(OsNotifications.notificarBienvenida());
               Navigator.pushReplacementNamed(context, '/dashboard');
             }
           },

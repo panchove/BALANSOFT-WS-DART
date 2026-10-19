@@ -39,6 +39,7 @@ import io
 import json
 import logging
 import os
+import sys
 import zlib
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
@@ -1062,18 +1063,46 @@ def _pares_catalogo(
 # Fuentes TTF (PDF)
 # ─────────────────────────────────────────────────────────────────────────────
 def _registrar_ttf() -> None:
-    """Registra DejaVu Sans (regular + bold) una sola vez."""
-    global _FUENTES_REGISTRADAS
+    """Registra DejaVu Sans (regular + bold) una sola vez.
+
+    Busca las fuentes en rutas de Linux y Windows (incluyendo el bundle
+    de PyInstaller). Si no se encuentra DejaVu, usa las fuentes Type1
+    built-in de ReportLab (Helvetica) reasignando los nombres de módulo,
+    ya que ``TTFont()`` solo acepta rutas de archivo ``.ttf``.
+    """
+    global _FUENTES_REGISTRADAS, FUENTE, FUENTE_BOLD
     if _FUENTES_REGISTRADAS:
         return
 
     base = bold = None
     candidatas = [
+        # Linux (Debian/Ubuntu)
         (
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         ),
     ]
+
+    # Windows: buscar en fuentes del sistema y bundle de PyInstaller
+    if sys.platform == "win32" or os.name == "nt":
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        rutas_extra = [
+            os.path.join(windir, "Fonts"),
+        ]
+        # Bundle de PyInstaller (fuentes embebidas)
+        if getattr(sys, "frozen", False):
+            meipass = getattr(sys, "_MEIPASS", "")
+            if meipass:
+                rutas_extra.append(os.path.join(meipass, "fonts"))
+                rutas_extra.append(meipass)
+        # Directorio del módulo actual (por si las fuentes están junto al .py)
+        rutas_extra.append(os.path.dirname(os.path.abspath(__file__)))
+        for directorio in rutas_extra:
+            candidatas.append((
+                os.path.join(directorio, "DejaVuSans.ttf"),
+                os.path.join(directorio, "DejaVuSans-Bold.ttf"),
+            ))
+
     for reg, bld in candidatas:
         if os.path.exists(reg):
             base, bold = reg, bld if os.path.exists(bld) else reg
@@ -1097,9 +1126,12 @@ def _registrar_ttf() -> None:
         except Exception:
             pass
     else:
-        # Fallback a fuentes estándar de ReportLab
-        pdfmetrics.registerFont(TTFont(FUENTE, "Helvetica"))
-        pdfmetrics.registerFont(TTFont(FUENTE_BOLD, "Helvetica-Bold"))
+        # Fallback: usar las fuentes Type1 built-in de ReportLab.
+        # TTFont() exige una ruta de archivo .ttf; Helvetica es Type1 y
+        # ya viene registrada en ReportLab, así que reasignamos los
+        # nombres de módulo para que todo el código PDF use Helvetica.
+        FUENTE = "Helvetica"
+        FUENTE_BOLD = "Helvetica-Bold"
 
     _FUENTES_REGISTRADAS = True
 

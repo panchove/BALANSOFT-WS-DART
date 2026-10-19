@@ -11,11 +11,19 @@ Canales:
 * **Linux** — ``notify-send`` (libnotify), con el icono de la app y la urgencia
   según la severidad.
 * **Windows** — toast de la API WinRT vía PowerShell (plantilla
-  ``ToastText02`` o ``ToastGeneric`` con ``appLogoOverride``).
+  ``ToastText02`` o ``ToastGeneric`` con ``appLogoOverride``), **con el AUMID
+  registrado antes de emitirlo** (ver :data:`CLAVE_AUMID`): sin ese registro
+  Windows descarta el aviso en silencio, sin excepción ni traza.
 
 El aviso lleva siempre el **icono de la app** (``assets/balansoft-ws.png``) y el
 nombre ``BALANSOFT-WS`` como aplicación emisora, para que el operador lo
 identifique de un vistazo entre las notificaciones de la estación.
+
+**Nota de despliegue**: un toast solo se dibuja si quien lo emite corre en la
+sesión interactiva del operador. El WServer que arranca la tarea programada del
+instalador corre como SYSTEM (sesión 0) y sus avisos no llegan al escritorio;
+los de la app Flutter y los del WServer arrancado por la app sí, porque viven en
+la sesión del usuario.
 """
 
 from __future__ import annotations
@@ -31,6 +39,30 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 APP_NAME = "BALANSOFT-WS"
+
+#: AppUserModelID: la identidad con la que Windows reconoce al emisor de un
+#: aviso. Es el mismo que usa la app Flutter (``flutter_local_notifications``),
+#: de modo que los avisos del WServer y los de la app comparten emisor, nombre
+#: e icono en el Centro de notificaciones, y el operador identifica de un
+#: vistazo que el aviso es de BALANSOFT-WS.
+AUMID = "BALANSOFT-WS"
+
+#: Claves del registro que le dan identidad a un emisor **sin identidad de
+#: paquete** (sin instalador MSIX). Sin ellas, ``CreateToastNotifier(AUMID)``
+#: **no lanza ninguna excepción y descarta el aviso en silencio**: el aviso se
+#: pierde sin error, que es exactamente el fallo que reportó la estación. Son
+#: las mismas dos claves que escribe ``flutter_local_notifications_windows``
+#: (``src/plugin.cpp``, ``UpdateRegistry``), que es la ruta que Microsoft
+#: documenta para apps de escritorio:
+#:
+#: * ``...\Classes\AppUserModelId\<AUMID>`` — nombre e icono del emisor.
+#: * ``...\CurrentVersion\PushNotifications\Backup\<AUMID>`` — declara que es
+#:   una app de escritorio (``app:desktop``) con banner y sonido.
+CLAVE_AUMID = rf"HKCU:\Software\Classes\AppUserModelId\{AUMID}"
+CLAVE_AUMID_BACKUP = (
+    "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion"
+    f"\\PushNotifications\\Backup\\{AUMID}"
+)
 
 #: Nombre del icono dentro de ``assets/`` (copiado de ``BALANSOFT-WS.png``).
 ICONO_NOMBRE = "balansoft-ws.png"
@@ -111,8 +143,64 @@ def _ps_cadena(valor: str) -> str:
     return "'" + valor.replace("'", "''") + "'"
 
 
+def _ps_registrar_aumid(icono: str | None) -> list[str]:
+    """Sentencias de PowerShell que registran el AUMID (idempotentes).
+
+    Se ejecutan **antes** de mostrar el aviso, en la misma llamada a
+    PowerShell: registrar el emisor y mostrar el toast en procesos distintos
+    multiplicaría los arranques de PowerShell (que es lo caro de esta vía).
+
+    Las claves se crean solo si faltan, y los valores se escriben solo si no
+    existen, **sin tocar los demás**: la app Flutter registra el mismo AUMID
+    y añade su ``CustomActivator`` —el que hace que al pulsar el aviso se abra
+    la app—, y reescribir la clave desde aquí dejaría el aviso sin ese
+    reenviar el clic. Registrarlo en ambos sentidos es lo que hace que los
+    avisos del WServer y los de la app compartan emisor en Windows.
+    """
+    partes = [
+        f"$ka = {_ps_cadena(CLAVE_AUMID)};",
+        "if (-not (Test-Path $ka)) {",
+        "New-Item -Path $ka -Force > $null;",
+        "};",
+    ]
+    propiedades = {
+        "DisplayName": APP_NAME,
+        "IconUri": str(Path(icono).resolve().as_uri()) if icono else None,
+    }
+    for nombre, valor in propiedades.items():
+        if not valor:
+            continue
+        partes += [
+            # Sin `Test-Path` sobre el valor (el proveedor de registro de
+            # PowerShell no distingue bien nombre de clave), se pregunta por
+            # el dato.
+            f"$v = Get-ItemProperty -Path $ka -Name {nombre}"
+            " -ErrorAction SilentlyContinue;",
+            "if ($null -eq $v) {",
+            f"Set-ItemProperty -Path $ka -Name {nombre} -Value "
+            f"{_ps_cadena(valor)} -Force;",
+            "};",
+        ]
+    partes += [
+        f"$kb = {_ps_cadena(CLAVE_AUMID_BACKUP)};",
+        "if (-not (Test-Path $kb)) {",
+        "New-Item -Path $kb -Force > $null;",
+        "Set-ItemProperty -Path $kb -Name appType -Value 'app:desktop' -Force;",
+        "Set-ItemProperty -Path $kb -Name Setting -Value "
+        "'s:banner,s:toast,s:audio,c:toast,c:ringing' -Force;",
+        "Set-ItemProperty -Path $kb -Name wnsId -Value 'NonImmersivePackage' -Force;",
+        "};",
+    ]
+    return partes
+
+
 def _comando_windows(titulo: str, mensaje: str) -> list[str] | None:
-    """Toast de Windows. Con icono usa ``ToastGeneric`` + ``appLogoOverride``."""
+    """Toast de Windows. Con icono usa ``ToastGeneric`` + ``appLogoOverride``.
+
+    El notificador se crea con el **AUMID** registrado (no con el nombre
+    visible): un emisor sin identidad de paquete que no esté en el registro
+    hace que Windows descarte el aviso sin error alguno.
+    """
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if not powershell:
         return None
@@ -125,6 +213,9 @@ def _comando_windows(titulo: str, mensaje: str) -> list[str] | None:
         "Windows.UI.Notifications, ContentType = WindowsRuntime] > $null;",
         "[Windows.UI.Notifications.ToastNotification, "
         "Windows.UI.Notifications, ContentType = WindowsRuntime] > $null;",
+    ]
+    partes += _ps_registrar_aumid(icono)
+    partes += [
         "$t = [Windows.UI.Notifications.ToastNotificationManager]::"
         "GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::"
         f"{plantilla});",
@@ -154,7 +245,7 @@ def _comando_windows(titulo: str, mensaje: str) -> list[str] | None:
         )
     partes.append(
         "[Windows.UI.Notifications.ToastNotificationManager]::"
-        f"CreateToastNotifier({_ps_cadena(APP_NAME)}).Show("
+        f"CreateToastNotifier({_ps_cadena(AUMID)}).Show("
         "[Windows.UI.Notifications.ToastNotification]::new($t));"
     )
     return [powershell, "-NoProfile", "-NonInteractive", "-Command", "".join(partes)]

@@ -137,7 +137,7 @@ class SesionUpdateRequest(BaseModel):
 
     estado: str | None = Field(None, pattern="^(APROBADO|RECHAZADO)$")
     rol_sesion: str | None = Field(
-        None, pattern="^(ADMIN|OPERADOR|AUDITOR|TRABAJADOR)$"
+        None, pattern="^(ADMIN|OPERADOR|AUDITOR)$"
     )
 
 
@@ -286,7 +286,7 @@ class ServerUsuarioSyncItem(BaseModel):
 
     email: EmailStr
     nombre: str | None = Field(None, max_length=150)
-    rol_global: str = Field("OPERADOR", pattern="^(ADMIN|OPERADOR|AUDITOR|TRABAJADOR)$")
+    rol_global: str = Field("OPERADOR", pattern="^(ADMIN|OPERADOR|AUDITOR)$")
     activo: bool = True
     operacion: str = Field("upsert", pattern="^(upsert|delete)$")
 

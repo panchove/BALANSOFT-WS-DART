@@ -52,7 +52,9 @@ class LoginCentralRequest(BaseModel):
     #: Rol que la estación quiere tomar en la instalación. ``SERVIDOR`` solo se
     #: acepta si el central reconoce a este equipo como titular de la licencia
     #: (``dispositivo.rol_dispositivo = SERVIDOR_LOCAL``). ``None`` = login normal.
-    modo_solicitado: Literal["SERVIDOR", "TRABAJADOR"] | None = None
+    #: El antiguo ``TRABAJADOR`` se conserva como alias de ``OPERADOR`` para no
+    #: romper instaladores ya desplegados (el término visible es "Operador").
+    modo_solicitado: Literal["SERVIDOR", "TRABAJADOR", "OPERADOR"] | None = None
 
 
 class ValidateLicenseRequest(BaseModel):
@@ -708,7 +710,7 @@ class IdentidadUpdate(BaseModel):
 # Usuarios locales (roles operativos + vínculo con credencial global)
 # ---------------------------------------------------------------------------
 
-_ROLES_LOCALES = "^(ADMIN|OPERADOR|AUDITOR|TRABAJADOR)$"
+_ROLES_LOCALES = "^(ADMIN|OPERADOR|AUDITOR)$"
 
 
 class UsuarioCreate(BaseModel):
@@ -929,3 +931,41 @@ class BackupRestoreResponse(BaseModel):
     archivo: str
     restaurados: dict[str, int]
     advertencia: str
+
+
+# ---------------------------------------------------------------------------
+# Llaves de activación (estaciones OPERADOR / cliente delgado)
+# ---------------------------------------------------------------------------
+
+
+class LlaveActivacionCreateRequest(BaseModel):
+    """El ADMIN emite una llave de un solo uso para un usuario de su empresa."""
+
+    id_usuario: uuid.UUID
+    #: Vigencia en horas desde la emisión (1 a 90 días).
+    expira_horas: int = Field(24, ge=1, le=24 * 90)
+
+
+class LlaveActivacionCreateResponse(BaseModel):
+    """``codigo`` se devuelve **una sola vez**: en la BD solo queda el hash."""
+
+    ok: bool = True
+    id: uuid.UUID
+    codigo: str
+    codigo_preview: str
+    expira_en: datetime | None = None
+    mensaje: str
+
+
+class LlaveActivacionValidarRequest(BaseModel):
+    """Canje desde el instalador de una estación cliente (sin autenticación)."""
+
+    codigo: str = Field(..., min_length=8, max_length=64)
+    hardware_id: str | None = Field(None, max_length=255)
+
+
+class LlaveActivacionValidarResponse(BaseModel):
+    ok: bool = True
+    usuario_email: str
+    empresa_nombre: str
+    mensaje: str

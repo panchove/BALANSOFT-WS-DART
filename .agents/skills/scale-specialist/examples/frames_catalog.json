@@ -1,0 +1,82 @@
+[
+  {
+    "indicator": "Toledo / GSI",
+    "description": "Trama estándar estable en kg",
+    "raw": "ST,GS,+00320.00kg\r\n",
+    "expected_weight": 320.0,
+    "expected_status": "stable",
+    "expected_valid": true
+  },
+  {
+    "indicator": "Toledo / GSI con espacios",
+    "description": "Trama con espacios de alineación",
+    "raw": "ST,GS,+  320.00 kg\r\n",
+    "expected_weight": 320.0,
+    "expected_status": "stable",
+    "expected_valid": true
+  },
+  {
+    "indicator": "Toledo Inestable",
+    "description": "Plataforma en movimiento (token US)",
+    "raw": "US,GS,+00320.00kg\r\n",
+    "expected_weight": 320.0,
+    "expected_status": "unstable",
+    "expected_valid": true
+  },
+  {
+    "indicator": "Yaohua XK3190",
+    "description": "Modo continuo compacto con prefijo '='",
+    "raw": "=+000023.5kg\r\n",
+    "expected_weight": 23.5,
+    "expected_status": null,
+    "expected_valid": true
+  },
+  {
+    "indicator": "Yaohua XK3190 Espaciado",
+    "description": "Modo continuo espaciado",
+    "raw": "= 00023.5 kg\r\n",
+    "expected_weight": 23.5,
+    "expected_status": null,
+    "expected_valid": true
+  },
+  {
+    "indicator": "Rice Lake / iQ",
+    "description": "Trama con dirección adherida 01+",
+    "raw": "01+000320.0\r\n",
+    "expected_weight": 320.0,
+    "expected_status": null,
+    "expected_valid": true
+  },
+  {
+    "indicator": "Torrey LQ",
+    "description": "Salida continua de indicador Torrey",
+    "raw": "ST,GS,+00042.5kg\r\n",
+    "expected_weight": 42.5,
+    "expected_status": "stable",
+    "expected_valid": true
+  },
+  {
+    "indicator": "Keli KX3101",
+    "description": "Enmarcado STX/ETX con checksum XOR",
+    "raw": "\u0002ST,GS,+00320.00kg\u00032B\r\n",
+    "expected_weight": 320.0,
+    "expected_status": "stable",
+    "expected_valid": true
+  },
+  {
+    "indicator": "Mettler Toledo MT-SICS",
+    "description": "Formato MT-SICS estable",
+    "raw": "S S 320.00 kg\r\n",
+    "expected_weight": 320.0,
+    "expected_status": null,
+    "expected_valid": true
+  },
+  {
+    "indicator": "Rechazo Anti-Falso-Positivo",
+    "description": "Número desnudo sin semántica (rechazado por diseño)",
+    "raw": "1234567890\r\n",
+    "expected_weight": null,
+    "expected_status": null,
+    "expected_valid": false
+  }
+]

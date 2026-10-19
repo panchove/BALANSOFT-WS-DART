@@ -4,6 +4,7 @@ import '../i18n/locale_controller.dart';
 import '../i18n/translations.dart';
 import '../theme/app_theme.dart';
 import '../utils/save_file_utils.dart';
+import '../widgets/keyboard_dialog_wrapper.dart';
 import '../widgets/photo_picker_field.dart';
 
 /// Datos de empresa + preferencias de exportación.
@@ -251,7 +252,7 @@ class CompanySetupFormState extends State<CompanySetupForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       children: [
         Expanded(
           child: Column(
@@ -270,6 +271,12 @@ class CompanySetupFormState extends State<CompanySetupForm> {
         ),
         _barraInferior(),
       ],
+    );
+
+    return KeyboardDialogWrapper(
+      onEnter: _paso < 2 ? _siguiente : _finalizar,
+      onEscape: widget.onOmitir ?? () => Navigator.of(context).pop(),
+      child: content,
     );
   }
 

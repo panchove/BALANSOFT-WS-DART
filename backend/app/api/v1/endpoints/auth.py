@@ -417,7 +417,7 @@ async def login_central(
             status_code=403,
             detail=(
                 "Esta máquina no es la titular de la licencia, por lo que no puede "
-                "instalarse como servidor. Configure el equipo como trabajador local."
+                "instalarse como servidor. Configure el equipo como operador local."
                 + (
                     f" La licencia está atada al equipo {hardware}."
                     if hardware and hardware != (payload.hardware_id or "")
@@ -656,6 +656,7 @@ async def licencia_empresa(
     devuelve el estado cacheado sin bloquear.
     """
     from app.services.license_service import sincronizar_licencia_e_identidad
+    from app.services.llave_activacion_service import limite_sesiones_por_tier
 
     identidad = await sincronizar_licencia_e_identidad(db, empresa, force_remote=True)
     # Persistir el tier/status fresco (la sesión cierra con rollback si no hay
@@ -666,10 +667,18 @@ async def licencia_empresa(
     tier = (identidad.licencia_tier or empresa.licencia_tier or "").upper()
     status = identidad.licencia_status or empresa.licencia_status
     expira = identidad.licencia_expira or empresa.licencia_expira
-    max_registros = settings.demo_max_records if tier == "DEMO" else None
-    max_sesiones = None if tier == "CENTRAL" else (3 if tier == "DEMO" else 1)
-    max_equipos = None if tier == "CENTRAL" else 1
-    max_usuarios = None if tier == "CENTRAL" else 1
+    # Solo DEMO limita funcionalidad (registros y concurrencia). Cualquier
+    # otro tier opera sin topes funcionales: los planes Básico/Premium que el
+    # LM emita NO restringen módulos y las sesiones concurrentes las sigue
+    # fijando la licencia del LM/central (``licencias.max_sesiones``), no este
+    # snapshot. Un tier desconocido tampoco debe degradar a «mínimo seguro».
+    es_demo = tier == "DEMO"
+    max_registros = settings.demo_max_records if es_demo else None
+    # El tope de sesiones sale de la fuente unica de la estacion (solo DEMO
+    # limita: 3); un literal aqui volveria a duplicar la regla.
+    max_sesiones = limite_sesiones_por_tier(tier)
+    max_equipos = 1 if es_demo else None
+    max_usuarios = 1 if es_demo else None
     consumo = await db.scalar(
         select(func.count())
         .select_from(BoletoPesaje)

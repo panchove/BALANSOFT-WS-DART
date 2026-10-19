@@ -1,7 +1,7 @@
 """Usuarios operativos locales y su vínculo con las credenciales globales.
 
-docs/MANEJO_DB.md §4 y §9.3: los usuarios locales (ADMIN/OPERADOR/AUDITOR/
-TRABAJADOR) viven en la DB local; crear/modificar implica encolar la entidad
+docs/MANEJO_DB.md §4 y §9.3: los usuarios locales (ADMIN/OPERADOR/AUDITOR)
+viven en la DB local; crear/modificar implica encolar la entidad
 `usuario` en `sync_queue` para su entrega al servidor (credenciales globales).
 """
 

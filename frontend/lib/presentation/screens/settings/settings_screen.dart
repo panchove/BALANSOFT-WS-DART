@@ -265,7 +265,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [_DirectorioTile()],
       ),
       // Respaldos de estación: solo en la máquina que aloja la BD local
-      // (el TRABAJADOR es cliente delgado y no tiene datos propios).
+      // (el OPERADOR es cliente delgado y no tiene datos propios).
       if (AppConfig.esServidor)
         _SectionCard(
           icon: Icons.backup_outlined,

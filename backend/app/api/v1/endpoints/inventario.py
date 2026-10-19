@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -310,6 +310,14 @@ async def list_balanzas(
 async def descubrir_balanzas(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
+    incluir_simuladas: bool = Query(
+        True,
+        description=(
+            "Probar también las básculas simuladas/virtuales (BSDD en "
+            "127.0.0.1:5555 y ptys de /tmp). Por defecto sí, para no cambiar "
+            "el comportamiento histórico del escaneo."
+        ),
+    ),
 ) -> list[BalanzaDescubiertaOut]:
     """Escanea las básculas conectadas/disponibles:
 
@@ -321,6 +329,11 @@ async def descubrir_balanzas(
       que el kernel NO reporta como tty real, pero que pyserial sí puede abrir.
       Excluye los symlinks internos ``*_pty`` que no emiten datos.
     Omite las básculas ya registradas para no duplicarlas.
+
+    Las básculas simuladas se incluyen **por defecto** (la app las muestra así
+    de forma automática, sin botón de alta manual). Un cliente que no las
+    quiera ver en el escaneo debe pedir `incluir_simuladas=false`; una báscula
+    hallada en 127.0.0.1:5555 se devuelve marcada con `is_simulada=true`.
     """
     import glob
     import os
@@ -340,7 +353,11 @@ async def descubrir_balanzas(
     encontradas: list[BalanzaDescubiertaOut] = []
 
     # ---------- TCP ----------
-    candidatos_tcp: list[tuple[str, int]] = [("127.0.0.1", 5555)]
+    # El simulador BSDD local (127.0.0.1:5555) entra por defecto; solo se
+    # prueba si el cliente no lo ha desactivado con `incluir_simuladas=false`.
+    candidatos_tcp: list[tuple[str, int]] = []
+    if incluir_simuladas:
+        candidatos_tcp.append(("127.0.0.1", 5555))
     for b in registradas:
         ip = b.get("ip_address")
         if ip:
@@ -357,6 +374,7 @@ async def descubrir_balanzas(
         except Exception:  # noqa: BLE001 - el escaneo nunca debe romper la API
             peso = None
         if peso is not None:
+            es_simulada = host == "127.0.0.1" and puerto == 5555
             encontradas.append(
                 BalanzaDescubiertaOut(
                     descripcion=f"Báscula TCP ({host}:{puerto})",
@@ -364,7 +382,7 @@ async def descubrir_balanzas(
                     ip_address=host,
                     puerto_tcp=puerto,
                     peso_kg=peso,
-                    is_simulada=False,
+                    is_simulada=es_simulada,
                     formato_trama="auto",
                 )
             )
@@ -392,36 +410,38 @@ async def descubrir_balanzas(
         pass
 
     # ---------- Serial simulado (ptys virtuales) ----------
-    # Patrones configurables vía env. Por defecto cubre:
-    #   - /tmp/bsdd_*   → simulador BSDD
-    #   - /tmp/ttyV*    → pares de socat (recomendado)
-    #   - /tmp/tnt*     → otros simuladores comunes
-    patrones_env = os.environ.get(
-        "BSSD_SERIAL_GLOBS",
-        "/tmp/bsdd_*,/tmp/ttyV*,/tmp/tnt*",
-    )
-    patrones = [p.strip() for p in patrones_env.split(",") if p.strip()]
+    # Solo se escanean si el cliente no ha desactivado las simuladas.
+    if incluir_simuladas:
+        # Patrones configurables vía env. Por defecto cubre:
+        #   - /tmp/bsdd_*   → simulador BSDD
+        #   - /tmp/ttyV*    → pares de socat (recomendado)
+        #   - /tmp/tnt*     → otros simuladores comunes
+        patrones_env = os.environ.get(
+            "BSSD_SERIAL_GLOBS",
+            "/tmp/bsdd_*,/tmp/ttyV*,/tmp/tnt*",
+        )
+        patrones = [p.strip() for p in patrones_env.split(",") if p.strip()]
 
-    for patron in patrones:
-        for ruta in glob.glob(patron):
-            if ruta in puertos_existentes:
-                continue
-            # Excluir symlinks internos del simulador (*_pty) que no emiten datos.
-            if ruta.endswith("_pty"):
-                continue
-            if not (os.path.exists(ruta) or os.path.islink(ruta)):
-                continue
-            if not _es_pty_o_socket(ruta):
-                continue
-            puertos_existentes.add(ruta)
-            encontradas.append(
-                BalanzaDescubiertaOut(
-                    descripcion=f"Báscula serial simulada ({ruta})",
-                    protocolo="serial",
-                    puerto_com=ruta,
-                    is_simulada=True,
+        for patron in patrones:
+            for ruta in glob.glob(patron):
+                if ruta in puertos_existentes:
+                    continue
+                # Excluir symlinks internos del simulador (*_pty) que no emiten datos.
+                if ruta.endswith("_pty"):
+                    continue
+                if not (os.path.exists(ruta) or os.path.islink(ruta)):
+                    continue
+                if not _es_pty_o_socket(ruta):
+                    continue
+                puertos_existentes.add(ruta)
+                encontradas.append(
+                    BalanzaDescubiertaOut(
+                        descripcion=f"Báscula serial simulada ({ruta})",
+                        protocolo="serial",
+                        puerto_com=ruta,
+                        is_simulada=True,
+                    )
                 )
-            )
 
     return encontradas
 

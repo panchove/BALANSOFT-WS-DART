@@ -313,12 +313,38 @@ def _aplicar_sql(cur, ruta_absoluta: Path, etiqueta: str) -> None:
     print(f"[WServer] Esquema aplicado: {etiqueta}")
 
 
+def _es_migracion_mssql(mig: Path) -> bool:
+    """``True`` si el archivo es la variante T-SQL (``*.mssql.sql``).
+
+    Se compara en minúsculas para no depender del nombre exacto: el sufijo
+    canónico es ``*.mssql.sql`` y un ``.MSSQL.SQL`` no debe colarse en el
+    bootstrap de PostgreSQL.
+    """
+    return mig.name.lower().endswith(".mssql.sql")
+
+
+def _archivos_migracion(mig_dir: Path) -> list[Path]:
+    """Migraciones aplicables, ordenadas por nombre.
+
+    Excluye los archivos ``*.mssql.sql``: son el equivalente T-SQL de una
+    migración (canal SQL Server), no DDL de PostgreSQL. Sin esta exclusión, el
+    arranque de una estación PostgreSQL intentaría ejecutar T-SQL y el
+    bootstrap fallaría en cada arranque.
+    """
+    if not mig_dir.exists():
+        return []
+    return [mig for mig in sorted(mig_dir.glob("*.sql")) if not _es_migracion_mssql(mig)]
+
+
 def _migraciones_pendientes(cur, mig_dir: Path) -> list[Path]:
     """Devuelve los archivos de migración que aún no se han aplicado.
 
     Las instalaciones existentes (creadas antes de este registro) se marcan
     como aplicadas para no reejecutar el esquema canónico; a partir de ahí
     cada arranque aplica solo lo nuevo (REQ-NF-CFG-001 → migración 017).
+
+    Se **excluyen** los ``*.mssql.sql`` (ver ``_archivos_migracion``): son el
+    equivalente T-SQL y aplicarlos aquí rompería el arranque de PostgreSQL.
     """
     cur.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -326,9 +352,7 @@ def _migraciones_pendientes(cur, mig_dir: Path) -> list[Path]:
     )
     cur.execute("SELECT version FROM schema_migrations")
     aplicadas = {fila[0] for fila in cur.fetchall()}
-    if not mig_dir.exists():
-        return []
-    archivos = sorted(mig_dir.glob("*.sql"))
+    archivos = _archivos_migracion(mig_dir)
     if not aplicadas:
         # Instalación previa sin registro: se reejecutan TODAS (son
         # idempotentes) y quedan registradas, para que las columnas nuevas
@@ -362,9 +386,13 @@ def _sembrar_migraciones_sqlserver(conn: Any, versiones: list[str]) -> None:
     """Registra en ``schema_migrations`` las migraciones plegadas en el T-SQL.
 
     El esquema canónico de SQL Server es autocontenido (incluye el efecto de
-    ``migrations/001..024``); al aplicarlo por primera vez se siembra el
+    ``migrations/001..025``); al aplicarlo por primera vez se siembra el
     registro para que las futuras migraciones dual-dialecto (024+) partan de
     un estado coherente. Idempotente: si ya hay filas, no toca nada.
+
+    ``versiones`` llega de ``_archivos_migracion``, que omite los
+    ``*.mssql.sql``: así la BD de SQL Server registra los mismos nombres de
+    versión que la de PostgreSQL (p. ej. ``025_rol_operador_llaves_activacion.sql``).
     """
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
@@ -428,11 +456,7 @@ def _asegurar_db_sqlserver(db_url: str) -> None:
                 conn = pyodbc.connect(dsn_pyodbc(c), autocommit=False, timeout=20)
                 _aplicar_tsql_sqlserver(conn, ruta, SCHEMA_LOCAL)
                 mig_dir = ROOT / MIGRACIONES_DIR
-                versiones = (
-                    [m.name for m in sorted(mig_dir.glob("*.sql"))]
-                    if mig_dir.exists()
-                    else []
-                )
+                versiones = [m.name for m in _archivos_migracion(mig_dir)]
                 _sembrar_migraciones_sqlserver(conn, versiones)
             except Exception:
                 if conn is not None:
@@ -471,7 +495,7 @@ def asegurar_db(db_url_sync: str) -> None:
 
     SQL Server (Fase 2): ``_asegurar_db_sqlserver`` crea la BD, aplica el
     esquema T-SQL autocontenido (``sqlserver/balansoft-ws-local.sql``) y
-    siembra ``schema_migrations`` con las migraciones plegadas 001-024.
+    siembra ``schema_migrations`` con las migraciones plegadas 001-025.
     """
     from app.core.db_engine import detectar_motor
 
@@ -518,7 +542,7 @@ def asegurar_db(db_url_sync: str) -> None:
             if not esquema_previo and not pendientes:
                 # BD recién creada: registrar el estado para los próximos arranques.
                 with conn.cursor() as cur:
-                    for mig in sorted(mig_dir.glob("*.sql")) if mig_dir.exists() else []:
+                    for mig in _archivos_migracion(mig_dir):
                         _registrar_migracion(cur, mig.name)
                 conn.commit()
             print(

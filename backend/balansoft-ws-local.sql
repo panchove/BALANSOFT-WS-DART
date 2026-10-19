@@ -141,7 +141,7 @@ ALTER TABLE empresas ALTER COLUMN id_cuenta DROP NOT NULL;
 
 -- ============================================================
 -- 2. USUARIOS LOCALES (creados por el ADMIN local)
--- Roles: ADMIN / OPERADOR / AUDITOR / TRABAJADOR
+-- Roles: ADMIN / OPERADOR / AUDITOR
 -- El login se valida contra el servidor, pero el perfil
 -- operativo vive aquí.
 -- ============================================================
@@ -153,13 +153,14 @@ CREATE TABLE IF NOT EXISTS usuarios (
     nombre           VARCHAR(150) NOT NULL,
     email            VARCHAR(255) NOT NULL UNIQUE,
     password_hash    VARCHAR(255),               -- caché local para modo offline
-    rol              VARCHAR(30) NOT NULL DEFAULT 'TRABAJADOR',
-                     -- ADMIN / OPERADOR / AUDITOR / TRABAJADOR
+    rol              VARCHAR(30) NOT NULL DEFAULT 'OPERADOR',
+                     -- ADMIN / OPERADOR / AUDITOR (el antiguo TRABAJADOR se
+                     -- fusionó en OPERADOR en la migración 025)
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
     ultimo_login     TIMESTAMP,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_rol_usuario CHECK (rol IN ('ADMIN','OPERADOR','AUDITOR','TRABAJADOR'))
+    CONSTRAINT chk_rol_usuario CHECK (rol IN ('ADMIN','OPERADOR','AUDITOR'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_usuarios_empresa ON usuarios (id_empresa);
@@ -633,6 +634,35 @@ CREATE INDEX IF NOT EXISTS idx_auditoria_fecha          ON auditoria (created_at
 CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_estado  ON notificaciones (id_empresa, estado);
 CREATE INDEX IF NOT EXISTS idx_notificaciones_empresa_created ON notificaciones (id_empresa, created_at);
 CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa    ON recordatorios (id_empresa, activo, programada_para);
+
+
+-- ============================================================
+-- 14. LLAVES DE ACTIVACIÓN (estaciones OPERADOR / cliente delgado)
+-- El ADMIN emite una llave por usuario; el instalador de la estación
+-- cliente la canjea UNA sola vez contra la API del titular. El código se
+-- guarda hasheado (SHA-256); en claro solo se muestra al emitirlo.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llaves_activacion (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa) ON DELETE CASCADE,
+    id_usuario        UUID NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    codigo_hash       VARCHAR(255) NOT NULL,
+    codigo_preview    VARCHAR(40),
+    estado            VARCHAR(20) NOT NULL DEFAULT 'activa',
+    expira_en         TIMESTAMP,
+    consumida_en      TIMESTAMP,
+    consumida_por_hw  VARCHAR(255),
+    ip_consumo        VARCHAR(45),
+    user_agent        VARCHAR(255),
+    creado_por        UUID REFERENCES usuarios(id_usuario),
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_estado_llave CHECK (estado IN ('activa','consumida','revocada'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_llaves_empresa_usuario ON llaves_activacion (id_empresa, id_usuario);
+CREATE INDEX IF NOT EXISTS idx_llaves_estado          ON llaves_activacion (estado);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_llaves_codigo_hash ON llaves_activacion (codigo_hash);
 
 
 -- ============================================================

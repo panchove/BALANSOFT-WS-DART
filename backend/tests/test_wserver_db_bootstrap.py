@@ -369,7 +369,7 @@ def test_asegurar_db_sqlserver_aplica_esquema_y_siembra_migraciones(
 ):
     # Fase 2: sobre una BD SQL Server recién creada (sin tablas), el WServer
     # aplica el T-SQL autocontenido y siembra schema_migrations con las
-    # migraciones plegadas 001-024; el estado final queda "aplicado".
+    # migraciones plegadas 001-025; el estado final queda "aplicado".
     estado = {"aplicado": False}
 
     def respuestas(sql: str) -> tuple:
@@ -412,7 +412,18 @@ def test_asegurar_db_sqlserver_aplica_esquema_y_siembra_migraciones(
     assert db_engine.estado_esquema() == "aplicado"
     salida = capsys.readouterr().out
     assert "Esquema SQL Server aplicado" in salida
-    assert "Migraciones plegadas registradas: 24" in salida
+    # El conteo se calcula del disco con el mismo filtro (se excluyen las
+    # variantes T-SQL); así el test no envejece al añadir una migración nueva
+    # pero sigue detectando que se cuele un `*.mssql.sql`.
+    esperadas = len(
+        [
+            p
+            for p in (wserver.ROOT / wserver.MIGRACIONES_DIR).glob("*.sql")
+            if not p.name.endswith(".mssql.sql")
+        ]
+    )
+    assert esperadas >= 25
+    assert f"Migraciones plegadas registradas: {esperadas}" in salida
 
 
 def test_asegurar_db_sqlserver_con_tablas_no_reaplica(monkeypatch, capsys):
@@ -628,3 +639,64 @@ def test_asegurar_estructura_genera_env_con_backup_dir_absoluto(tmp_path, monkey
     assert f"BACKUP_DIR={home / 'backups'}" in lineas
     assert "BACKUP_DIR=backups" not in lineas
     assert not any("__SECRET_KEY__" in linea for linea in lineas)
+
+
+# ---------------------------------------------------------------------------
+# Filtro de variantes T-SQL en el canal de migraciones de PostgreSQL
+# ---------------------------------------------------------------------------
+def test_archivos_migracion_omite_variantes_mssql(tmp_path):
+    """``_archivos_migracion`` descarta los ``*.mssql.sql``.
+
+    Regresión: la migración 025 llegó con su equivalente T-SQL
+    (``025_....mssql.sql``) y el glob ``*.sql`` de ``_migraciones_pendientes``
+    lo habría ejecutado contra PostgreSQL (``BEGIN TRANSACTION``, ``[dbo]``),
+    tumbando el bootstrap y dejando la API en 503 en cada arranque.
+    """
+    for nombre in (
+        "001_a.sql",
+        "002_b.sql",
+        "002_b.mssql.sql",
+        "025_rol_operador_llaves_activacion.sql",
+        "025_rol_operador_llaves_activacion.mssql.sql",
+    ):
+        (tmp_path / nombre).write_text("-- migración", encoding="utf-8")
+    (tmp_path / "notas.txt").write_text("no es migración", encoding="utf-8")
+
+    nombres = [p.name for p in wserver._archivos_migracion(tmp_path)]
+
+    assert nombres == [
+        "001_a.sql",
+        "002_b.sql",
+        "025_rol_operador_llaves_activacion.sql",
+    ]
+    assert all(not n.endswith(".mssql.sql") for n in nombres)
+
+
+def test_archivos_migracion_directorio_inexistente(tmp_path):
+    assert wserver._archivos_migracion(tmp_path / "no_existe") == []
+
+
+def test_migraciones_pendientes_no_incluye_variante_mssql(tmp_path):
+    """Solo se devuelven las migraciones PG que aún no están registradas."""
+    (tmp_path / "001_a.sql").write_text("--", encoding="utf-8")
+    (tmp_path / "002_b.sql").write_text("--", encoding="utf-8")
+    (tmp_path / "002_b.mssql.sql").write_text("--", encoding="utf-8")
+
+    conn = _ConexionPG(resultados=[("001_a.sql",)])
+    with conn.cursor() as cur:
+        pendientes = wserver._migraciones_pendientes(cur, tmp_path)
+
+    assert [p.name for p in pendientes] == ["002_b.sql"]
+
+
+def test_migraciones_pendientes_instalacion_vieja_reejecuta_todas(tmp_path):
+    """Sin registro previo se devuelven todas (idempotentes) menos las T-SQL."""
+    (tmp_path / "001_a.sql").write_text("--", encoding="utf-8")
+    (tmp_path / "001_a.mssql.sql").write_text("--", encoding="utf-8")
+
+    conn = _ConexionPG(resultados=[])  # schema_migrations vacía
+    with conn.cursor() as cur:
+        pendientes = wserver._migraciones_pendientes(cur, tmp_path)
+
+    assert [p.name for p in pendientes] == ["001_a.sql"]
+    assert any("schema_migrations" in sql for sql in conn.sql)

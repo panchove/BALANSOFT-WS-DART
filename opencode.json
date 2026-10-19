@@ -1,38 +1,61 @@
 {
-    "$schema": "https://opencode.ai/config.json",
-    "default_agent": "engineer",
-    "subagent_depth": 1,
-    "permission": {
-        "task": {
-            "*": "deny",
-            "planner": "allow",
-            "implementer": "allow",
-            "verifier": "allow",
-            "engineer": "allow"
-        }
-    },
-    "mcp": {
-        "balansoft-filesystem": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                "/home/yohander/Documentos/BALANSOFT-WS-DART"
-            ],
-            "enabled": true,
-            "timeout": 15000
-        },
-        "balansoft-git": {
-            "type": "local",
-            "command": [
-                "uvx",
-                "mcp-server-git",
-                "--repository",
-                "/home/yohander/Documentos/BALANSOFT-WS-DART"
-            ],
-            "enabled": true,
-            "timeout": 15000
-        }
+  "$schema": "https://opencode.ai/schema/opencode.json",
+  "name": "BALANSOFT-WS",
+  "description": "Sistema de pesaje industrial multi-empresa: FastAPI + Flutter + WServer runtime + HAL básculas",
+  "version": "3.25",
+  "language": "es",
+  "instructions": [
+    "AGENTS.md",
+    ".agents/rules/iso-iec-compliance.md",
+    ".agents/rules/industrial-weighing-safety.md",
+    ".agents/rules/hardware-io-concurrency.md",
+    ".agents/rules/ticket-layout-parity.md"
+  ],
+  "mcpServers": {
+    "balansoft-hardware": {
+      "command": "python3",
+      "args": ["backend/scripts/mcp_hardware_server.py"],
+      "env": {
+        "PYTHONPATH": "backend"
+      }
     }
+  },
+  "scripts": {
+    "backend:test": "cd backend && .venv/bin/python -m pytest -q -m 'not e2e'",
+    "backend:test-e2e": "cd backend && .venv/bin/python -m pytest tests/e2e",
+    "backend:lint": "cd backend && .venv/bin/ruff check app tests",
+    "backend:dev": "cd backend && .venv/bin/uvicorn app.main:app --port 8000 --reload",
+    "backend:mcp": "cd backend && .venv/bin/python scripts/mcp_hardware_server.py",
+    "frontend:analyze": "cd frontend && flutter analyze",
+    "frontend:test": "cd frontend && flutter test",
+    "frontend:e2e-ui": "cd frontend && flutter test integration_test/pesaje_flow_test.dart -d linux",
+    "db:verify": "cd backend && ./scripts/verify.sh",
+    "db:reset": "cd backend && ./scripts/reset_db.sh"
+  },
+  "domain": {
+    "weighing": {
+      "indicators": ["Yaohua XK3190", "Toledo/GSI", "Rice Lake", "Torrey", "Keli", "Cardinal", "MT-SICS"],
+      "protocols": ["Serial RS232", "TCP", "Bluetooth SPP/BLE"],
+      "states": ["PENDIENTE", "CERRADO", "MODIFICADO", "ANULADO"],
+      "kardex": {
+        "ingreso": 10,
+        "despacho": 60
+      }
+    },
+    "printers": {
+      "thermal": ["POS_80 (80mm)", "POS_58 (58mm)"],
+      "dot_matrix": ["EPSON LX-350", "EPSON FX-890", "OKI Microline"],
+      "pdf": ["Media Carta", "Carta", "A4"]
+    },
+    "standards": {
+      "quality": "ISO/IEC 25010 (SQuaRE)",
+      "metrology": "ISO/IEC 17025 / OIML R 76-1 / WELMEC",
+      "security": "ISO/IEC 27001",
+      "testing": "ISO/IEC/IEEE 29119",
+      "timestamps": "ISO 8601 (UTC)",
+      "encoding": "ISO/IEC 10646 (UTF-8) / ISO/IEC 8859-1 (Latin-1)",
+      "qr_code": "ISO/IEC 18004",
+      "barcode_128": "ISO/IEC 15417"
+    }
+  }
 }

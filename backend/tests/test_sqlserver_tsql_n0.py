@@ -5,7 +5,7 @@ No requiere SQL Server real: verifica la integridad del esquema canónico
 guards idempotentes, límite NVARCHAR(255) en columnas indexadas y paridad con
 el esquema PostgreSQL ``balansoft-ws-local.sql``).
 
-La paridad esperada es 30 tablas = 27 canónicas SQLite/PG + 3 auxiliares que
+La paridad esperada es 31 tablas = 28 canónicas SQLite/PG + 3 auxiliares que
 solo existen en SQL Server: ``password_reset_tokens``, ``series_numeracion``
 y ``schema_migrations``.
 """
@@ -23,7 +23,8 @@ TABLAS_PG_Y_MSSQL = {
     "almacenes", "auditoria", "balanzas", "boletos_pesaje", "boletos_ediciones",
     "camiones",
     "categorias", "conductores", "configuraciones", "empresas",
-    "identidad_local", "imagenes_pesaje", "kardex", "logs_sistema", "marcas",
+    "identidad_local", "imagenes_pesaje", "kardex", "llaves_activacion",
+    "logs_sistema", "marcas",
     "modelos_camion", "notificaciones", "parametros_sistema",
     "permisos_acceso", "productos", "recordatorios", "remolques", "sync_logs",
     "sync_queue", "terceros", "transportes", "usuarios",
@@ -31,10 +32,21 @@ TABLAS_PG_Y_MSSQL = {
 TABLAS_SOLO_MSSQL = {"password_reset_tokens", "series_numeracion", "schema_migrations"}
 TABLAS_ESPERADAS_MSSQL = TABLAS_PG_Y_MSSQL | TABLAS_SOLO_MSSQL
 
-ESPERADAS_PK = 30
-ESPERADAS_FK = 44
-ESPERADAS_MIGRACIONES_PLEGADAS = 24
+ESPERADAS_PK = 31
+ESPERADAS_FK = 46
+ESPERADAS_MIGRACIONES_PLEGADAS = 25
 MAX_NVARCHAR_INDEXADA = 255
+
+
+def _migraciones_declaradas() -> list[str]:
+    """Nombres de migración aplicables, igual que ``wserver._archivos_migracion``.
+
+    Los ``*.mssql.sql`` se omiten a propósito: son el equivalente T-SQL (no los
+    aplica el arranque de PostgreSQL ni se siembran como versión en SQL Server).
+    """
+    return sorted(
+        p.name for p in MIGRACIONES_DIR.glob("*.sql") if not p.name.endswith(".mssql.sql")
+    )
 
 
 def _leer_mssql() -> str:
@@ -83,7 +95,7 @@ def test_cabecera_transaccional():
 # ---------------------------------------------------------------------------
 def test_conteo_tablas():
     assert _tablas_mssql(_leer_mssql()) == TABLAS_ESPERADAS_MSSQL
-    assert len(_tablas_mssql(_leer_mssql())) == 30
+    assert len(_tablas_mssql(_leer_mssql())) == 31
 
 
 def test_conteo_pk():
@@ -110,13 +122,13 @@ def test_guards_idempotentes_tablas():
     texto = _leer_mssql()
     crea = len(re.findall(r"CREATE TABLE", texto, re.I))
     guards = len(re.findall(r"IF OBJECT_ID", texto, re.I))
-    assert crea == guards == 30, f"CREATE TABLE={crea} guards={guards}"
+    assert crea == guards == 31, f"CREATE TABLE={crea} guards={guards}"
 
 
 def test_guards_idempotentes_indices_y_fk():
     """Índices y FKs se crean con IF NOT EXISTS sobre sys.indexes/foreign_keys."""
     texto = _leer_mssql()
-    assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.indexes") >= 30
+    assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.indexes") >= 31
     assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys") == ESPERADAS_FK
 
 
@@ -209,19 +221,39 @@ def test_paridad_tablas_pg_vs_mssql():
 
 
 def test_migraciones_plegadas_documentadas():
-    """Las 24 migraciones 001-024 existen como archivo (las pliega el WServer).
+    """Las 25 migraciones 001-025 existen como archivo (las pliega el WServer).
 
-    ``wserver._sembrar_migraciones_sqlserver`` itera ``migrations/*.sql`` del
-    disco; si el directorio real no tuviera esos 24 archivos, la siembra en
-    SQL Server (N1) registraría menos versiones y el esquema quedaría
-    desincronizado respecto a PostgreSQL. Verificar contra el directorio real
-    (no contra una constante) evita un test tautológico.
+    ``wserver._sembrar_migraciones_sqlserver`` itera las migraciones del disco
+    (``_archivos_migracion``); si el directorio real no tuviera esos 25
+    archivos, la siembra en SQL Server (N1) registraría menos versiones y el
+    esquema quedaría desincronizado respecto a PostgreSQL. Verificar contra el
+    directorio real (no contra una constante) evita un test tautológico.
     """
-    archivos = sorted(p.name for p in MIGRACIONES_DIR.glob("*.sql")) if MIGRACIONES_DIR.exists() else []
+    archivos = _migraciones_declaradas()
     assert len(archivos) == ESPERADAS_MIGRACIONES_PLEGADAS, (
         f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
-        f"hay {len(archivos)} en {MIGRACIONES_DIR}"
+        f"hay {len(archivos)} aplicables en {MIGRACIONES_DIR}"
     )
-    # Numeración contigua 001..024 (sin huecos) para que la siembra sea determinista.
+    # Numeración contigua 001..025 (sin huecos) para que la siembra sea determinista.
     for i in range(1, ESPERADAS_MIGRACIONES_PLEGADAS + 1):
         assert any(p.startswith(f"{i:03d}_") for p in archivos), f"falta la migración {i:03d}_*.sql"
+
+
+def test_migracion_mssql_no_se_aplica_en_postgres():
+    """Regresión: ``*.mssql.sql`` no debe llegar al arranque de PostgreSQL.
+
+    ``wserver._migraciones_pendientes`` ejecuta todo lo que el glob devuelva; un
+    archivo con sintaxis T-SQL (``BEGIN TRANSACTION``, ``[dbo]``, ``GO``) haría
+    fallar el bootstrap entero y dejaría la API en 503 en cada arranque.
+    """
+    variantes = [p.name for p in MIGRACIONES_DIR.glob("*.mssql.sql")]
+    assert variantes, "se esperaba al menos una variante T-SQL en migrations/"
+    declaradas = set(_migraciones_declaradas())
+    for nombre in variantes:
+        assert nombre not in declaradas, (
+            f"'{nombre}' tiene sintaxis T-SQL y el arranque de PostgreSQL la aplicaría"
+        )
+    # La versión PG equivalente sí debe existir y estar declarada.
+    for nombre in variantes:
+        equivalente = nombre.replace(".mssql.sql", ".sql")
+        assert equivalente in declaradas, f"falta la versión PostgreSQL de {nombre}"

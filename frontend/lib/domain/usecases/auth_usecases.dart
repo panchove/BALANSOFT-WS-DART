@@ -70,6 +70,16 @@ class RestoreSessionUseCase {
   Future<SesionRestaurada> execute() => _repo.restoreSession();
 }
 
+/// Relee la empresa del perfil (`GET /api/v1/empresa`) y la aplica al usuario
+/// cacheado. Se usa tras guardar el perfil de empresa para que la UI refresque
+/// nombre, RIF, dirección y logo sin obligar a reloguearse.
+class RefrescarEmpresaUseCase {
+  final IAuthRepository _repo;
+  RefrescarEmpresaUseCase(this._repo);
+
+  Future<User?> execute() => _repo.refrescarEmpresaEnUsuarioCacheado();
+}
+
 class ForgotPasswordUseCase {
   final IAuthRepository _repo;
   ForgotPasswordUseCase(this._repo);

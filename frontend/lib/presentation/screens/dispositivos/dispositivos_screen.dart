@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/i18n/translations.dart';
+import '../../../core/services/printer_discovery.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/scale_monitor_widget.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -39,10 +40,17 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   final Map<String, PruebaConexion> _ultimaPrueba = {};
   bool _verificando = false;
 
+  /// El escaneo SIEMPRE incluye básculas simuladas (BSDD local en
+  /// `127.0.0.1:5555` y ptys virtuales): el usuario pidió que la báscula
+  /// simulada aparezca automáticamente, sin botón manual de "agregar".
   @override
   void initState() {
     super.initState();
-    _cargar();
+    // Cargar el registro y, en segundo plano, autodetectar y registrar las
+    // básculas conectadas (reales o el simulador local) sin intervención.
+    unawaited(_cargar().then((_) {
+      if (mounted) unawaited(_escanear(silencioso: true));
+    }));
   }
 
   Future<void> _cargar() async {
@@ -119,38 +127,41 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     return 'No se pudo cargar los dispositivos. Revise la conexión con la API.';
   }
 
-  // ─── Escanear: descubre + auto-agrega nuevas + recarga ─────────────────
+  // ─── Escanear: descubre + auto-registra nuevas + recarga ──────────────
 
-  Future<void> _escanear() async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text('scanning_scales'.tr())),
-    );
+  /// Descubre básculas conectadas (reales o el simulador local en
+  /// `127.0.0.1:5555`) y **registra automáticamente** las nuevas.
+  ///
+  /// [silencioso] evita los avisos de "escaneando"/"no se encontraron"
+  /// cuando el escaneo se dispara solo al abrir la pantalla.
+  Future<void> _escanear({bool silencioso = false}) async {
+    if (!silencioso && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('scanning_scales'.tr())));
+    }
 
     List<Map<String, dynamic>> encontradas;
     try {
-      encontradas = await _api.descubrirBalanzas();
+      encontradas = await _api.descubrirBalanzas(incluirSimuladas: true);
     } catch (e) {
-      messenger.hideCurrentSnackBar();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(_mensajeError(e)),
-          backgroundColor: SwsColors.danger,
-        ),
-      );
+      if (!mounted || silencioso) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(_mensajeError(e)),
+            backgroundColor: SwsColors.danger,
+          ),
+        );
       return;
     }
 
     if (encontradas.isEmpty) {
-      messenger.hideCurrentSnackBar();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('no_scales_found'.tr()),
-        ),
-      );
+      if (!mounted || silencioso) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('no_scales_found'.tr())));
       return;
     }
 
@@ -187,20 +198,32 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       }
     }
 
-    messenger.hideCurrentSnackBar();
     if (!mounted) return;
     await _cargar();
     if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          '${encontradas.length} detectada(s) · '
-          '$agregadas nueva(s) añadida(s) · '
-          '${encontradas.length - agregadas} ya registrada(s)',
+
+    if (!silencioso) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'scales_detected_registered'
+                  .tr(null, ['${encontradas.length}', '$agregadas']),
+            ),
+            backgroundColor: SwsColors.info,
+          ),
+        );
+    } else if (agregadas > 0) {
+      // Aviso discreto cuando la autodetección registró algo nuevo.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('scale_autodetected'.tr(null, ['$agregadas'])),
+          backgroundColor: SwsColors.info,
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: agregadas > 0 ? SwsColors.success : null,
-      ),
-    );
+      );
+    }
   }
 
   String _claveHardware(Scale b) {
@@ -268,142 +291,6 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     }
   }
 
-  // ─── Agregar: solo IP+Puerto (simulada) ────────────────────────────────
-
-  Future<void> _agregarBalanza() async {
-    final descCtrl = TextEditingController();
-    final ipCtrl = TextEditingController(text: '127.0.0.1');
-    final puertoCtrl = TextEditingController(text: '5555');
-
-    final creada = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.scale, color: SwsColors.primary),
-            const SizedBox(width: 12),
-            Expanded(child: Text('add_tcp_scale'.tr())),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: SwsColors.blue100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: SwsColors.primary),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Conexión TCP. Por defecto apunta al simulador '
-                        'local en 127.0.0.1:5555.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción *',
-                  hintText: 'Báscula entrada',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: ipCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Dirección IP *',
-                  hintText: '127.0.0.1',
-                  prefixIcon: Icon(Icons.language),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: puertoCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Puerto TCP *',
-                  hintText: '5555',
-                  prefixIcon: Icon(Icons.router_outlined),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final desc = descCtrl.text.trim();
-              final ip = ipCtrl.text.trim();
-              final puerto = int.tryParse(puertoCtrl.text.trim());
-              if (desc.isEmpty || ip.isEmpty || puerto == null) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text('fill_desc_ip_port'.tr()),
-                    backgroundColor: SwsColors.danger,
-                  ),
-                );
-                return;
-              }
-              Navigator.of(ctx).pop({
-                'descripcion': desc,
-                'activo': true,
-                'protocolo': 'tcp',
-                'ip_address': ip,
-                'puerto_tcp': puerto,
-                'is_simulada': true,
-              });
-            },
-            child: Text('add'.tr()),
-          ),
-        ],
-      ),
-    );
-    Future.delayed(const Duration(milliseconds: 300), () {
-      descCtrl.dispose();
-      ipCtrl.dispose();
-      puertoCtrl.dispose();
-    });
-    if (creada == null || !mounted) return;
-    try {
-      await _api.createItem(ApiConstants.balanzas, creada);
-      if (!mounted) return;
-      await _cargar();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('scale_added'.tr()),
-          backgroundColor: SwsColors.success,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_mensajeError(e)),
-          backgroundColor: SwsColors.danger,
-        ),
-      );
-    }
-  }
-
   void _abrirDetalle(Scale balanza) {
     showModalBottomSheet<void>(
       context: context,
@@ -413,7 +300,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       builder: (_) => _BalanzaDetailSheet(
         balanza: balanza,
         esAdmin: _esAdmin,
-        onGuardado: _cargar,
+        onGuardado: () => unawaited(_escanear(silencioso: true)),
       ),
     );
   }
@@ -469,7 +356,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
   @override
   Widget build(BuildContext context) {
     return AtajoNuevo(
-      onNuevo: () => _agregarBalanza(),
+      onNuevo: () => unawaited(_escanear()),
       child: DefaultTabController(
         length: 2,
         child: Scaffold(
@@ -503,9 +390,9 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
           ),
           floatingActionButton: FloatingActionButton.extended(
             key: const Key('dispositivos_agregar'),
-            onPressed: _agregarBalanza,
-            icon: const Icon(Icons.add),
-            label: Text(context.tr('Añadir báscula')),
+            onPressed: _escanear,
+            icon: const Icon(Icons.radar_outlined),
+            label: Text(context.tr('detectar_balanzas')),
           ),
           body: TabBarView(
             children: [
@@ -543,7 +430,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
         const Center(
           child: Text(
             'No hay básculas registradas.\n'
-            'Use "Añadir báscula" o "Detectar" para encontrarlas.',
+            'Presione "Detectar" para buscarlas automáticamente.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SwsColors.gray500),
           ),
@@ -558,14 +445,6 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Center(
-          child: OutlinedButton.icon(
-            key: const Key('dispositivos_agregar_vacio'),
-            onPressed: _agregarBalanza,
-            icon: const Icon(Icons.add),
-            label: Text(context.tr('Añadir báscula')),
-          ),
-        ),
       ],
     );
   }
@@ -1202,36 +1081,39 @@ class _ImpresorasConfigTab extends StatefulWidget {
 }
 
 class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
+  /// Valor centinela del desplegable cuando el escaneo no encontró ninguna
+  /// impresora real. Es un valor de **lógica**: nunca se traduce ni se muestra
+  /// (la etiqueta visible es `printer_none_detected`).
+  static const String _sinImpresora = '__sin_impresora__';
+
   PrinterPreset _preset = const PrinterPreset();
   bool _cargando = true;
   bool _guardando = false;
   bool _escaneando = false;
 
-  final List<String> _impresorasDisponibles = [
-    'Impresora Térmica POS-80 (USB / EscPOS)',
-    'Impresora de Ticket 58mm (Serial / RS232)',
-    'Impresora de Sistema (PDF / Default OS)',
-    'EPSON LX-350 Matriz de Puntos (Formulario Continuo)',
-  ];
+  List<DiscoveredPrinter> _impresorasDescubiertas = [];
+  String? _ultimoErrorScan;
 
   @override
   void initState() {
     super.initState();
-    _cargarPreset();
+    unawaited(_arrancar());
   }
 
-  Future<void> _cargarPreset() async {
+  /// Carga la impresora recordada y **detecta automáticamente** las
+  /// impresoras reales instaladas en el equipo (las virtuales se descartan).
+  ///
+  /// El spinner se mantiene hasta terminar el primer escaneo para no
+  /// mostrar la lista vacía durante unos milisegundos.
+  Future<void> _arrancar() async {
     try {
-      final p = await di.sl<LocalStorage>().getPrinterPreset();
-      if (mounted) {
-        setState(() {
-          _preset = p;
-          _cargando = false;
-        });
-      }
+      _preset = await di.sl<LocalStorage>().getPrinterPreset();
     } catch (_) {
-      if (mounted) setState(() => _cargando = false);
+      // Sin preset guardado se usa el valor por defecto.
     }
+    if (!mounted) return;
+    await _escanearImpresoras(silencioso: true);
+    if (mounted) setState(() => _cargando = false);
   }
 
   Future<void> _guardarImpresora() async {
@@ -1260,18 +1142,67 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
     }
   }
 
-  Future<void> _escanearImpresoras() async {
-    setState(() => _escaneando = true);
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (mounted) {
-      setState(() => _escaneando = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('printer_scan_done'.tr()),
-          backgroundColor: SwsColors.info,
-        ),
-      );
+  /// Escanea las impresoras **reales** del sistema (Windows/CUPS) y
+  /// descarta las virtuales (PDF, XPS…).
+  ///
+  /// Si la impresora recordada ya no está instalada, adopta automáticamente
+  /// la detectada como predeterminada del sistema y la **guarda** para
+  /// dejarla registrada como reconocida.
+  Future<void> _escanearImpresoras({bool silencioso = false}) async {
+    setState(() {
+      _escaneando = true;
+      _ultimoErrorScan = null;
+    });
+
+    List<DiscoveredPrinter> printers;
+    try {
+      printers = await PrinterDiscovery.scan();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _escaneando = false;
+          _ultimoErrorScan = 'Error al escanear: $e';
+        });
+      }
+      return;
     }
+    if (!mounted) return;
+
+    // ¿La impresora guardada sigue instalada en este equipo?
+    final guardadaExiste = printers.any((p) => p.name == _preset.nombreImpresora);
+    var autoRegistrada = false;
+    if (printers.isNotEmpty && !guardadaExiste) {
+      final elegida =
+          printers.firstWhere((p) => p.isDefault, orElse: () => printers.first);
+      _preset = _preset.copyWith(nombreImpresora: elegida.name);
+      autoRegistrada = true;
+      try {
+        await di.sl<LocalStorage>().savePrinterPreset(_preset);
+      } catch (_) {
+        // El guardado no debe romper la UI; el usuario puede reintentarlo.
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _impresorasDescubiertas = printers;
+      _escaneando = false;
+      if (printers.isEmpty) _ultimoErrorScan = 'printer_no_printers'.tr();
+    });
+
+    if (silencioso) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          printers.isEmpty
+              ? 'printer_no_printers'.tr()
+              : autoRegistrada
+                  ? 'printer_auto_registered'.tr(null, [_preset.nombreImpresora])
+                  : 'printers_found'.tr(null, ['${printers.length}']),
+        ),
+        backgroundColor: printers.isEmpty ? SwsColors.warning : SwsColors.info,
+      ),
+    );
   }
 
   @override
@@ -1310,21 +1241,66 @@ class _ImpresorasConfigTabState extends State<_ImpresorasConfigTab> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: _impresorasDisponibles.contains(_preset.nombreImpresora)
+                  // La clave cambia con el resultado del escaneo: fuerza la
+                  // recreación del campo para que `initialValue` refleje las
+                  // impresoras recién descubiertas (si la activa guardada no
+                  // está en la lista, cae a la primera real detectada).
+                  key: ValueKey(
+                    'impresoras_${_impresorasDescubiertas.map((p) => p.name).join('|')}_'
+                    '${_preset.nombreImpresora}',
+                  ),
+                  initialValue: _impresorasDescubiertas
+                          .any((p) => p.name == _preset.nombreImpresora)
                       ? _preset.nombreImpresora
-                      : _impresorasDisponibles.first,
+                      : (_impresorasDescubiertas.isNotEmpty
+                          ? _impresorasDescubiertas.first.name
+                          : _sinImpresora),
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Impresora Activa Seleccionada',
                     prefixIcon: Icon(Icons.print_outlined),
                   ),
-                  items: _impresorasDisponibles
-                      .map((imp) => DropdownMenuItem(value: imp, child: Text(imp, overflow: TextOverflow.ellipsis)))
-                      .toList(),
+                  items: [
+                    ..._impresorasDescubiertas.map((p) => DropdownMenuItem(
+                          value: p.name,
+                          child: Text(
+                            '${p.name} (${PrinterDiscovery.connectionTypeLabel(p.connection)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                    if (_impresorasDescubiertas.isEmpty)
+                      DropdownMenuItem(
+                        value: _sinImpresora,
+                        child: Text('printer_none_detected'.tr(),
+                            style: const TextStyle(
+                                color: SwsColors.gray500, fontStyle: FontStyle.italic)),
+                      ),
+                  ],
                   onChanged: (val) {
-                    if (val != null) setState(() => _preset = _preset.copyWith(nombreImpresora: val));
+                    if (val != null && val != _sinImpresora) {
+                      setState(() => _preset = _preset.copyWith(nombreImpresora: val));
+                    }
                   },
                 ),
+                // Aviso cuando el escaneo no encontró NINGUNA impresora real
+                // (en lugar de mostrar una lista ficticia).
+                if (_ultimoErrorScan != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 16, color: SwsColors.danger),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _ultimoErrorScan!,
+                          style: const TextStyle(
+                              fontSize: 12, color: SwsColors.danger),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _preset.tipoImpresora,

@@ -745,6 +745,116 @@ class TestNotifier:
         assert script is not None
         assert "'va''l'" in script[-1]
 
+    def test_windows_registra_el_aumid_antes_de_mostrar(self, monkeypatch):
+        """Sin el AUMID en el registro Windows **descarta** el toast en silencio.
+
+        `CreateToastNotifier` con un emisor desconocido no lanza ninguna
+        excepción: el aviso simplemente no aparece. El guion tiene que dejar el
+        AUMID registrado (las dos claves que documenta Microsoft para apps de
+        escritorio sin identidad de paquete) **antes** del `.Show(...)`.
+        """
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        script = notifier._comando_windows("Título", "Mensaje")
+        assert script is not None
+        guion = script[-1]
+        assert "New-Item -Path $ka -Force" in guion
+        assert "DisplayName" in guion
+        assert "PushNotifications" in guion
+        assert "app:desktop" in guion
+        assert "NonImmersivePackage" in guion
+        # El AUMID, no el nombre visible: el registro y el emisor coinciden.
+        assert f"CreateToastNotifier({notifier._ps_cadena(notifier.AUMID)})" in guion
+        assert (
+            guion.index(notifier.CLAVE_AUMID)
+            < guion.index("CreateToastNotifier(")
+        )
+
+    def test_windows_no_pisa_el_aumid_de_la_app(self, monkeypatch):
+        """La app Flutter escribe la misma clave con su `CustomActivator`.
+
+        Si el WServer la reescribiera en cada aviso borraría el activador con el
+        que el clic en el toast abre la app, así que el registro va guardado por
+        `Test-Path`.
+        """
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        partes = notifier._comando_windows("T", "M")
+        assert partes is not None
+        guion = partes[-1]
+        assert guion.count("if (-not (Test-Path $ka)) {") == 1
+        assert guion.count("if (-not (Test-Path $kb)) {") == 1
+        # Nada de `-Force` sobre `CustomActivator`: la clave no se toca si ya
+        # existe.
+        assert "CustomActivator" not in guion
+
+    def test_windows_icono_del_aumid_es_una_uri_de_archivo(self, monkeypatch):
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        guion = notifier._comando_windows("T", "M")
+        assert guion is not None
+        assert "IconUri" in guion[-1]
+        assert "file:///" in guion[-1]
+
+    def test_sin_icono_no_registra_iconuri(self, monkeypatch):
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        monkeypatch.setattr(notifier, "ruta_icono", lambda: None)
+        guion = notifier._comando_windows("T", "M")
+        assert guion is not None
+        assert "IconUri" not in guion[-1]
+        assert "DisplayName" in guion[-1]
+
+    def test_windows_escapa_comillas_en_las_claves_del_registro(self, monkeypatch):
+        """Las claves del registro van como literal de PowerShell, no crudas."""
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        guion = notifier._comando_windows("T", "M")
+        assert guion is not None
+        assert (
+            f"$ka = {notifier._ps_cadena(notifier.CLAVE_AUMID)};" in guion[-1]
+        )
+        assert (
+            f"$kb = {notifier._ps_cadena(notifier.CLAVE_AUMID_BACKUP)};" in guion[-1]
+        )
+
+    def test_comando_windows_completo_se_puede_ejecutar(self, monkeypatch):
+        """El guion es texto de PowerShell sintácticamente equilibrado.
+
+        No se ejecuta PowerShell de verdad (no hay en CI Linux): se comprueba
+        que las llaves y los paréntesis cierran, que es el error que dejaría el
+        guion colgado y el aviso sin mostrarse **sin** error visible.
+        """
+        from app.services import notifier
+
+        monkeypatch.setattr(
+            notifier.shutil, "which", lambda _: "C:/Windows/powershell.exe"
+        )
+        partes = notifier._comando_windows("Título", "Mensaje")
+        assert partes is not None
+        guion = partes[-1]
+        assert guion.count("{") == guion.count("}")
+        assert guion.count("(") == guion.count(")")
+        # Un solo `.Show(`: un toast por aviso.
+        assert guion.count(".Show(") == 1
+        # El literal de las claves termina en `;` (PowerShell ejecuta sentencias).
+        assert guion.endswith(";")
+
 
 # ---------------------------------------------------------------------------
 # Carrera real del dedup (dos sesiones)

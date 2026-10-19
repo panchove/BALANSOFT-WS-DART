@@ -337,6 +337,25 @@ class ApiClient {
     return response.data as Map<String, dynamic>;
   }
 
+  /// Emite una llave de activación de un solo uso para un usuario local.
+  ///
+  /// El código en claro solo se devuelve en esta respuesta (el backend lo
+  /// guarda hasheado): el ADMIN debe compartirlo con el empleado, que lo
+  /// canjeará al instalar su estación. Una llave nueva revoca la anterior.
+  Future<Map<String, dynamic>> crearLlaveActivacion(
+    String idUsuario, {
+    int? expiraHoras,
+  }) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.llavesActivacion}',
+      data: {
+        'id_usuario': idUsuario,
+        if (expiraHoras != null) 'expira_horas': expiraHoras,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   /// Lista de usuarios sincronizados pendientes de enviar al servidor central.
   Future<List<dynamic>> usuariosPendientes() async {
     final response =
@@ -724,9 +743,17 @@ Future<Response> getMonthlyReport(int year, int month) async {
   }
 
   /// Escanea las básculas conectadas/disponibles (TCP + serial).
-  Future<List<Map<String, dynamic>>> descubrirBalanzas() async {
-    final response =
-        await _dio.get('$_baseUrl${ApiConstants.balanzasDescubrir}');
+  ///
+  /// [incluirSimuladas] - Incluye básculas simuladas (BSDD local en
+  /// 127.0.0.1:5555 y ptys virtuales en /tmp). Por defecto true: el simulador
+  /// debe aparecer solo, sin alta manual, igual que el backend.
+  Future<List<Map<String, dynamic>>> descubrirBalanzas({
+    bool incluirSimuladas = true,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.balanzasDescubrir}',
+      queryParameters: {'incluir_simuladas': incluirSimuladas},
+    );
     return (response.data as List? ?? []).whereType<Map<String, dynamic>>().toList();
   }
 

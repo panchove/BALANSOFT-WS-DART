@@ -100,22 +100,21 @@ if settings.app_role == "local":
 |-----|----------|
 | **ADMIN** | Todo: catálogos, pesaje, modificar/anular, crear usuarios, configurar balanzas, ver licencia |
 | **AUDITOR** | Consultas, reportes, auditoría, modificar/anular. **No** crea usuarios ni configura |
-| **OPERADOR** | Pesaje entrada/salida, consulta básica de vehículos |
-| **TRABAJADOR** | Pesaje entrada/salida únicamente (rol más restringido) |
+| **OPERADOR** | Pesaje entrada/salida, consulta básica de vehículos (absorbe el antiguo rol `TRABAJADOR`) |
 
 **Matriz de permisos por endpoint:**
 
-| Endpoint | ADMIN | AUDITOR | OPERADOR | TRABAJADOR |
-|----------|:-----:|:-------:|:--------:|:----------:|
-| `POST /weighing/create` | ✅ | ❌ | ✅ | ✅ |
-| `POST /weighing/close` | ✅ | ❌ | ✅ | ✅ |
-| `PUT /weighing/{boleto}/anular` | ✅ | ✅ | ❌ | ❌ |
-| `PUT /weighing/{boleto}` (modificar) | ✅ | ✅ | ❌ | ❌ |
-| `GET /catalogo/*` | ✅ | ✅ | ✅ (lectura) | ❌ |
-| `POST/PUT/DELETE /catalogo/*` | ✅ | ❌ | ❌ | ❌ |
-| `GET /reports/*` | ✅ | ✅ | ❌ | ❌ |
-| `POST /panel/*` (proveedor) | ❌ | ❌ | ❌ | ❌ |
-| `GET /licencias/snapshot` | ✅ | ✅ | ❌ | ❌ |
+| Endpoint | ADMIN | AUDITOR | OPERADOR |
+|----------|:-----:|:-------:|:--------:|
+| `POST /weighing/create` | ✅ | ❌ | ✅ |
+| `POST /weighing/close` | ✅ | ❌ | ✅ |
+| `PUT /weighing/{boleto}/anular` | ✅ | ✅ | ❌ |
+| `PUT /weighing/{boleto}` (modificar) | ✅ | ✅ | ❌ |
+| `GET /catalogo/*` | ✅ | ✅ | ✅ (lectura) |
+| `POST/PUT/DELETE /catalogo/*` | ✅ | ❌ | ❌ |
+| `GET /reports/*` | ✅ | ✅ | ❌ |
+| `POST /panel/*` (proveedor) | ❌ | ❌ | ❌ |
+| `GET /licencias/snapshot` | ✅ | ✅ | ❌ |
 
 ---
 
@@ -196,7 +195,7 @@ No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 |-------|-----------|
 | `identidad_local` | Vínculo con la cuenta (1 fila): `id_cuenta`, licencia cacheada, `modo_offline` |
 | `empresas` | Espejo local de la cuenta (1:1, provee `id_empresa` para FKs) |
-| `usuarios` | Usuarios operativos con rol local (ADMIN/OPERADOR/AUDITOR/TRABAJADOR) |
+| `usuarios` | Usuarios operativos con rol local (ADMIN/OPERADOR/AUDITOR) |
 | `transportes` | Empresas de transporte |
 | `marcas` / `modelos_camion` / `camiones` / `remolques` | Flota y transporte |
 | `conductores` / `terceros` | Directorio (conductores PK = cédula; terceros con `tipo` C/P) |
@@ -208,6 +207,7 @@ No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 | `auditoria` / `logs_sistema` | Auditoría operativa y logs |
 | `configuraciones` / `parametros_sistema` | Configuración local |
 | `recordatorios` / `notificaciones` | Avisos de la estación: recordatorios programados por el ADMIN y la bandeja de avisos (idempotente por `dedup_key`). La llena el programador residente del backend (`app/core/notification_scheduler.py`) |
+| `llaves_activacion` | Llaves de activación de **un solo uso** que el ADMIN emite para autorizar una estación OPERADOR (código guardado como SHA-256, `codigo_preview` de 6 caracteres). Ver §13.7 |
 
 #### Avisos nativos del SO (app Flutter cerrada)
 
@@ -218,7 +218,7 @@ El programador residente del backend local (`app/core/notification_scheduler.py`
 - **Windows**: toast vía PowerShell; con icono usa la plantilla `ToastGeneric` + `<image placement="appLogoOverride">` (la antigua `ToastText02` no admite logo). El texto va por nodos DOM (`CreateTextNode`), nunca interpolado en el XML.
 - **Bundles**: el icono viaja dentro del binario one-file (`WServer.spec` → `assets/balansoft-ws.png`), por lo que **una estación con un WServer anterior al subsistema de notificaciones no avisa ni aplica la migración `023`**: hay que recompilar (`./scripts/build_wserver.sh`) y redistribuir.
 
-> **Tablas del esquema local (26, verificadas contra el DDL):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `almacenes`, `balanzas`, `boletos_pesaje`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `seguridad_permisos`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`.
+> **Tablas del esquema local (30, verificadas contra el DDL: `balansoft-ws-local.sql` + `migrations/*.sql`):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `categorias`, `almacenes`, `balanzas`, `boletos_pesaje`, `boletos_ediciones`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `permisos_acceso`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`, `llaves_activacion`, `password_reset_tokens`.
 
 ### 6.3 Columnas reservadas (sin semántica definida — no usar)
 
@@ -494,7 +494,7 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
    en el firewall (`ufw allow 8000/tcp` vía `pkexec`) y muestra la URL
    alcanzable de la LAN (`http://<IP-local>:8000`).
 2. El **instalador** (`BALANSOFT-INSTALLER`, repo aparte) decide el rol de la
-   estación (`SERVIDOR` | `TRABAJADOR`) y escribe `config.json` (ver §13.3).
+   estación (`SERVIDOR` | `OPERADOR`) y escribe `config.json` (ver §13.3).
    La app Flutter **ya no tiene asistente de instalación**: arranca siempre en
    `/login`. Si `config.json` falta o es inválido, `main()` muestra una pantalla
    de error de provisión (no inventa rol ni URL).
@@ -706,7 +706,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 | Documento | Estado | Descripción |
 |-----------|:------:|-------------|
 | `MANEJO_DB.md` | **Este documento** | Arquitectura de dos BDs, setup de desarrollo, login, modelo de cuenta/dispositivos (§13), estado y plan |
-| `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/trabajador) y preferencias persistidas |
+| `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/operador) y preferencias persistidas |
 | `BALANZAS_SOPORTADAS.md` | Vigente | Matriz de compatibilidad de indicadores reales (Yaohua, Torrey, Keli, Rice Lake, Syneria/Ichiban, Excel) y configuración recomendada por marca |
 | `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
 | `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (26 tablas) |
@@ -722,7 +722,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 ---
 
-## 13. Modelo de Cuenta y Dispositivos (Servidor Local / Trabajador Local)
+## 13. Modelo de Cuenta y Dispositivos (Servidor Local / Operador Local)
 
 > Referenciado por el código de estación (`frontend/lib/core/config/station_config.dart`
 > y `main.dart`) y por los comentarios de `app/api/v1/endpoints/servidor.py` y `auth.py`.
@@ -767,7 +767,7 @@ si ya fue activada es `licencias.hardware_id`:
   `ADMIN`, o cualquier credencial en `DEMO`/`MONOPUESTO`) se amarra a la licencia
   como **titular único** y la licencia queda `ACTIVA`.
 - Con `hardware_id` → ya activada: ese equipo es el `SERVIDOR_LOCAL` y el resto
-  son trabajadores.
+  son operadores.
 
 Por eso `_normalizar_estado_lm()` convierte `AVAILABLE`/`DEVICE_NOT_REGISTERED`
 en `ACTIVA` antes de escribir en la BD: si se guardaba tal cual, `_licencia_activa()`
@@ -817,16 +817,17 @@ central); ese valor es el que se pasa como `HW_NUEVO` a `reconcile_titular.sh`.
 La app **ya no tiene asistente de instalación**: el rol lo decide el instalador
 (`BALANSOFT-INSTALLER`) y queda fijo en `config.json`. El backend sigue siendo
 la autoridad en cada login: `POST /api/v1/auth/login-central` puede recibir
-`modo_solicitado: SERVIDOR | TRABAJADOR` como campo opcional, y si se pide
+`modo_solicitado: SERVIDOR | OPERADOR` como campo opcional (el valor histórico
+`TRABAJADOR` sigue aceptándose como alias), y si se pide
 `SERVIDOR` en un dispositivo que **no** es `SERVIDOR_LOCAL` responde `403` con
-la instrucción de instalarse como Trabajador. La app ya no envía ese campo: la
+la instrucción de instalarse como Operador. La app ya no envía ese campo: la
 validación de rol ocurre sola en el login (ver 13.1).
 
 ### 13.3 Flujo por modo
 
 **Config de estación (`config.json`):** el instalador escribe exactamente dos
 claves — `api_base_url` (http/https, sin credenciales ni path) y `rol`
-(`SERVIDOR` | `TRABAJADOR`) — en el **override de usuario**
+(`SERVIDOR` | `OPERADOR`) — en el **override de usuario**
 `~/.config/balansoftws/config.json` (prioritario, 0600) o en el **de sistema**
 (`/etc/balansoftws/config.json` en Linux, `%ProgramData%\BalansoftWS\config.json`
 en Windows). Si ambos faltan, la app intenta **una sola vez** migrar el legado
@@ -851,7 +852,7 @@ no autoriza nada:
 3. Cierre de ventana: si el WServer no está en autostart, la app lo detiene al
    salir (`onWindowClose`).
 
-**Trabajador Local** (cliente delgado, sin BD ni WServer propios):
+**Operador Local** (cliente delgado, sin BD ni WServer propios):
 
 1. `/login` — `LoginScreen` **no** llama `WServerManager.ensureRunning()`: la
    API es la del servidor titular (la URL viene en `config.json`).
@@ -883,7 +884,7 @@ equipo de la cuenta, además de su rol de dispositivo:
 | Columna | Valores | Semántica |
 |---------|---------|-----------|
 | `estado` | `PENDIENTE` / `APROBADO` / `RECHAZADO` (default `APROBADO`) | Aprobación de la tutora. Las filas **antiguas** sin valor se leen como `APROBADO`. |
-| `rol_sesion` | `ADMIN` / `OPERADOR` / `AUDITOR` / `TRABAJADOR`, o `NULL` | Rol con el que opera la sesión del equipo (NULL hasta aprobar). |
+| `rol_sesion` | `ADMIN` / `OPERADOR` / `AUDITOR`, o `NULL` | Rol con el que opera la sesión del equipo (NULL hasta aprobar). El valor histórico `TRABAJADOR` se lee como `OPERADOR`. |
 
 - **Quién nace pendiente**: solo un equipo de licencia **`CENTRAL`** que **no**
   sea el titular; nace `PENDIENTE` (y `activo=false`, no consume cupo). El
@@ -902,6 +903,53 @@ equipo de la cuenta, además de su rol de dispositivo:
   `sesion_rechazada` / `sesion_+rol`).
 - Detalle funcional, contrato de `GET/PATCH /api/v1/auth/sesiones` y la UI de
   Flutter (`Sesiones y Equipos`): **`docs/SESIONES.md`**.
+
+### 13.6 Licencia: funcionalidad y sesiones
+
+La licencia del LM **no restringe funciones** en la estación: sus `features`
+(Básico/Premium) no bloquean ningún módulo. Lo único que el tier impone es el
+**límite de sesiones/equipos**:
+
+| Tier | Límite de sesiones local |
+|------|--------------------------|
+| `DEMO` | 3 |
+| `MONOPUESTO` / `CENTRAL` (y los planes Básico/Premium) | Sin tope local: manda `licencias.max_sesiones` del LM/central |
+
+`limite_sesiones_por_tier()` (`app/services/llave_activacion_service.py`) es la
+única fuente de ese tope y `GET /api/v1/auth/license` lo traduce a
+`es_demo`/límite antes de responder a la app.
+
+### 13.7 Llaves de activación (autorización de estaciones OPERADOR)
+
+Una estación **OPERADOR** (cliente delgado) no se instala sin autorización
+explícita: el instalador exige una **llave de activación de un solo uso** que
+emite el ADMIN desde el servidor titular.
+
+| Aspecto | Regla |
+|---------|-------|
+| Emisión | `POST /api/v1/activacion/llaves` — solo `ADMIN`; cuerpo `{id_usuario, expira_horas?}`. El código en claro se devuelve **una sola vez** (`BS-XXXX-XXXX-XXXX`), con `codigo_preview` (últimos 6) para reconocerlo en la lista. |
+| Vigencia | 7 días por defecto (`_EXPIRA_HORAS_DEFAULT`), entre 1 h y 90 días. |
+| Un solo uso **por usuario** | Emitir una llave nueva **revoca** la anterior del mismo usuario. |
+| Canje | `POST /api/v1/activacion/validar` — **sin autenticación** (lo llama el instalador antes de existir sesión); cuerpo `{codigo, hardware_id?}`. |
+| Idempotencia | La fila se lee con `FOR UPDATE`: dos instaladores con el mismo código no pueden consumirlo dos veces. |
+| Tenant | El `id_empresa` sale de la **propia llave**, nunca del cliente. |
+| Respuesta inválida | `400` con `detail` («inválido o ya utilizado», «expiró», …): el instalador no deja continuar y **ese equipo no recibe cuenta**. |
+| Respuesta válida | `200 {ok: true, usuario_email, empresa_nombre, mensaje}` (`ok` es un default del esquema, pero viaja en el cuerpo y el instalador lo **exige**: un `200` sin él —p. ej. un portal cautivo que devuelva HTML— **no** cuenta como canje). El instalador guarda el usuario autorizado y sigue. |
+| Aviso al dueño | Al consumirse se escribe una `notificacion` (`tipo=activacion_equipo`, `dedup_key=llave_activacion:<id>`) con las sesiones usadas/disponibles. |
+| Almacenamiento | Solo el **SHA-256** del código (`codigo_hash`, índice único) y el `codigo_preview`; nunca el código en claro. Alfabeto sin `0/O` ni `1/I` (tecleo en estación). |
+
+En el instalador la llave se pide en el **paso 1c**, junto a la dirección del
+servidor titular: ese paso no deja avanzar hasta que la API responde **y** la
+llave se canjea (`gui/steps/conexion.py`, `core/station_config.validar_llave_activacion`).
+
+**La llave canjeada no se reenvía.** El canje es de un solo uso, así que si el
+operador **corrige la dirección** del titular después de haber canjeado (una IP
+mal tecleada es el caso típico: bastaba un cambio de IP del titular), el
+segundo *Siguiente* vuelve a probar **solo la dirección** y conserva el usuario
+autorizado: no reenvía el código, que el servidor rechazaría por consumido y
+dejaría al asistente parado sin salida (``llave_validada=False`` y sin más
+salida que pedir otra llave al administrador). La autorización no se pierde al
+corregir la dirección.
 
 ---
 

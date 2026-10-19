@@ -20,7 +20,7 @@ class SesionEquipo {
   /// `LOCAL` o `SERVIDOR` (rol de instalación del equipo).
   final String rolDispositivo;
 
-  /// Rol con el que operará la sesión: `ADMIN|OPERADOR|AUDITOR|TRABAJADOR`.
+  /// Rol con el que operará la sesión: `ADMIN|OPERADOR|AUDITOR`.
   /// `null` mientras el equipo no ha sido aprobado.
   final String? rolSesion;
 
@@ -65,7 +65,6 @@ class SesionEquipo {
     'ADMIN',
     'OPERADOR',
     'AUDITOR',
-    'TRABAJADOR',
   ];
 
   bool get estaPendiente => estado == estadoPendiente;

@@ -463,6 +463,39 @@ class TestAuthEndpoints:
         assert payload["tier"] == "CENTRAL"
         assert payload["status"] == "ACTIVE"
         assert "registros_actuales" in payload
+        # Un tier de pago (CENTRAL, Básico o Premium) no impone topes
+        # funcionales locales: solo DEMO limita. La concurrencia la fija el LM.
+        assert payload["features"] == {
+            "max_registros": None,
+            "max_sesiones": None,
+            "max_equipos": None,
+            "max_usuarios": None,
+        }
+
+    async def test_licencia_empresa_snapshot_demo(self, app, empresa, db):
+        """DEMO es el unico tier con topes: 3 sesiones, 1 equipo y 1 usuario.
+
+        Pincha la rama DEMO del snapshot (la de arriba solo cubre el tier de
+        pago) y, sobre todo, que las sesiones DEMO salen de la fuente unica
+        (``limite_sesiones_por_tier``) y no de un literal suelto en la ruta.
+        """
+        from app.core.config import settings
+
+        empresa.licencia_tier = "DEMO"
+        await db.commit()
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as ac:
+            resp = await ac.get("/api/v1/auth/license")
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert payload["tier"] == "DEMO"
+        assert payload["features"] == {
+            "max_registros": settings.demo_max_records,
+            "max_sesiones": 3,
+            "max_equipos": 1,
+            "max_usuarios": 1,
+        }
 
     async def test_login_credenciales_invalidas(self, app):
         transport = httpx.ASGITransport(app=app)
@@ -579,6 +612,47 @@ class TestDispositivosEndpoints:
             d["ip_address"] == "127.0.0.1" and d["puerto_tcp"] == 5555 and d["peso_kg"] == 321.5
             for d in r.json()
         )
+
+    async def test_descubrir_simulada_por_defecto_y_marcada(self, client, monkeypatch):
+        """La simulada se descubre por defecto y llega marcada `is_simulada=True`.
+
+        La app muestra el simulador de forma automática (sin alta manual), y el
+        resultado debe poder distinguirse de una báscula real.
+        """
+
+        class FakeTcp:  # noqa: D106
+            def __init__(self, host: str, port: int):
+                self.host = host
+                self.port = port
+
+            async def read_weight(self) -> float:
+                return 320.0
+
+        monkeypatch.setattr(inventario_module, "TcpScaleHAL", FakeTcp)
+        r = await client.get("/api/v1/balanzas/descubrir")
+        assert r.status_code == 200, r.text
+        sim = [d for d in r.json() if d["ip_address"] == "127.0.0.1" and d["puerto_tcp"] == 5555]
+        assert len(sim) == 1, r.text
+        assert sim[0]["is_simulada"] is True
+
+    async def test_descubrir_sin_simuladas_cuando_se_pide(self, client, monkeypatch):
+        """`incluir_simuladas=false` deja fuera tanto el TCP local como los ptys."""
+
+        class FakeTcp:  # noqa: D106
+            def __init__(self, host: str, port: int):
+                self.host = host
+                self.port = port
+
+            async def read_weight(self) -> float:
+                return 320.0
+
+        monkeypatch.setattr(inventario_module, "TcpScaleHAL", FakeTcp)
+        r = await client.get("/api/v1/balanzas/descubrir?incluir_simuladas=false")
+        assert r.status_code == 200, r.text
+        assert not any(
+            d["ip_address"] == "127.0.0.1" and d["puerto_tcp"] == 5555 for d in r.json()
+        )
+        assert not any(d.get("is_simulada") for d in r.json())
 
     async def test_catalogo_sync_incluye_hardware(self, client):
         await self._crear_balanza(client, ip_address="10.0.0.7", puerto_tcp=5556, protocolo="tcp")

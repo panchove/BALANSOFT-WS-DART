@@ -42,7 +42,7 @@ Para la correcta interpretación de estos Términos, se establecen las siguiente
 
 **1.9. Servidor Local:** Dispositivo titular de la licencia sobre el cual se activa la cuenta ADMIN y que ejecuta el componente **WServer** (backend y base de datos local).
 
-**1.10. Trabajador:** Dispositivo cliente delgado que se conecta a la API del Servidor Local, sin base de datos ni WServer propios, y que utiliza credenciales creadas por el administrador de la cuenta.
+**1.10. Operador:** Dispositivo cliente delgado que se conecta a la API del Servidor Local, sin base de datos ni WServer propios, y que utiliza credenciales creadas por el administrador de la cuenta.
 
 **1.11. Credenciales:** Conjunto de usuario (email) y contraseña requeridos para autenticarse en el Sistema.
 
@@ -95,9 +95,10 @@ Para la correcta interpretación de estos Términos, se establecen las siguiente
 
 **3.4. Configuración inicial:** Tras la activación, el Cliente (desde la cuenta ADMIN) debe completar la configuración inicial del Sistema, incluyendo datos de empresa, formatos, y la creación de los usuarios operativos.
 
-**3.5. Instalación en dispositivos Trabajador:** Para cada dispositivo adicional autorizado (dentro del límite de sesiones contratadas):
+**3.5. Instalación en dispositivos Operador:** Para cada dispositivo adicional autorizado (dentro del límite de sesiones contratadas):
    - El Cliente debe descargar el paquete instalador **únicamente desde el portal oficial** https://balansoft.com.ve/downloads.
-   - Instalar el Sistema en **modo Trabajador**.
+   - Instalar el Sistema en **modo Operador**.
+   - Autorizar el equipo con una **llave de activación de un solo uso** que el Cliente genera desde su cuenta ADMIN (la llave caduca y solo se puede canjear una vez).
    - Conectarse a la API del Servidor Local.
    - Utilizar las **credenciales creadas por el administrador de la cuenta** para iniciar sesión.
 
@@ -150,7 +151,7 @@ El Cliente se obliga a:
 
 **5.2. Custodia de credenciales:** Mantener bajo estricta confidencialidad las credenciales de la cuenta ADMIN entregadas por el Proveedor, y ser responsable de todas las acciones realizadas con dichas credenciales.
 
-**5.3. Gestión de usuarios:** Crear, administrar y revocar las credenciales de los usuarios Trabajadores desde la cuenta ADMIN, conforme al límite de sesiones contratadas.
+**5.3. Gestión de usuarios:** Crear, administrar y revocar las credenciales de los usuarios Operadores desde la cuenta ADMIN, conforme al límite de sesiones contratadas.
 
 **5.4. No compartir credenciales con terceros no autorizados:** Las credenciales son personales e intransferibles. El Cliente no debe compartirlas con personas ajenas a su organización.
 
@@ -318,8 +319,9 @@ El Cliente se obliga a:
 | Número de sesiones | Solicitado por el Cliente al comprar; define el costo y el límite de dispositivos simultáneos |
 | Creación de cuenta ADMIN | Exclusivamente por el Proveedor |
 | Entrega de credenciales | El Proveedor envía email y contraseña al Cliente |
+| Autorización de equipos Operador | El Cliente, emitiendo una llave de activación de un solo uso desde la cuenta ADMIN |
 | Vínculo de cuenta | Al primer dispositivo donde se activa (Servidor Local) |
-| Creación de trabajadores | El Cliente, desde la cuenta ADMIN |
+| Creación de operadores | El Cliente, desde la cuenta ADMIN |
 | Descarga del instalador | Solo desde https://balansoft.com.ve/downloads |
 | Copia/difusión de archivos | Prohibida |
 | Difusión de esquemas de BD | Prohibida |

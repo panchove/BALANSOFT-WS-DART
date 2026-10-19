@@ -68,6 +68,9 @@ class _FakeAuthRepository implements IAuthRepository {
   Future<User?> getCachedUser() async => usuario;
 
   @override
+  Future<User?> refrescarEmpresaEnUsuarioCacheado() async => usuario;
+
+  @override
   Future<SesionRestaurada> restoreSession() async => SesionRestaurada.ok;
 
   @override
@@ -140,6 +143,7 @@ void main() {
       restoreSessionUseCase: RestoreSessionUseCase(repo),
       forgotPasswordUseCase: ForgotPasswordUseCase(repo),
       resetPasswordUseCase: ResetPasswordUseCase(repo),
+      refrescarEmpresaUseCase: RefrescarEmpresaUseCase(repo),
     )..add(const CheckAuthStatusEvent());
 
     return BlocProvider<AuthBloc>.value(
@@ -291,7 +295,7 @@ void main() {
       expect(accionVisible('AUDITOR', 'go:auditoria'), isNotNull);
       expect(accionVisible('OPERADOR', 'go:auditoria'), isNull);
       // Ayuda: todos los roles.
-      for (final rol in ['ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR']) {
+      for (final rol in ['ADMIN', 'OPERADOR', 'AUDITOR']) {
         expect(accionVisible(rol, 'go:ayuda'), isNotNull, reason: rol);
       }
     });
@@ -400,8 +404,11 @@ void main() {
 
   test('la matriz por defecto sigue marcando reportes como visible', () {
     expect(AccesosDefault.acceso('OPERADOR', 'reportes'), 'editar');
-    expect(AccesosDefault.acceso('TRABAJADOR', 'reportes'), 'ninguno');
     expect(AccesosDefault.modulos['reportes'], 'Reportes Generales');
+    // El rol TRABAJADOR se fusionó en OPERADOR: ya no existe en la matriz
+    // (un valor heredado cae al `ninguno` por defecto, sin exponer nada).
+    expect(AccesosDefault.roles, ['ADMIN', 'OPERADOR', 'AUDITOR']);
+    expect(AccesosDefault.acceso('TRABAJADOR', 'reportes'), 'ninguno');
   });
 
   group('Atajos y alias de docs/INPUTS_MAP.md', () {

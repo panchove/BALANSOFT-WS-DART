@@ -313,7 +313,7 @@ async def main() -> None:
         boletos = _boletos(parametros)
         numero = await _siguiente_numero_boleto(db, empresa_id)
 
-        for i, b in enumerate(boletos):
+        for _i, b in enumerate(boletos):
             existente = (
                 await db.execute(
                     text(

@@ -1,6 +1,6 @@
 -- BALANSOFT-WS - Esquema canónico SQL Server (T-SQL)
 -- Generado a partir del pg_dump --schema-only de la BD local migrada.
--- 30 tablas: 27 canónicas + password_reset_tokens + series_numeracion +
+-- 31 tablas: 28 canónicas + password_reset_tokens + series_numeracion +
 -- schema_migrations. Idempotente: cada
 -- objeto se crea solo si no existe. Prohibido GO: el migrador ejecuta
 -- por lotes separados por ';'.
@@ -311,6 +311,27 @@ IF OBJECT_ID(N'dbo.kardex', N'U') IS NULL BEGIN
     );
 END
 
+IF OBJECT_ID(N'dbo.llaves_activacion', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[llaves_activacion] (
+        [id] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [id_usuario] UNIQUEIDENTIFIER NOT NULL,
+        [codigo_hash] NVARCHAR(255) NOT NULL,
+        [codigo_preview] NVARCHAR(40),
+        [estado] NVARCHAR(20) DEFAULT N'activa' NOT NULL,
+        [expira_en] DATETIME2(6),
+        [consumida_en] DATETIME2(6),
+        [consumida_por_hw] NVARCHAR(255),
+        [ip_consumo] NVARCHAR(45),
+        [user_agent] NVARCHAR(255),
+        [creado_por] UNIQUEIDENTIFIER,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [chk_estado_llave] CHECK ([estado] IN (N'activa', N'consumida', N'revocada')),
+        CONSTRAINT [llaves_activacion_pkey] PRIMARY KEY (id)
+    );
+END
+
 IF OBJECT_ID(N'dbo.logs_sistema', N'U') IS NULL BEGIN
     CREATE TABLE [dbo].[logs_sistema] (
         [id_log] BIGINT IDENTITY(1,1) NOT NULL,
@@ -562,12 +583,12 @@ IF OBJECT_ID(N'dbo.usuarios', N'U') IS NULL BEGIN
         [nombre] NVARCHAR(150) NOT NULL,
         [email] NVARCHAR(255) NOT NULL,
         [password_hash] NVARCHAR(255),
-        [rol] NVARCHAR(30) DEFAULT N'TRABAJADOR' NOT NULL,
+        [rol] NVARCHAR(30) DEFAULT N'OPERADOR' NOT NULL,
         [activo] BIT DEFAULT 1 NOT NULL,
         [ultimo_login] DATETIME2(6),
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
-        CONSTRAINT [chk_rol_usuario] CHECK ((rol) IN (N'ADMIN', N'OPERADOR', N'AUDITOR', N'TRABAJADOR')),
+        CONSTRAINT [chk_rol_usuario] CHECK ((rol) IN (N'ADMIN', N'OPERADOR', N'AUDITOR')),
         CONSTRAINT [usuarios_pkey] PRIMARY KEY (id_usuario)
     );
 END
@@ -652,6 +673,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'kardex_id_empresa_f
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'kardex_id_producto_fkey' ) BEGIN
     ALTER TABLE [dbo].[kardex] ADD CONSTRAINT [kardex_id_producto_fkey] FOREIGN KEY (id_producto) REFERENCES [dbo].[productos] (id_producto);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'llaves_activacion_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[llaves_activacion] ADD CONSTRAINT [llaves_activacion_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa) ON DELETE CASCADE;
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'llaves_activacion_id_usuario_fkey' ) BEGIN
+    ALTER TABLE [dbo].[llaves_activacion] ADD CONSTRAINT [llaves_activacion_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario) ON DELETE CASCADE;
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'marcas_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[marcas] ADD CONSTRAINT [marcas_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
@@ -818,6 +845,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_marcas_empresa_nombre
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_modelos_empresa_nombre' ) BEGIN
     CREATE UNIQUE INDEX [uq_modelos_empresa_nombre] ON [dbo].[modelos_camion] (id_empresa, nombre);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_llaves_empresa_usuario' ) BEGIN
+    CREATE INDEX [idx_llaves_empresa_usuario] ON [dbo].[llaves_activacion] (id_empresa, id_usuario);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_llaves_estado' ) BEGIN
+    CREATE INDEX [idx_llaves_estado] ON [dbo].[llaves_activacion] (estado);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_llaves_codigo_hash' ) BEGIN
+    CREATE UNIQUE INDEX [uq_llaves_codigo_hash] ON [dbo].[llaves_activacion] (codigo_hash);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_notificaciones_empresa_dedup' ) BEGIN
     CREATE UNIQUE INDEX [uq_notificaciones_empresa_dedup] ON [dbo].[notificaciones] (id_empresa, dedup_key) WHERE (dedup_key IS NOT NULL);

@@ -16,6 +16,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final RestoreSessionUseCase _restoreSessionUseCase;
   final ForgotPasswordUseCase _forgotPasswordUseCase;
   final ResetPasswordUseCase _resetPasswordUseCase;
+  final RefrescarEmpresaUseCase _refrescarEmpresaUseCase;
 
   AuthBloc({
     required LoginUseCase loginUseCase,
@@ -25,6 +26,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required RestoreSessionUseCase restoreSessionUseCase,
     required ForgotPasswordUseCase forgotPasswordUseCase,
     required ResetPasswordUseCase resetPasswordUseCase,
+    required RefrescarEmpresaUseCase refrescarEmpresaUseCase,
   })  : _loginUseCase = loginUseCase,
         _registerUseCase = registerUseCase,
         _logoutUseCase = logoutUseCase,
@@ -32,6 +34,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         _restoreSessionUseCase = restoreSessionUseCase,
         _forgotPasswordUseCase = forgotPasswordUseCase,
         _resetPasswordUseCase = resetPasswordUseCase,
+        _refrescarEmpresaUseCase = refrescarEmpresaUseCase,
         super(AuthInitial()) {
     on<LoginEvent>(_onLogin);
     on<RegisterEvent>(_onRegister);
@@ -39,6 +42,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<ForgotPasswordEvent>(_onForgotPassword);
     on<ResetPasswordEvent>(_onResetPassword);
+    on<RefreshCompanyEvent>(_onRefreshCompany);
   }
 
   Future<void> _onLogin(LoginEvent event, Emitter<AuthState> emit) async {
@@ -146,6 +150,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthPasswordChanged());
     } catch (e) {
       emit(AuthError(mensajeDeError(e)));
+    }
+  }
+
+  /// Refresca la empresa del usuario en sesión sin pasar por `AuthLoading`.
+  ///
+  /// Si no hay sesión (`AuthInitial`) no hace nada: el refresco depende de un
+  /// token válido. Si la lectura falla, el repositorio devuelve `null` y se
+  /// conserva el estado actual (no es un error visible para el operador).
+  Future<void> _onRefreshCompany(
+      RefreshCompanyEvent event, Emitter<AuthState> emit) async {
+    if (state is! AuthAuthenticated) return;
+    try {
+      final user = await _refrescarEmpresaUseCase.execute();
+      if (user != null) emit(AuthAuthenticated(user));
+    } catch (_) {
+      // Best-effort: la sesión sigue válida con los datos que ya tenía. Borrar
+      // al operador por no poder releer un logo sería peor que no refrescarlo.
     }
   }
 }

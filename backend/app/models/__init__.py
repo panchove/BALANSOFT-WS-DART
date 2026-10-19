@@ -25,6 +25,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+from .llave_activacion import LlaveActivacion as LlaveActivacion
+
 
 def _uuid() -> uuid.UUID:
     return uuid.uuid4()
@@ -913,3 +915,4 @@ class Notificacion(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
     )
+

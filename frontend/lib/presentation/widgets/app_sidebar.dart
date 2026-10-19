@@ -87,7 +87,7 @@ class _AppSidebarState extends State<AppSidebar> {
           clave: 'inicio',
           index: 0,
           shortcut: 'Ctrl+1',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
           label: 'Pesaje Automático',
@@ -315,7 +315,7 @@ class _AppSidebarState extends State<AppSidebar> {
           icon: Icons.help_outline,
           activeIcon: Icons.help,
           accion: 'go:ayuda',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'},
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
       ],
     ),

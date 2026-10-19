@@ -55,9 +55,12 @@ BALANSOFT-WS solo admite **dos** tiers:
 - El **LM (SGLB)** es compartido entre productos y *sí* puede tener tiers de
   otros productos (p. ej. MONOPUESTO, de BALANSOFT SG). Para el producto WS el
   LM debe emitir **solo `DEMO` o `CENTRAL`** (`LICENSE_PRODUCT_CODE=WS`).
-- **Defensa en la estación:** si la estación recibiera un tier desconocido, los
-  límites locales caen al mínimo seguro (`auth.py::/license`: `max_equipos=1`,
-  `max_sesiones=1`), nunca a «ilimitado».
+- **Defensa en la estación:** un tier **desconocido no degrada** a «mínimo
+  seguro»: solo `DEMO` aplica topes locales (`auth.py::/license`) y cualquier
+  otro tier opera sin límites funcionales, con la concurrencia real fijada por
+  `licencias.max_sesiones` del LM/central. Los planes **Básico/Premium**
+  (`plan_type`) **no** restringen módulos: la estación WS ignora `features` para
+  gatear funciones (`MANEJO_DB.md` §13.6).
 - **Aprobación de equipos (RB-12):** solo aplica a `CENTRAL` (el tier que admite
   varios equipos). `DEMO` conserva el comportamiento previo (`docs/SESIONES.md` §4).
 

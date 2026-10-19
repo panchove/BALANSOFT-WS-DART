@@ -40,8 +40,8 @@ void main() {
   });
 
   group('AutoBackupService', () {
-    test('en TRABAJADOR no dispara respaldos', () async {
-      AppConfig.rol = StationRole.trabajador;
+    test('en la estación OPERADOR no dispara respaldos', () async {
+      AppConfig.rol = StationRole.operador;
       final api = _FakeApi();
       final service = AutoBackupService(apiClient: api);
       service.ultimaActividad = DateTime.now().subtract(

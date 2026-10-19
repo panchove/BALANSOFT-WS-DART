@@ -279,7 +279,10 @@ class TestSeguridadEndpoints:
 
         assert "inicio" in mapa
         assert mapa["inicio"]["accesos"]["ADMIN"] == "editar"
-        assert mapa["inicio"]["accesos"]["TRABAJADOR"] == "ver"
+        # El antiguo rol TRABAJADOR se fusionó en OPERADOR (3 roles locales):
+        # el operador de báscula tiene control pleno del inicio.
+        assert mapa["inicio"]["accesos"]["OPERADOR"] == "editar"
+        assert "TRABAJADOR" not in mapa["inicio"]["accesos"]
 
         # OPERADOR no ve usuarios; AUDITOR ve kardex solo lectura.
         assert mapa["usuarios"]["accesos"]["OPERADOR"] == "ninguno"

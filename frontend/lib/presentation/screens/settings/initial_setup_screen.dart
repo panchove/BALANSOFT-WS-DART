@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/i18n/locale_controller.dart';
@@ -8,6 +9,7 @@ import '../../../core/utils/save_file_utils.dart';
 import '../../../core/widgets/company_setup_form.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
+import '../../providers/bloc/auth/auth_bloc.dart';
 
 /// Configuración inicial posterior al login.
 ///
@@ -90,6 +92,10 @@ class _InitialSetupScreenState extends State<InitialSetupScreen> {
     await SaveFileUtils.setRutaPersonalizada(ruta.isEmpty ? null : ruta);
     await AppConfig.setOnboardingCompletado();
     if (!mounted) return;
+    // El usuario en sesión se construyó con el perfil anterior: se refresca
+    // para que el top-nav muestre el logo nuevo (y deje de pedir el viejo)
+    // sin esperar al siguiente login.
+    context.read<AuthBloc>().add(const RefreshCompanyEvent());
     _mensaje('initial_setup_saved'.tr(), SwsColors.success);
     widget.onFinish?.call();
   }

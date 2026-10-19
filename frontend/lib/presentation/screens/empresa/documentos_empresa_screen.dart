@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../settings/initial_setup_screen.dart';
 
@@ -10,6 +11,7 @@ import '../../../data/datasources/local/local_storage.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/user.dart';
 import '../../../injection.dart' as di;
+import '../../providers/bloc/auth/auth_bloc.dart';
 
 /// Mantenimiento: Definición de Documentos y Empresa.
 ///
@@ -247,6 +249,10 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
         'logo_url': logoUrl,
       });
       if (!mounted) return;
+      // El logo/nombre del top-nav salen del usuario EN SESIÓN: sin este
+      // refresco la app seguiría pidiendo el logo anterior (404) hasta el
+      // siguiente login.
+      context.read<AuthBloc>().add(const RefreshCompanyEvent());
       _snack('Perfil de la empresa guardado');
       await _cargar();
     } catch (e) {

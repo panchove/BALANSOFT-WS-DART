@@ -10,7 +10,10 @@ import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/theme_controller.dart';
+import '../../../core/services/dialog_keyboard.dart';
+import '../../../core/services/modal_manager.dart';
 import '../../../core/utils/focus_search_bus.dart';
+import '../../../core/widgets/keyboard_dialog_wrapper.dart';
 import '../../../core/widgets/welcome_guide_dialog.dart';
 import '../../../data/datasources/local/local_storage.dart';
 import '../../../domain/entities/user.dart';
@@ -118,16 +121,19 @@ class _HomeShellState extends State<HomeShell> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => Dialog(
-        child: InitialSetupScreen(
-          localeController: di.sl<LocaleController>(),
-          onFinish: () {
-            Navigator.of(ctx).pop();
-            if (mounted) setState(() {});
-            // Tras completar la empresa, mini tutorial de bienvenida (una vez).
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _abrirTutorialSiEsPrimeraVez());
-          },
+      builder: (ctx) => KeyboardDialogWrapper(
+        onEscape: () => Navigator.of(ctx).pop(),
+        child: Dialog(
+          child: InitialSetupScreen(
+            localeController: di.sl<LocaleController>(),
+            onFinish: () {
+              Navigator.of(ctx).pop();
+              if (mounted) setState(() {});
+              // Tras completar la empresa, mini tutorial de bienvenida (una vez).
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _abrirTutorialSiEsPrimeraVez());
+            },
+          ),
         ),
       ),
     );
@@ -204,6 +210,16 @@ class _HomeShellState extends State<HomeShell> {
     // Toda interacción de teclado cuenta como actividad para el respaldo
     // automático por inactividad (mismo efecto que el puntero).
     AutoBackupService.instance.registrarActividad();
+
+    // ── Modal abierto: los atajos del shell NO operan debajo ──────────────
+    // Diálogos, dropdowns, bottom sheets y modales registrados en
+    // ModalManager bloquean navegación y acciones globales. Aquí se resuelven
+    // además ENTER (botón primario) y ESC (cancelar) del modal.
+    if (di.sl<ModalManager>().hasOpenModals ||
+        DialogKeyboard.hayModalAbierto()) {
+      return DialogKeyboard.manejarTeclaEnModal(event);
+    }
+
     final key = event.logicalKey;
     final kb = HardwareKeyboard.instance;
     final ctrl = kb.isControlPressed || kb.isMetaPressed;
@@ -558,6 +574,17 @@ class _HomeShellState extends State<HomeShell> {
       setState(() => _commandPaletteOpen = !_commandPaletteOpen);
 
   void _cambiarIndice(int nuevo) {
+    // Con un modal abierto no se navega (los atajos ya están bloqueados;
+    // aquí se protege también a los llamados programáticos).
+    if (di.sl<ModalManager>().hasOpenModals) return;
+
+    // Si hay una pantalla empujada encima, primero se sale de ella para no
+    // dejar capas apiladas debajo del módulo destino.
+    final ruta = ModalRoute.of(context);
+    if (ruta != null && !ruta.isCurrent) {
+      Navigator.of(context).popUntil((r) => r == ruta);
+    }
+
     if (nuevo == _index) return;
     setState(() {
       if (_historial.length >= 60) _historial.removeAt(0);
@@ -571,6 +598,31 @@ class _HomeShellState extends State<HomeShell> {
     if (idx != -1) _cambiarIndice(idx);
   }
 
+  /// Nombre de la ruta superior del navegador raíz, o `null`.
+  ///
+  /// Truco de `popUntil` con predicado cierto en la primera evaluación: solo
+  /// consulta la ruta superior sin retirar ninguna.
+  String? _rutaSuperior() {
+    String? nombre;
+    Navigator.of(context).popUntil((ruta) {
+      nombre = ruta.settings.name;
+      return true;
+    });
+    return nombre;
+  }
+
+  /// Empuja una pantalla solo si no es ya la visible: pulsar dos veces el
+  /// mismo atajo no apila copias de la misma pantalla.
+  void _pushSiNoEsta(String nombre, Widget Function() builder) {
+    if (_rutaSuperior() == nombre) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: RouteSettings(name: nombre),
+        builder: (_) => builder(),
+      ),
+    );
+  }
+
   bool _hayTextoEnFoco() {
     final contexto = FocusManager.instance.primaryFocus?.context;
     if (contexto == null) return false;
@@ -581,7 +633,12 @@ class _HomeShellState extends State<HomeShell> {
   /// Determina si las teclas de operación global deben appliquer.
   bool _enShellVisible() {
     final ruta = ModalRoute.of(context);
-    return ruta == null || ruta.isCurrent;
+    if (ruta == null || !ruta.isCurrent) return false;
+
+    // Si hay modales abiertos (diálogos, bottom sheets), no aplicar atajos globales
+    if (di.sl<ModalManager>().hasOpenModals) return false;
+
+    return true;
   }
 
   /// F12: cancela la operación en curso. Cierra el diálogo o la pantalla
@@ -664,7 +721,7 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Cierra la aplicación tras confirmación (Ctrl+Q).
   Future<void> _salirDelSistema() async {
-    final confirmar = await showDialog<bool>(
+    final confirmar = await di.sl<ModalManager>().showModal<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(context.tr('Salir del sistema')),
@@ -695,88 +752,67 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _abrirNuevoPesaje() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const WeighingFormScreen()),
-    );
+    _pushSiNoEsta('nuevo_pesaje', () => const WeighingFormScreen());
   }
 
   void _abrirNuevoVehiculo() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            CatalogEditScreen(recurso: AppCatalogos.camionResource),
-      ),
+    _pushSiNoEsta(
+      'nuevo_vehiculo',
+      () => CatalogEditScreen(recurso: AppCatalogos.camionResource),
     );
   }
 
   void _abrirNuevoConductor() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            CatalogEditScreen(recurso: AppCatalogos.conductorResource),
-      ),
+    _pushSiNoEsta(
+      'nuevo_conductor',
+      () => CatalogEditScreen(recurso: AppCatalogos.conductorResource),
     );
   }
 
   void _abrirConfiguracion() => _irA('configuracion');
 
   void _abrirAuditoria() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AuditoriaScreen()),
-    );
+    _pushSiNoEsta('auditoria', () => const AuditoriaScreen());
   }
 
   /// RB-12: equipos de la cuenta (aprobación contra el servidor central).
   void _abrirSesiones() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SesionesScreen()),
-    );
+    _pushSiNoEsta('sesiones', () => const SesionesScreen());
   }
 
   void _abrirAjustesInventario() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AjustesInventarioScreen()),
-    );
+    _pushSiNoEsta('ajustes_inventario', () => const AjustesInventarioScreen());
   }
 
   void _abrirMovimientos() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const WeighingListScreen(titulo: 'Movimientos'),
-      ),
+    _pushSiNoEsta(
+      'movimientos',
+      () => const WeighingListScreen(titulo: 'Movimientos'),
     );
   }
 
   void _abrirAyuda() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AyudaScreen()),
-    );
+    _pushSiNoEsta('ayuda', () => const AyudaScreen());
   }
 
   void _abrirDiagnostico() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SystemDiagnosticsScreen()),
-    );
+    _pushSiNoEsta('diagnostico', () => const SystemDiagnosticsScreen());
   }
 
   void _abrirLicencia() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LicenseAdminScreen()),
-    );
+    _pushSiNoEsta('licencia', () => const LicenseAdminScreen());
   }
 
   /// Conexiones: URL de la API de la estación + prueba de /health. En el
-  /// TRABAJADOR esa URL apunta al servidor titular; en el SERVIDOR es la
+  /// OPERADOR esa URL apunta al servidor titular; en el SERVIDOR es la
   /// propia (docs/MANEJO_DB.md §13).
   void _abrirConexiones() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ConnectionsScreen()),
-    );
+    _pushSiNoEsta('conexiones', () => const ConnectionsScreen());
   }
 
   Future<void> _cerrarSesion() async {
     final authBloc = context.read<AuthBloc>();
-    final confirmar = await showDialog<bool>(
+    final confirmar = await di.sl<ModalManager>().showModal<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(context.tr('Cerrar sesión')),

@@ -9,7 +9,7 @@ import '../../injection.dart' as di;
 
 /// Respaldo automático por inactividad (REQ-NF-BKP-001).
 ///
-/// Solo corre en estaciones **SERVIDOR** (el TRABAJADOR es cliente delgado y
+/// Solo corre en estaciones **SERVIDOR** (el OPERADOR es cliente delgado y
 /// no aloja los datos). Tras [AppConstants.backupAutoIdleMinutes] minutos sin
 /// interacción (puntero, teclado o navegación) dispara
 /// `POST /api/v1/backups/auto`.

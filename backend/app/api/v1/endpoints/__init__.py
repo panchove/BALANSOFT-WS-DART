@@ -6,6 +6,7 @@ credenciales globales, panel del proveedor y recepción de sync.
 """
 
 from app.api.v1.endpoints import (
+    activacion,
     archivos,
     auditoria,
     auth,
@@ -43,6 +44,7 @@ API_ROUTERS = [
     directorio.router,
     pesajes.router,
     sync.router,
+    activacion.router,
     reports.router,
     exports.router,
     identity.router,

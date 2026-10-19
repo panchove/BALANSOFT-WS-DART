@@ -548,7 +548,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     final key = event.logicalKey;
-    if (_alertaAbierta) return false;
+    if (_alertaAbierta || _hayDialogAbierto()) return false;
 
     if (key == LogicalKeyboardKey.f2) {
       _registrarEntrada();

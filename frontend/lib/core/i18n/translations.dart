@@ -366,13 +366,13 @@ class AppTranslations {
           'El idioma elegido se usará también en los boletos y reportes impresos.',
       'setup_mode_title': '¿Cómo funcionará esta máquina?',
       'setup_mode_subtitle':
-          'Elija si esta máquina será el Servidor de la cuenta o un Trabajador conectado a ese servidor.',
+          'Elija si esta máquina será el Servidor de la cuenta o un Operador conectado a ese servidor.',
       'setup_mode_license_note':
-          'Solo la máquina titular de la licencia puede instalarse como Servidor. Si la licencia ya fue activada en otro equipo, configure esta estación como Trabajador.',
+          'Solo la máquina titular de la licencia puede instalarse como Servidor. Si la licencia ya fue activada en otro equipo, configure esta estación como Operador.',
       'setup_mode_server': 'Servidor Local',
       'setup_mode_server_desc':
           'Esta máquina alojará la base de datos local, se conectará a la balanza y procesará los pesajes. Es el equipo titular de la licencia.',
-      'setup_mode_client': 'Trabajador Local',
+      'setup_mode_client': 'Operador Local',
       'setup_mode_client_desc':
           'Esta máquina operará el sistema conectándose al Servidor de la cuenta en su red. No crea base de datos propia.',
 
@@ -384,7 +384,7 @@ class AppTranslations {
       'activation_password': 'Contraseña',
       'activation_submit': 'Verificar cuenta y licencia',
       'activation_help':
-          'Si su licencia ya fue activada en otro equipo, el sistema lo informará y deberá instalar esta estación como Trabajador.',
+          'Si su licencia ya fue activada en otro equipo, el sistema lo informará y deberá instalar esta estación como Operador.',
       'activation_required': 'Este campo es obligatorio',
       'activation_email_invalid': 'Escriba un correo electrónico válido',
       'btn_show_password': 'Mostrar u ocultar la contraseña',
@@ -396,7 +396,7 @@ class AppTranslations {
       'company_field_from_server': 'Provisto por el servidor central',
       'company_save_error': 'No se pudieron guardar los datos de la empresa',
 
-      // ── Modo trabajador: conexión al servidor de la cuenta ─────────────────
+      // ── Modo operador: conexión al servidor de la cuenta ───────────────────
       'worker_title': 'Conexión al servidor',
       'worker_subtitle':
           'Coloque la dirección IP o URL de la máquina que es Servidor de su cuenta y su puerto.',
@@ -483,6 +483,8 @@ class AppTranslations {
       'help_quick_guide_desc':
           'Recorre los módulos, los botones principales y los atajos más usados del sistema.',
       'help_open_guide': 'Ver guía rápida',
+      'notif_welcome_title': 'Bienvenido a BALANSOFT WS',
+      'notif_welcome_body': 'La estación de pesaje está lista para operar.',
       'initial_setup_reopen': 'Configuración inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture el peso y guarde',
       'weighing_save_first': 'Guarde el pesaje primero para imprimir',
@@ -707,6 +709,9 @@ class AppTranslations {
           'Configurada por el administrador para todas las sesiones',
       'scanning_scales': 'Escaneando básculas conectadas…',
       'no_scales_found': 'No se detectaron básculas conectadas',
+      'scale_autodetected': 'Básculas detectadas y registradas automáticamente: {0}',
+      'scales_detected_registered':
+          '{0} detectada(s) · {1} registrada(s) automáticamente',
       'detectar_balanzas': 'Detectar básculas',
      // Respaldos de estación (REQ-NF-BKP-001/002/003)
      'backup_titulo': 'Respaldos',
@@ -750,6 +755,10 @@ class AppTranslations {
       'printer_active_saved':
           'Impresora activa guardada exitosamente en el módulo de dispositivos',
       'printers_connected': 'Impresoras Conectadas al Sistema',
+      'printers_found': 'Impresoras encontradas: {0}',
+      'printer_no_printers': 'No se detectaron impresoras. Verifique conexiones y drivers.',
+      'printer_auto_registered': 'Impresora real detectada y registrada: {0}',
+      'printer_none_detected': 'Ninguna impresora detectada',
       'thermal_80': 'Térmica Directa POS-80 (EscPOS)',
       'thermal_58': 'Térmica Directa POS-58 (EscPOS)',
       'system_driver': 'Driver de Sistema (PDF / Spooler)',
@@ -783,6 +792,15 @@ class AppTranslations {
       'save_series': 'Guardar serie',
       'users_and_roles_hint': 'Usuarios y roles',
       'no_users_yet': 'No hay usuarios. Crea el primero.',
+      'user_key_title': 'Llave de activación',
+      'user_key_desc':
+          'Compártela con el empleado. Se canjea UNA sola vez al instalar su '
+          'estación; si se pierde, genera una nueva.',
+      'user_key_expires': 'Caduca el {0}',
+      'user_key_copy': 'Copiar llave',
+      'user_key_copied': 'Llave copiada al portapapeles',
+      'user_key_generate': 'Generar llave',
+      'user_key_error': 'No se pudo generar la llave',
       'readonly_mode': 'Modo solo lectura',
       'access_matrix': 'Matriz de accesos por rol',
       'access_matrix_desc':
@@ -1348,13 +1366,13 @@ class AppTranslations {
           'The selected language is also used for printed tickets and reports.',
       'setup_mode_title': 'How will this machine work?',
       'setup_mode_subtitle':
-          'Choose whether this machine will be the account Server or a Worker connected to that server.',
+          'Choose whether this machine will be the account Server or an Operator connected to that server.',
       'setup_mode_license_note':
-          'Only the machine holding the license can be installed as Server. If the license was already activated on another device, set this station up as a Worker.',
+          'Only the machine holding the license can be installed as Server. If the license was already activated on another device, set this station up as an Operator.',
       'setup_mode_server': 'Local Server',
       'setup_mode_server_desc':
           'This machine will host the local database, connect to the scale and process the weighings. It is the device holding the license.',
-      'setup_mode_client': 'Local Worker',
+      'setup_mode_client': 'Local Operator',
       'setup_mode_client_desc':
           'This machine will run the system by connecting to the account Server on your network. It does not create its own database.',
 
@@ -1366,7 +1384,7 @@ class AppTranslations {
       'activation_password': 'Password',
       'activation_submit': 'Verify account and license',
       'activation_help':
-          'If your license was already activated on another device, the system will tell you and you must set this station up as a Worker.',
+          'If your license was already activated on another device, the system will tell you and you must set this station up as an Operator.',
       'activation_required': 'This field is required',
       'activation_email_invalid': 'Enter a valid email address',
       'btn_show_password': 'Show or hide the password',
@@ -1464,6 +1482,8 @@ class AppTranslations {
       'help_quick_guide_desc':
           'Walk through the modules, the main buttons and the most used shortcuts.',
       'help_open_guide': 'View quick guide',
+      'notif_welcome_title': 'Welcome to BALANSOFT WS',
+      'notif_welcome_body': 'The weighing station is ready to operate.',
       'initial_setup_reopen': 'Initial configuration',
       'weighing_entry_mode_title': 'Entry mode — capture the weight and save',
       'weighing_save_first': 'Save the weighing first to print',
@@ -1677,6 +1697,9 @@ class AppTranslations {
       'set_by_admin': 'Set by the administrator for all sessions',
       'scanning_scales': 'Scanning connected scales…',
       'no_scales_found': 'No connected scales detected',
+      'scale_autodetected': 'Scales automatically detected and registered: {0}',
+      'scales_detected_registered':
+          '{0} detected · {1} automatically registered',
       'detectar_balanzas': 'Detect scales',
      // Station backups (REQ-NF-BKP-001/002/003)
      'backup_titulo': 'Backups',
@@ -1720,6 +1743,10 @@ class AppTranslations {
       'printer_active_saved':
           'Active printer saved successfully in the devices module',
       'printers_connected': 'Printers Connected to the System',
+      'printers_found': 'Printers found: {0}',
+      'printer_no_printers': 'No printers detected. Check connections and drivers.',
+      'printer_auto_registered': 'Real printer detected and registered: {0}',
+      'printer_none_detected': 'No printer detected',
       'thermal_80': 'Direct Thermal POS-80 (EscPOS)',
       'thermal_58': 'Direct Thermal POS-58 (EscPOS)',
       'system_driver': 'System Driver (PDF / Spooler)',
@@ -1752,6 +1779,15 @@ class AppTranslations {
       'save_series': 'Save series',
       'users_and_roles_hint': 'Users and roles',
       'no_users_yet': 'No users. Create the first one.',
+      'user_key_title': 'Activation key',
+      'user_key_desc':
+          'Share it with the employee. It is redeemed ONCE when their station '
+          'is installed; if it is lost, generate a new one.',
+      'user_key_expires': 'Expires on {0}',
+      'user_key_copy': 'Copy key',
+      'user_key_copied': 'Key copied to the clipboard',
+      'user_key_generate': 'Generate key',
+      'user_key_error': 'The key could not be generated',
       'readonly_mode': 'Read-only mode',
       'access_matrix': 'Access matrix by role',
       'access_matrix_desc':
@@ -2305,13 +2341,13 @@ class AppTranslations {
           'O idioma escolhido também será usado nos bilhetes e relatórios impressos.',
       'setup_mode_title': 'Como esta máquina funcionará?',
       'setup_mode_subtitle':
-          'Escolha se esta máquina será o Servidor da conta ou um Trabalhador conectado a esse servidor.',
+          'Escolha se esta máquina será o Servidor da conta ou um Operador conectado a esse servidor.',
       'setup_mode_license_note':
-          'Somente a máquina titular da licença pode ser instalada como Servidor. Se a licença já foi ativada em outro equipamento, configure esta estação como Trabalhador.',
+          'Somente a máquina titular da licença pode ser instalada como Servidor. Se a licença já foi ativada em outro equipamento, configure esta estação como Operador.',
       'setup_mode_server': 'Servidor Local',
       'setup_mode_server_desc':
           'Esta máquina hospedará o banco de dados local, conectará à balança e processará as pesagens. É o equipamento titular da licença.',
-      'setup_mode_client': 'Trabalhador Local',
+      'setup_mode_client': 'Operador Local',
       'setup_mode_client_desc':
           'Esta máquina operará o sistema conectando-se ao Servidor da conta na sua rede. Não cria banco de dados próprio.',
 
@@ -2323,7 +2359,7 @@ class AppTranslations {
       'activation_password': 'Senha',
       'activation_submit': 'Verificar conta e licença',
       'activation_help':
-          'Se a sua licença já foi ativada em outro equipamento, o sistema avisará e você deverá instalar esta estação como Trabalhador.',
+          'Se a sua licença já foi ativada em outro equipamento, o sistema avisará e você deverá instalar esta estação como Operador.',
       'activation_required': 'Este campo é obrigatório',
       'activation_email_invalid': 'Informe um e-mail válido',
       'btn_show_password': 'Mostrar ou ocultar a senha',
@@ -2421,6 +2457,8 @@ class AppTranslations {
       'help_quick_guide_desc':
           'Percorra os módulos, os botões principais e os atalhos mais usados do sistema.',
       'help_open_guide': 'Ver guia rápida',
+      'notif_welcome_title': 'Bem-vindo ao BALANSOFT WS',
+      'notif_welcome_body': 'A estação de pesagem está pronta para operar.',
       'initial_setup_reopen': 'Configuração inicial',
       'weighing_entry_mode_title': 'Modo Entrada — capture o peso e salve',
       'weighing_save_first': 'Salve a pesagem primeiro para imprimir',
@@ -2639,6 +2677,9 @@ class AppTranslations {
       'set_by_admin': 'Configurada pelo administrador para todas as sessões',
       'scanning_scales': 'Escaneando balanças conectadas…',
       'no_scales_found': 'Nenhuma balança conectada detectada',
+      'scale_autodetected': 'Balanças detectadas e registradas automaticamente: {0}',
+      'scales_detected_registered':
+          '{0} detectada(s) · {1} registrada(s) automaticamente',
       'detectar_balanzas': 'Detectar balanças',
      // Backups da estação (REQ-NF-BKP-001/002/003)
      'backup_titulo': 'Backups',
@@ -2682,6 +2723,10 @@ class AppTranslations {
       'printer_active_saved':
           'Impressora ativa salva com sucesso no módulo de dispositivos',
       'printers_connected': 'Impressoras Conectadas ao Sistema',
+      'printers_found': 'Impressoras encontradas: {0}',
+      'printer_no_printers': 'Nenhuma impressora detectada. Verifique conexões e drivers.',
+      'printer_auto_registered': 'Impressora real detectada e registrada: {0}',
+      'printer_none_detected': 'Nenhuma impressora detectada',
       'thermal_80': 'Térmica Direta POS-80 (EscPOS)',
       'thermal_58': 'Térmica Direta POS-58 (EscPOS)',
       'system_driver': 'Driver do Sistema (PDF / Spooler)',
@@ -2715,6 +2760,15 @@ class AppTranslations {
       'save_series': 'Salvar série',
       'users_and_roles_hint': 'Usuários e papéis',
       'no_users_yet': 'Nenhum usuário. Crie o primeiro.',
+      'user_key_title': 'Chave de ativação',
+      'user_key_desc':
+          'Compartilhe com o funcionário. É usada UMA única vez ao instalar a '
+          'estação dele; se for perdida, gere uma nova.',
+      'user_key_expires': 'Expira em {0}',
+      'user_key_copy': 'Copiar chave',
+      'user_key_copied': 'Chave copiada para a área de transferência',
+      'user_key_generate': 'Gerar chave',
+      'user_key_error': 'Não foi possível gerar a chave',
       'readonly_mode': 'Modo somente leitura',
       'access_matrix': 'Matriz de acessos por papel',
       'access_matrix_desc':

@@ -12,6 +12,15 @@ class AppConfig {
   static const String appName = 'Balansoft-WS';
   static const String appVersion = '1.0.0';
 
+  /// Título de la ventana nativa de escritorio.
+  ///
+  /// `MaterialApp.title` **no** la cambia en Linux/Windows: es el runner nativo
+  /// el que fija el título al crear la ventana, así que lo re-aplica
+  /// `window_manager` en `main()` (ver `OsNotifications` para el otro caso en
+  /// que Windows muestra un nombre: el emisor de los avisos).
+  static const String windowTitle =
+      'BALANSOFT WS - ESTACIÓN DE PESAJE INDUSTRIAL';
+
   static const String defaultServerApiUrl = 'https://ws.balansoft.com.ve';
   static const String defaultApiBaseUrl = 'http://localhost:8000';
 
@@ -23,13 +32,19 @@ class AppConfig {
   static String? licenseApiUrl;
   static String? publicKey;
   static bool offline = false;
-  static bool wserverAutostart = false;
+
+  /// El WServer arranca con el sistema (silencioso) en lugar de esperar a que
+  /// la app lo lance. Activado por defecto: una estación recién instalada no
+  /// puede depender de que alguien abra la app para que haya API. Quien
+  /// desactive el conmutador de Ajustes baja este flag, y entonces el WServer
+  /// solo vive mientras la app esté abierta.
+  static bool wserverAutostart = true;
 
   /// Sincronización automática por timer (Ajustes → Sincronización).
   static bool syncAutoEnabled = true;
 
   // ── Configuración de estación (config.json del instalador) ───────────────
-  /// Rol funcional decidido por el instalador (`SERVIDOR` o `TRABAJADOR`).
+  /// Rol funcional decidido por el instalador (`SERVIDOR` o `OPERADOR`).
   /// `null` = sin config válida (la app no debe operar).
   static StationRole? rol;
 
@@ -44,6 +59,10 @@ class AppConfig {
   /// El mini tutorial de bienvenida ya se mostró (se marca al finalizarlo o
   /// saltarlo). Se repite manualmente desde Ayuda y Soporte.
   static bool tutorialVisto = false;
+
+  /// El aviso de bienvenida del SO ya se emitió (una sola vez por estación,
+  /// al primer inicio de sesión de la app).
+  static bool bienvenidaNotificada = false;
 
   static late SharedPreferences _prefs;
 
@@ -64,7 +83,7 @@ class AppConfig {
       apiBaseUrl != null && apiBaseUrl!.trim().isNotEmpty;
 
   /// Cliente delgado: no levanta WServer ni base de datos propia.
-  static bool get esTrabajador => rol == StationRole.trabajador;
+  static bool get esOperador => rol == StationRole.operador;
 
   /// Servidor local: la estación aloja la API y los datos de la empresa.
   static bool get esServidor => rol == StationRole.servidor;
@@ -77,10 +96,11 @@ class AppConfig {
     licenseApiUrl = _prefs.getString('license_api_url') ?? 'http://localhost:8080';
     publicKey = _prefs.getString('public_key');
     offline = _prefs.getBool('offline') ?? false;
-    wserverAutostart = _prefs.getBool('wserver_autostart') ?? false;
+    wserverAutostart = _prefs.getBool('wserver_autostart') ?? true;
     syncAutoEnabled = _prefs.getBool('sync_auto_enabled') ?? true;
     onboardingCompletado = _prefs.getBool('onboarding_completado') ?? false;
     tutorialVisto = _prefs.getBool('tutorial_visto') ?? false;
+    bienvenidaNotificada = _prefs.getBool('bienvenida_notificada') ?? false;
 
     // Config de estación: archivo del instalador (override → sistema) o, en
     // el arranque real, migración única del legado. Sin archivo ni legado,
@@ -145,6 +165,17 @@ class AppConfig {
     tutorialVisto = value;
     if (_prefsLista) {
       await _prefs.setBool('tutorial_visto', value);
+    }
+  }
+
+  /// Marca el aviso de bienvenida del SO como emitido (una sola vez).
+  /// En producción persiste en prefs; sin prefs guarda solo en memoria (tests
+  /// de widget, donde no se llama `init()` — misma regla que
+  /// [setTutorialVisto]).
+  static Future<void> setBienvenidaNotificada([bool value = true]) async {
+    bienvenidaNotificada = value;
+    if (_prefsLista) {
+      await _prefs.setBool('bienvenida_notificada', value);
     }
   }
 }

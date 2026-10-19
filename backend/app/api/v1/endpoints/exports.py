@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import glob
 import os
+import sys
 from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
@@ -71,16 +72,40 @@ _FUENTES_REGISTRADAS = False
 
 
 def _registrar_ttf() -> None:
-    """Registra DejaVu Sans una sola vez."""
-    global _FUENTES_REGISTRADAS
+    """Registra DejaVu Sans una sola vez.
+
+    Busca en rutas de Linux y Windows (incluyendo el bundle de PyInstaller).
+    Si no se encuentra, usa Helvetica built-in de ReportLab reasignando los
+    nombres de módulo, ya que ``TTFont()`` solo acepta rutas ``.ttf``.
+    """
+    global _FUENTES_REGISTRADAS, FUENTE, FUENTE_BOLD
     if _FUENTES_REGISTRADAS:
         return
     base = bold = None
-    reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    bld = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    if os.path.exists(reg):
-        base, bold = reg, bld if os.path.exists(bld) else reg
-    else:
+    candidatas = [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ]
+    # Windows: buscar en fuentes del sistema y bundle de PyInstaller
+    if sys.platform == "win32" or os.name == "nt":
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        rutas_extra = [os.path.join(windir, "Fonts")]
+        if getattr(sys, "frozen", False):
+            meipass = getattr(sys, "_MEIPASS", "")
+            if meipass:
+                rutas_extra.append(os.path.join(meipass, "fonts"))
+                rutas_extra.append(meipass)
+        rutas_extra.append(os.path.dirname(os.path.abspath(__file__)))
+        for directorio in rutas_extra:
+            candidatas.append((
+                os.path.join(directorio, "DejaVuSans.ttf"),
+                os.path.join(directorio, "DejaVuSans-Bold.ttf"),
+            ))
+    for reg, bld in candidatas:
+        if os.path.exists(reg):
+            base, bold = reg, bld if os.path.exists(bld) else reg
+            break
+    if base is None:
         halls = glob.glob("/usr/share/fonts/**/DejaVuSans.ttf", recursive=True)
         if halls:
             base = halls[0]
@@ -98,8 +123,9 @@ def _registrar_ttf() -> None:
         except Exception:
             pass
     else:
-        pdfmetrics.registerFont(TTFont(FUENTE, "Helvetica"))
-        pdfmetrics.registerFont(TTFont(FUENTE_BOLD, "Helvetica-Bold"))
+        # Fallback: Helvetica built-in de ReportLab (Type1, no necesita TTF)
+        FUENTE = "Helvetica"
+        FUENTE_BOLD = "Helvetica-Bold"
     _FUENTES_REGISTRADAS = True
 
 

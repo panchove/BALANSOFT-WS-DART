@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS dispositivos (
     version_app      VARCHAR(50),
     rol_dispositivo  VARCHAR(20) NOT NULL DEFAULT 'LOCAL', -- LOCAL / SERVIDOR_LOCAL
     estado           VARCHAR(20) NOT NULL DEFAULT 'APROBADO', -- PENDIENTE / APROBADO / RECHAZADO (RB-12)
-    rol_sesion       VARCHAR(30),                             -- ADMIN / OPERADOR / AUDITOR / TRABAJADOR
+    rol_sesion       VARCHAR(30),                             -- ADMIN / OPERADOR / AUDITOR
     ip_local         VARCHAR(45),
     ultima_conexion  TIMESTAMP,
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS dispositivos (
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_dispositivos_estado CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO')),
     CONSTRAINT chk_dispositivos_rol_sesion CHECK (
-        rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR')
+        rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR')
     )
 );
 
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS credenciales (
     id_cuenta        UUID NOT NULL REFERENCES cuentas(id_cuenta) ON DELETE CASCADE,
     email            VARCHAR(255) NOT NULL UNIQUE,
     password_hash    VARCHAR(255) NOT NULL,
-    rol_global       VARCHAR(30) NOT NULL DEFAULT 'OPERADOR', -- ADMIN / OPERADOR / AUDITOR / TRABAJADOR
+    rol_global       VARCHAR(30) NOT NULL DEFAULT 'OPERADOR', -- ADMIN / OPERADOR / AUDITOR
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
     ultimo_login     TIMESTAMP,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -228,13 +228,30 @@ BEGIN
         ALTER TABLE dispositivos ADD CONSTRAINT chk_dispositivos_estado
             CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO'));
     END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'chk_dispositivos_rol_sesion' AND conrelid = 'dispositivos'::regclass
-    ) THEN
-        ALTER TABLE dispositivos ADD CONSTRAINT chk_dispositivos_rol_sesion
-            CHECK (rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'));
-    END IF;
 END $$;
+
+-- ============================================================
+-- Normalización de datos: el rol TRABAJADOR se fusionó en OPERADOR
+-- (3 roles: ADMIN / OPERADOR / AUDITOR). Idempotente: si no quedan filas con
+-- el rol antiguo no afecta nada. Los datos se actualizan ANTES de re-crear el
+-- CHECK, porque si quedara alguna fila con el rol antiguo la re-creación
+-- fallaría.
+-- ============================================================
+UPDATE dispositivos
+   SET rol_sesion = 'OPERADOR',
+       updated_at = CURRENT_TIMESTAMP
+ WHERE rol_sesion = 'TRABAJADOR';
+
+UPDATE credenciales
+   SET rol_global = 'OPERADOR',
+       updated_at = CURRENT_TIMESTAMP
+ WHERE rol_global = 'TRABAJADOR';
+
+-- El CHECK se recrea (no solo se crea si falta): los servidores ya desplegados
+-- conservan el constraint antiguo que permitía TRABAJADOR, y un guard
+-- `IF NOT EXISTS` lo dejaría intacto. Drop-if-exists + ADD es idempotente.
+ALTER TABLE dispositivos DROP CONSTRAINT IF EXISTS chk_dispositivos_rol_sesion;
+ALTER TABLE dispositivos ADD CONSTRAINT chk_dispositivos_rol_sesion
+    CHECK (rol_sesion IS NULL OR rol_sesion IN ('ADMIN', 'OPERADOR', 'AUDITOR'));
 
 COMMIT;

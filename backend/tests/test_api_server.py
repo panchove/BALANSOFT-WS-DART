@@ -381,7 +381,7 @@ async def test_rb12_listado_de_sesiones_y_permisos(_server_engine, server_db) ->
         r = await ac.patch(
             f"/api/v1/auth/sesiones/{pend.id_dispositivo}",
             headers={"Authorization": f"Bearer {login_admin['access_token']}"},
-            json={"estado": "APROBADO", "rol_sesion": "TRABAJADOR"},
+            json={"estado": "APROBADO", "rol_sesion": "OPERADOR"},
         )
         assert r.status_code == 200, r.text
         assert r.json()["estado"] == "APROBADO"
@@ -393,7 +393,7 @@ async def test_rb12_listado_de_sesiones_y_permisos(_server_engine, server_db) ->
         assert r.status_code == 200, r.text
         disp_oper = r.json()["dispositivo"]
         assert disp_oper["estado"] == "APROBADO"
-        assert disp_oper["rol_sesion"] == "TRABAJADOR"
+        assert disp_oper["rol_sesion"] == "OPERADOR"
         cabecera_oper = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
         # Solo ADMIN: un OPERADOR no lista ni aprueba equipos.

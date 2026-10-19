@@ -1,7 +1,7 @@
 """Matriz de seguridad por defecto: módulos de la estación × roles.
 
 Fuente: docs/ARCH.md ("Seguridad y Accesos") y decisión del equipo.
-Roles locales: ADMIN, OPERADOR, AUDITOR, TRABAJADOR (CHECK de balansoft-ws-local.sql).
+Roles locales: ADMIN, OPERADOR, AUDITOR (CHECK de balansoft-ws-local.sql).
 Acceso: ``ver`` | ``editar`` | ``ninguno``.
 
 Cuando no existe un registro en ``permisos_acceso`` para un (rol, módulo),
@@ -33,7 +33,7 @@ MODULOS: dict[str, str] = {
     "configuracion": "Configuración General",
 }
 
-ROLES_LOCALES: tuple[str, ...] = ("ADMIN", "OPERADOR", "AUDITOR", "TRABAJADOR")
+ROLES_LOCALES: tuple[str, ...] = ("ADMIN", "OPERADOR", "AUDITOR")
 
 ACCESOS_VALIDOS: tuple[str, ...] = ("ver", "editar", "ninguno")
 
@@ -78,25 +78,6 @@ MATRIZ_DEFECTO: dict[str, dict[str, str]] = {
         "seguridad": "ninguno",
         "documentos_empresa": "ver",
         "diseno_ticket": "ver",
-        "configuracion": "ninguno",
-    },
-    "TRABAJADOR": {
-        "inicio": "ver",
-        "terceros": "ninguno",
-        "usuarios": "ninguno",
-        "camiones": "ninguno",
-        "conductores": "ninguno",
-        "transportes": "ninguno",
-        "categorias": "ninguno",
-        "productos": "ninguno",
-        "almacenes": "ninguno",
-        "kardex": "ninguno",
-        "entradas": "ninguno",
-        "salidas": "ninguno",
-        "reportes": "ninguno",
-        "dispositivos": "ninguno",
-        "seguridad": "ninguno",
-        "documentos_empresa": "ninguno",
         "configuracion": "ninguno",
     },
 }

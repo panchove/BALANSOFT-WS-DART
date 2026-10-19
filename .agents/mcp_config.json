@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "balansoft-hardware": {
+      "command": "python3",
+      "args": ["backend/scripts/mcp_hardware_server.py"],
+      "env": {
+        "PYTHONPATH": "backend"
+      }
+    }
+  }
+}

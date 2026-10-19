@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 ///
 /// Acceso: `ver` | `editar` | `ninguno`.
 class AccesosDefault {
-  static const List<String> roles = ['ADMIN', 'OPERADOR', 'AUDITOR', 'TRABAJADOR'];
+  static const List<String> roles = ['ADMIN', 'OPERADOR', 'AUDITOR'];
 
   /// Clave de módulo → (título).
   static const Map<String, String> modulos = {
@@ -109,14 +109,6 @@ class AccesosDefault {
       'reportes': 'editar', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
       'documentos_empresa': 'ver', 'diseno_ticket': 'ver',
       'configuracion': 'ninguno',
-    },
-    'TRABAJADOR': {
-      'inicio': 'ver', 'terceros': 'ninguno', 'usuarios': 'ninguno',
-      'camiones': 'ninguno', 'conductores': 'ninguno', 'transportes': 'ninguno',
-      'categorias': 'ninguno', 'productos': 'ninguno', 'almacenes': 'ninguno',
-      'kardex': 'ninguno', 'entradas': 'ninguno', 'salidas': 'ninguno',
-      'reportes': 'ninguno', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
-      'documentos_empresa': 'ninguno', 'configuracion': 'ninguno',
     },
   };
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../services/modal_manager.dart';
 import '../i18n/translations.dart';
+import 'keyboard_dialog_wrapper.dart';
+import '../../injection.dart' as di;
 
 /// Un paso del mini tutorial de bienvenida.
 ///
@@ -94,6 +97,18 @@ class _WelcomeGuideDialogState extends State<WelcomeGuideDialog> {
     );
   }
 
+  void _cerrar() {
+    // Salida sin aceptar (ESC): no marca el tutorial como visto.
+    Navigator.of(context).pop(false);
+  }
+
+  /// Botón «Saltar»: el usuario decide no verlo, pero es una acción
+  /// deliberada, así que el tutorial queda dado por visto (no vuelve a
+  /// aparecer en el próximo arranque).
+  void _saltar() {
+    Navigator.of(context).pop(true);
+  }
+
   void _anterior() {
     if (_paso <= 0) return;
     _pages.previousPage(
@@ -106,7 +121,8 @@ class _WelcomeGuideDialogState extends State<WelcomeGuideDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final ultimo = _paso == widget.pasos.length - 1;
-    return Dialog(
+
+    final dialogContent = Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
@@ -174,7 +190,7 @@ class _WelcomeGuideDialogState extends State<WelcomeGuideDialog> {
               Row(
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
+                    onPressed: _saltar,
                     child: Text('tutorial_skip'.tr()),
                   ),
                   const Spacer(),
@@ -198,6 +214,12 @@ class _WelcomeGuideDialogState extends State<WelcomeGuideDialog> {
           ),
         ),
       ),
+    );
+
+    return KeyboardDialogWrapper(
+      onEnter: _siguiente,
+      onEscape: _cerrar,
+      child: dialogContent,
     );
   }
 }
@@ -269,7 +291,8 @@ Future<bool?> mostrarGuiaRapida(
   BuildContext context, {
   bool marcarVisto = false,
 }) {
-  return showDialog<bool>(
+  final modalManager = di.sl<ModalManager>();
+  return modalManager.showModal<bool>(
     context: context,
     barrierDismissible: false,
     builder: (_) => const WelcomeGuideDialog(

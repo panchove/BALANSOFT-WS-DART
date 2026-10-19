@@ -31,6 +31,7 @@ import 'data/services/scale_tcp_client.dart';
 import 'data/datasources/remote/scale_api_datasource.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/controllers/typography_controller.dart';
+import 'core/services/modal_manager.dart';
 
 final sl = GetIt.instance;
 
@@ -93,6 +94,8 @@ Future<void> init() async {
       () => ForgotPasswordUseCase(sl<AuthRepository>()));
   sl.registerLazySingleton<ResetPasswordUseCase>(
       () => ResetPasswordUseCase(sl<AuthRepository>()));
+  sl.registerLazySingleton<RefrescarEmpresaUseCase>(
+      () => RefrescarEmpresaUseCase(sl<AuthRepository>()));
   sl.registerLazySingleton<CreateWeighingUseCase>(
       () => CreateWeighingUseCase(sl<WeighingRepository>()));
   sl.registerLazySingleton<CloseWeighingUseCase>(
@@ -137,6 +140,7 @@ Future<void> init() async {
         restoreSessionUseCase: sl(),
         forgotPasswordUseCase: sl(),
         resetPasswordUseCase: sl(),
+        refrescarEmpresaUseCase: sl(),
       ));
   sl.registerFactory<WeighingBloc>(() => WeighingBloc(
         createUseCase: sl(),
@@ -180,6 +184,7 @@ Future<void> init() async {
   sl.registerLazySingleton<TypographyController>(
     () => TypographyController(prefs: AppConfig.prefs),
   );
+  sl.registerLazySingleton<ModalManager>(() => ModalManager());
   sl<ApiClient>().setLanguageProvider(() => sl<LocaleController>().activeLanguageCode);
   // Respaldo TCP: config de báscula/dispositivo guardada en Ajustes.
   final scaleCfg = await sl<LocalStorage>().getScaleConfig();

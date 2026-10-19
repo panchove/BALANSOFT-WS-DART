@@ -60,6 +60,16 @@ class CheckAuthStatusEvent extends AuthEvent {
   const CheckAuthStatusEvent();
 }
 
+/// Relee el perfil de la empresa y refresca el usuario en sesión (nombre, RIF,
+/// dirección y logo) sin emitir `AuthLoading`.
+///
+/// Se dispara al guardar el perfil de empresa (o subir el logo) para que la UI
+/// muestre los datos nuevos al instante, en lugar de seguir pidiendo el logo
+/// anterior —que ya no existe en `media/`— hasta el siguiente login.
+class RefreshCompanyEvent extends AuthEvent {
+  const RefreshCompanyEvent();
+}
+
 class ForgotPasswordEvent extends AuthEvent {
   final String email;
   const ForgotPasswordEvent({required this.email});

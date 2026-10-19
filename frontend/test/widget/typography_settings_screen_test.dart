@@ -91,6 +91,9 @@ class _FakeAuthRepository implements IAuthRepository {
   Future<User?> getCachedUser() async => usuario;
 
   @override
+  Future<User?> refrescarEmpresaEnUsuarioCacheado() async => usuario;
+
+  @override
   Future<SesionRestaurada> restoreSession() async => SesionRestaurada.ok;
 
   @override
@@ -140,6 +143,7 @@ void main() {
       restoreSessionUseCase: RestoreSessionUseCase(repo),
       forgotPasswordUseCase: ForgotPasswordUseCase(repo),
       resetPasswordUseCase: ResetPasswordUseCase(repo),
+      refrescarEmpresaUseCase: RefrescarEmpresaUseCase(repo),
     )..add(const CheckAuthStatusEvent());
 
     return BlocProvider<AuthBloc>(

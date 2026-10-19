@@ -595,7 +595,7 @@
       '¿Designar este equipo como TITULAR de la licencia?\n\n' +
         'Equipo: ' + hardwareId + '\n\n' +
         'Pasará a SERVIDOR_LOCAL (podrá instalarse como servidor) y el resto de ' +
-        'equipos quedarán como LOCAL (trabajadores).'
+        'equipos quedarán como LOCAL (operadores).'
     )) {
       return;
     }

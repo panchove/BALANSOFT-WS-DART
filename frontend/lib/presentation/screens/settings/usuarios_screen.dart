@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../presentation/widgets/atajo_nuevo.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/date_utils.dart' as app_dates;
+import '../../../core/widgets/keyboard_dialog_wrapper.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
 
 /// Gestión de usuarios locales (solo ADMIN). Crea/modifica operadores y los
 /// encola en `sync_queue` para entregarlos al panel (credenciales).
+///
+/// Cada usuario OPERADOR tiene una **llave de activación de un solo uso**: el
+/// ADMIN la genera aquí y la comparte con el empleado, que la canjea al
+/// instalar su estación (cliente delgado). Si la llave no se canjea, esa
+/// computadora no queda con cuenta asociada; emitir una nueva revoca la
+/// anterior.
 ///
 /// Protección de la cuenta ADMIN (REQ-FN-USR): el administrador principal no
 /// puede desactivarse ni degradarse, y su contraseña/correo no pueden cambiar.
@@ -19,7 +28,7 @@ class UsuariosScreen extends StatefulWidget {
 }
 
 class _UsuariosScreenState extends State<UsuariosScreen> {
-  static const _roles = ['OPERADOR', 'ADMIN', 'AUDITOR', 'TRABAJADOR'];
+  static const _roles = ['OPERADOR', 'ADMIN', 'AUDITOR'];
 
   List<Map<String, dynamic>> _usuarios = [];
   bool _cargando = true;
@@ -155,17 +164,117 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
         if (usuario == null) 'email': email,
         if (passCtrl.text.isNotEmpty && !esAdmin) 'password': passCtrl.text,
       };
+      Map<String, dynamic>? creado;
       if (usuario == null) {
-        await di.sl<ApiClient>().createUsuario(body);
+        creado = await di.sl<ApiClient>().createUsuario(body);
       } else {
         await di.sl<ApiClient>()
             .updateUsuario('${usuario['id_usuario']}', body);
       }
       await _cargar();
       _snack(usuario == null ? 'Usuario creado y encolado' : 'Usuario actualizado');
+      // Alta de un operador: se emite su llave y se muestra para compartirla.
+      if (creado != null && rol == 'OPERADOR') {
+        await _generarLlave(creado, silencioso: true);
+      }
     } catch (e) {
       _snack('Error al guardar: $e', error: true);
     }
+  }
+
+  /// Emite (o reemite) la llave de activación de un usuario y la muestra.
+  ///
+  /// `silencioso` solo evita el aviso de error que duplicaría el del alta.
+  Future<void> _generarLlave(
+    Map<String, dynamic> usuario, {
+    bool silencioso = false,
+  }) async {
+    try {
+      final respuesta =
+          await di.sl<ApiClient>().crearLlaveActivacion('${usuario['id_usuario']}');
+      if (!mounted) return;
+      await _mostrarLlave(respuesta, nombre: '${usuario['nombre']}');
+    } catch (e) {
+      if (!silencioso) _snack('user_key_error'.tr(), error: true);
+    }
+  }
+
+  /// Diálogo con el código en claro (el backend solo guarda su hash).
+  Future<void> _mostrarLlave(
+    Map<String, dynamic> respuesta, {
+    required String nombre,
+  }) async {
+    final codigo = '${respuesta['codigo'] ?? ''}';
+    if (codigo.isEmpty) {
+      _snack('user_key_error'.tr(), error: true);
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => KeyboardDialogWrapper(
+        onEscape: () => Navigator.of(ctx).pop(),
+        child: AlertDialog(
+          title: Text('user_key_title'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('user_key_desc'.tr(), style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  codigo,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 20,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              if (respuesta['expira_en'] != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'user_key_expires'.tr(null, [
+                    app_dates.DateUtils.formatDateTime(
+                      DateTime.parse('${respuesta['expira_en']}').toLocal(),
+                    ),
+                  ]),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: codigo));
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('user_key_copied'.tr())),
+                );
+              },
+              icon: const Icon(Icons.copy_all),
+              label: Text('user_key_copy'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleActivo(Map<String, dynamic> usuario, bool activo) async {
@@ -255,18 +364,30 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
               '${u['email']} · $rolLabel',
               style: const TextStyle(fontSize: 12),
             ),
-            trailing: Tooltip(
-              message: esAdmin
-                  ? 'La cuenta ADMIN no puede desactivarse'
-                  : activo
-                      ? 'Activo (toca para desactivar)'
-                      : 'Inactivo (toca para activar)',
-              child: Switch(
-                value: activo,
-                onChanged: esAdmin
-                    ? null
-                    : (v) => _toggleActivo(u, v),
-              ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!esAdmin)
+                  IconButton(
+                    key: Key('usuario_llave_${u['email']}'),
+                    icon: const Icon(Icons.vpn_key_outlined),
+                    tooltip: 'user_key_generate'.tr(),
+                    onPressed: () => _generarLlave(u),
+                  ),
+                Tooltip(
+                  message: esAdmin
+                      ? 'La cuenta ADMIN no puede desactivarse'
+                      : activo
+                          ? 'Activo (toca para desactivar)'
+                          : 'Inactivo (toca para activar)',
+                  child: Switch(
+                    value: activo,
+                    onChanged: esAdmin
+                        ? null
+                        : (v) => _toggleActivo(u, v),
+                  ),
+                ),
+              ],
             ),
             onTap: () => _mostrarFormulario(u),
           );

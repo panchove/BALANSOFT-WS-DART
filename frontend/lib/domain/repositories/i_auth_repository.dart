@@ -41,6 +41,16 @@ abstract class IAuthRepository {
   Future<void> resetPassword(String token, String newPassword);
   Future<User?> getCachedUser();
   Future<SesionRestaurada> restoreSession();
+
+  /// Relee el perfil de la empresa (`GET /api/v1/empresa`) y lo aplica al
+  /// [User] cacheado (nombre, RIF, dirección y logo).
+  ///
+  /// Devuelve el usuario actualizado, o `null` si no hay sesión o la lectura
+  /// falló (no es crítico: el usuario cacheado conserva los datos anteriores).
+  /// Se usa tras guardar el perfil de empresa para que la UI deje de mostrar
+  /// —y de pedir— el logo anterior, sin obligar a reloguearse.
+  Future<User?> refrescarEmpresaEnUsuarioCacheado();
+
   Future<void> cacheUser(User user);
   Future<void> clearCache();
 }

@@ -1,21 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:balansoft_ws/core/config/app_config.dart';
 import 'package:balansoft_ws/core/i18n/translations.dart';
+import 'package:balansoft_ws/core/services/modal_manager.dart';
 import 'package:balansoft_ws/core/theme/app_theme.dart';
 import 'package:balansoft_ws/core/widgets/welcome_guide_dialog.dart';
+import 'package:balansoft_ws/injection.dart' as di;
 
 /// Mini tutorial de bienvenida: se muestra una sola vez tras el onboarding y
-/// se puede repetir desde Ayuda. Cubre el stepper (avance/retroceso), el flag
-/// `tutorial_visto` y que el texto respete el tema claro (sin blanco).
+/// se puede repetir desde Ayuda. Cubre el stepper (avance/retroceso), las
+/// teclas ENTER/ESC del modal, el flag `tutorial_visto` y que el texto respete
+/// el tema claro (sin blanco).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  setUp(() async {
+    // `mostrarGuiaRapida` abre el tutorial con `ModalManager.showModal`, que
+    // en producción registra `injection.dart`; aquí hay que registrarlo.
+    await di.sl.reset();
+    di.sl.registerLazySingleton<ModalManager>(() => ModalManager());
     // `AppConfig` es estático y no se puede usar `init()` en testWidgets
     // (FakeAsync); el flag del tutorial se resetea en memoria por test.
     AppConfig.tutorialVisto = false;
+  });
+
+  tearDown(() async {
+    await di.sl.reset();
   });
 
   Future<void> montar(WidgetTester tester, {bool marcarVisto = true}) async {
@@ -118,5 +130,41 @@ void main() {
       find.text(AppTranslations.tr('tutorial_title')),
     );
     expect(titulo.style?.color, isNot(Colors.white));
+  });
+
+  testWidgets('ENTER avanza de paso y finaliza en el último',
+      (tester) async {
+    await montar(tester);
+    await abrir(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(AppTranslations.tr('tutorial_step', args: ['2', '7'])),
+      findsOneWidget,
+      reason: 'ENTER debe avanzar al paso 2 sin cerrar el tutorial',
+    );
+
+    for (var i = 0; i < 6; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text(AppTranslations.tr('tutorial_title')), findsNothing);
+    expect(AppConfig.tutorialVisto, isTrue,
+        reason: 'ENTER en el último paso finaliza y da por visto el tutorial');
+  });
+
+  testWidgets('ESC cierra el tutorial sin marcarlo como visto',
+      (tester) async {
+    await montar(tester);
+    await abrir(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.text(AppTranslations.tr('tutorial_title')), findsNothing,
+        reason: 'ESC debe cerrar el tutorial');
+    expect(AppConfig.tutorialVisto, isFalse,
+        reason: 'ESC es salida, no aceptación: no marca el flag');
   });
 }

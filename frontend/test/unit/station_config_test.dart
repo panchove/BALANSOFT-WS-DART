@@ -6,7 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Contrato `config.json` (BALANSOFT-INSTALLER `core/station_config.py`):
 /// exactamente dos claves, urls http/https sin credenciales ni path, rol
-/// SERVIDOR|TRABAJADOR, override de usuario con prioridad sobre el de sistema
+/// SERVIDOR|OPERADOR (el `TRABAJADOR` legado se acepta como alias), override de
+/// usuario con prioridad sobre el de sistema
 /// y error duro si el archivo presente es inválido. Sin archivos ni legado,
 /// error `ausente`.
 void main() {
@@ -56,11 +57,21 @@ void main() {
   });
 
   group('StationRole.parse', () {
-    test('reconoce exactamente SERVIDOR y TRABAJADOR', () {
+    test('reconoce SERVIDOR y OPERADOR', () {
       expect(StationRole.parse('SERVIDOR'), StationRole.servidor);
-      expect(StationRole.parse(' TRABAJADOR '), StationRole.trabajador);
+      expect(StationRole.parse(' OPERADOR '), StationRole.operador);
       expect(StationRole.servidor.etiqueta, 'SERVIDOR');
-      expect(StationRole.trabajador.etiqueta, 'TRABAJADOR');
+      expect(StationRole.operador.etiqueta, 'OPERADOR');
+    });
+
+    test('TRABAJADOR es alias legado y se canoniza a OPERADOR', () {
+      // Instalaciones provisionadas antes de la fusión del rol: el
+      // `config.json` en disco trae "TRABAJADOR" y debe seguir arrancando.
+      expect(StationRole.parse('TRABAJADOR'), StationRole.operador);
+      expect(StationRole.parse(' TRABAJADOR '), StationRole.operador);
+      expect(StationRole.operador.etiqueta, 'OPERADOR');
+      // El contrato es sensible a mayúsculas (igual que 'servidor').
+      expect(() => StationRole.parse('trabajador'), throwsFormatException);
     });
 
     test('lanza con cualquier otro valor o nulo', () {
@@ -95,7 +106,7 @@ void main() {
 
       final cfg = await StationConfigLoader.cargar();
       expect(cfg.apiBaseUrl, 'http://10.0.0.5:8000');
-      expect(cfg.rol, StationRole.trabajador);
+      expect(cfg.rol, StationRole.operador);
     });
 
     test('cae al sistema cuando no existe override', () async {
@@ -200,7 +211,7 @@ void main() {
 
       final cfg = await StationConfigLoader.cargar(migrarLegado: true);
       expect(cfg.apiBaseUrl, 'http://192.168.1.20:8000');
-      expect(cfg.rol, StationRole.trabajador);
+      expect(cfg.rol, StationRole.operador);
 
       // El archivo quedó escrito y las claves legadas fueron limpiadas.
       final f = File(StationConfigPaths.overridePath);
@@ -214,7 +225,7 @@ void main() {
       // Segunda carga: ya no toca prefs, lee el archivo.
       final cfg2 = await StationConfigLoader.cargar();
       expect(cfg2.apiBaseUrl, 'http://192.168.1.20:8000');
-      expect(cfg2.rol, StationRole.trabajador);
+      expect(cfg2.rol, StationRole.operador);
     });
 
     test('no migra si faltan claves legadas o la URL es inválida', () async {
@@ -252,13 +263,13 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await StationConfigWriter.escribirOverride(const StationConfig(
         apiBaseUrl: 'http://old:8000',
-        rol: StationRole.trabajador,
+        rol: StationRole.operador,
       ));
 
       await StationConfigWriter.actualizarApiBaseUrl('http://new:9000');
       final cfg = await StationConfigLoader.cargar();
       expect(cfg.apiBaseUrl, 'http://new:9000');
-      expect(cfg.rol, StationRole.trabajador);
+      expect(cfg.rol, StationRole.operador);
     });
 
     test('actualizarApiBaseUrl rechaza URL inválida', () async {

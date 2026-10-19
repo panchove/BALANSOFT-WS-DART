@@ -128,6 +128,8 @@ En la app, `InventoryViewModel.insertCategoria()` / `insertProducto()` **bloquea
 
 **Acceso por plan (`plan_type`):** además del tier, la respuesta de `/validate` incluye `plan_type` (`basic` = Básica | `premium` = Avanzada), que la app usa para habilitar u ocultar módulos/funciones según el plan contratado. `tier` rige la concurrencia y vigencia (`DEMO` expira, `MONOPUESTO` = 1 usuario, `CENTRAL` = multi-usuario); `plan_type` rige el **alcance de funciones** dentro del software. Como va dentro de la firma Ed25519, se aplica solo tras verificar firma + `server_time`.
 
+> **Excepción de BALANSOFT-WS (`LICENSE_PRODUCT_CODE=WS`):** la estación **no** gatea funciones por `plan_type` ni por `features`. Sea cual sea el plan que emita el LM (Básico/Premium), todos los módulos quedan disponibles; lo único que la licencia impone es el **límite de sesiones/equipos** (`DEMO` = 3 sesiones; el resto sin tope local, manda `licencias.max_sesiones` del LM/central). Ver `MANEJO_DB.md` §13.6 y `backend/app/api/v1/endpoints/auth.py::/license` (`es_demo`).
+
 ---
 
 ## 6. Seguridad que Debe Implementar el Cliente

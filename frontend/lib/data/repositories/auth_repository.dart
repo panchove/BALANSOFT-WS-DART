@@ -121,7 +121,7 @@ class AuthRepository implements IAuthRepository {
     // Se ESPERA para que al entrar el sistema ya esté operativo, pero un fallo
     // nunca impide el login (el borrador queda guardado y el wizard post-login
     // ofrece el reintento al primer ADMIN).
-    await _aplicarBorradorEmpresa(user);
+    final userSesion = await _aplicarBorradorEmpresa(user);
 
     // Best-effort: registrar la identidad local y empujar la cola de usuarios.
     // Nunca debe hacer fallar el login: se captura cualquier error.
@@ -134,7 +134,7 @@ class AuthRepository implements IAuthRepository {
       hardwareId: hardwareId,
     ));
 
-    return user;
+    return userSesion;
   }
 
   /// Aplica el borrador de empresa capturado en la instalación.
@@ -142,10 +142,15 @@ class AuthRepository implements IAuthRepository {
   /// Envía los datos a `PUT /api/v1/empresa` (solo `ADMIN`), sube el logo
   /// pendiente y marca el onboarding como cerrado para que no vuelva a
   /// aparecer el wizard posterior al login.
-  Future<void> _aplicarBorradorEmpresa(UserModel user) async {
-    if (!user.isAdmin) return;
+  ///
+  /// Devuelve el [User] con el que debe arrancar la sesión: si el borrador
+  /// cambió la empresa se relee del backend, porque el del login se construyó
+  /// ANTES de este `PUT` y arrastraría el logo/nombre viejos (el top-nav los
+  /// mostraría, y pediría un logo que ya no existe en `media/`).
+  Future<User> _aplicarBorradorEmpresa(UserModel user) async {
+    if (!user.isAdmin) return user;
     final draft = await CompanyDraft.leer();
-    if (draft == null || draft.vacio) return;
+    if (draft == null || draft.vacio) return user;
     try {
       final body = draft.data.toApiBody();
       final bytes = await CompanyDraft.leerLogoBytes();
@@ -159,9 +164,11 @@ class AuthRepository implements IAuthRepository {
       await _apiClient.updateEmpresaPerfil(body);
       await CompanyDraft.limpiar();
       await AppConfig.setOnboardingCompletado();
+      return await refrescarEmpresaEnUsuarioCacheado() ?? user;
     } catch (_) {
       // Se conserva el borrador: el wizard post-login seguirá disponible para
       // reintentar y el operador no se queda sin datos de empresa.
+      return user;
     }
   }
 
@@ -407,7 +414,7 @@ class AuthRepository implements IAuthRepository {
       // Refrescar los datos de empresa (nombre, RIF, dirección, logo) en el
       // User cacheado. Así, usuarios que ya tenían sesión guardada antes de
       // añadir estos campos reciben la info sin tener que reloguearse.
-      await _refrescarEmpresaEnUserCacheado();
+      await refrescarEmpresaEnUsuarioCacheado();
 
       return SesionRestaurada.ok;
     } on DioException catch (e) {
@@ -420,12 +427,18 @@ class AuthRepository implements IAuthRepository {
   }
 
   /// Refresca nombre fiscal, RIF, dirección y logo de la empresa en el [User]
-  /// cacheado, leyéndolos de `GET /api/v1/empresa`. Se usa al restaurar
-  /// sesión para que sesiones antiguas reciban los campos nuevos sin relogin.
-  Future<void> _refrescarEmpresaEnUserCacheado() async {
+  /// cacheado, leyéndolos de `GET /api/v1/empresa`, y devuelve el usuario
+  /// actualizado (`null` si no hay sesión o la lectura falló).
+  ///
+  /// Se usa al restaurar sesión (para que sesiones antiguas reciban los campos
+  /// nuevos sin relogin) y tras guardar el perfil de empresa, para que la UI
+  /// —el logo del top-nav entre otras— no siga mostrando, ni pidiendo, el logo
+  /// anterior hasta el siguiente login.
+  @override
+  Future<User?> refrescarEmpresaEnUsuarioCacheado() async {
     try {
       final userActual = await _localStorage.getCachedUser();
-      if (userActual == null) return;
+      if (userActual == null) return null;
 
       final perfil = await _apiClient.getEmpresaPerfil();
 
@@ -453,8 +466,10 @@ class AuthRepository implements IAuthRepository {
         logoUrl: logo ?? userActual.logoUrl,
       );
       await _localStorage.saveUser(actualizado);
+      return actualizado;
     } catch (_) {
       // No crítico: si falla, el User cacheado conserva los datos anteriores.
+      return null;
     }
   }
 

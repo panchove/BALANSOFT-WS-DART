@@ -8,16 +8,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// operador). El rol determina qué hace la app en el arranque, pero NO
 /// autoriza nada: tenant, licencia y permisos los decide siempre el backend
 /// (docs/MANEJO_DB.md §13 · REQ-FN-079/080).
+///
+/// El antiguo valor `TRABAJADOR` se fusionó en `OPERADOR`: `parse()` sigue
+/// aceptándolo como alias para no romper instalaciones ya provisionadas, pero
+/// `etiqueta` —y por tanto lo que escribe `StationConfigWriter`— es siempre
+/// `OPERADOR`.
 enum StationRole {
   servidor,
-  trabajador;
+  operador;
 
   String get etiqueta {
     switch (this) {
       case StationRole.servidor:
         return 'SERVIDOR';
-      case StationRole.trabajador:
-        return 'TRABAJADOR';
+      case StationRole.operador:
+        return 'OPERADOR';
     }
   }
 
@@ -27,7 +32,10 @@ enum StationRole {
     }
     final v = value.trim();
     if (v == 'SERVIDOR') return StationRole.servidor;
-    if (v == 'TRABAJADOR') return StationRole.trabajador;
+    if (v == 'OPERADOR') return StationRole.operador;
+    // Alias de compatibilidad: instalaciones provisionadas por un instalador
+    // anterior a la fusión del rol (config.json con "TRABAJADOR").
+    if (v == 'TRABAJADOR') return StationRole.operador;
     throw FormatException('rol inválido: $v');
   }
 }
@@ -36,7 +44,8 @@ enum StationRole {
 ///
 /// Contrato (BALANSOFT-INSTALLER `core/station_config.py`): exactamente dos
 /// claves, `api_base_url` (http/https, sin credenciales ni path) y `rol`
-/// (`SERVIDOR` | `TRABAJADOR`). Un archivo presente pero inválido es un error
+/// (`SERVIDOR` | `OPERADOR`; el antiguo `TRABAJADOR` se acepta como alias). Un
+/// archivo presente pero inválido es un error
 /// DURO: no se degrada a otro archivo ni a un default localhost.
 class StationConfig {
   final String apiBaseUrl;
@@ -116,8 +125,8 @@ class StationConfigError implements Exception {
 /// - Sistema: `/etc/balansoftws/config.json` (Linux) y
 ///   `%ProgramData%\BalansoftWS\config.json` (Windows).
 /// - Override de usuario (prioritario): `~/.config/balansoftws/config.json`
-///   en AMBAS plataformas — el instalador de TRABAJADOR, que corre con
-///   privilegios distintos al usuario operativo, escribe ahí.
+///   en AMBAS plataformas — el instalador de la estación OPERADOR, que corre
+///   con privilegios distintos al usuario operativo, escribe ahí.
 class StationConfigPaths {
   static String get _home {
     final h = Platform.environment['HOME'] ??

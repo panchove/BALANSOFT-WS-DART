@@ -30,8 +30,8 @@ del alcance.
 | **Sesión** | Una **sesión abierta** de un dispositivo contra la API (`dispositivos` + `sesiones` en la BD del servidor). |
 | **Equipo** | Un dispositivo físico identificado por su `hardware_id` (fila de `dispositivos`). Una sesión pertenece a un equipo. |
 | **Titular / dueño / tutora** | El equipo al que quedó atada la licencia: `licencias.hardware_id`. Es el único que puede aprobar o rechazar a los demás. |
-| **Rol de dispositivo** | `SERVIDOR_LOCAL` (el titular) o `LOCAL` (trabajador). Decide si el equipo levanta su propio WServer. `docs/MANEJO_DB.md` §13.1. |
-| **Rol de sesión** | `ADMIN \| OPERADOR \| AUDITOR \| TRABAJADOR`. El rol con el que opera **esa sesión**, asignado al aprobar el equipo. |
+| **Rol de dispositivo** | `SERVIDOR_LOCAL` (el titular) o `LOCAL` (operador). Decide si el equipo levanta su propio WServer. `docs/MANEJO_DB.md` §13.1. |
+| **Rol de sesión** | `ADMIN \| OPERADOR \| AUDITOR`. El rol con el que opera **esa sesión**, asignado al aprobar el equipo. |
 
 > Nota de nomenclatura: «Sesiones y Equipos» (navegación Flutter) es el listado
 > de **equipos de la cuenta**. No confundir con «Dispositivos de Campo», que en
@@ -65,7 +65,7 @@ Columnas relevantes de `dispositivos` (migración plegada en
 | Columna | Tipo | Semántica |
 |---------|------|-----------|
 | `estado` | `VARCHAR` `CHECK (estado IN ('PENDIENTE','APROBADO','RECHAZADO'))` | Estado de aprobación. **Las filas antiguas sin valor se leen como `APROBADO`** (`_estado_equipo`). |
-| `rol_sesion` | `VARCHAR` NULL, `CHECK (rol_sesion IN ('ADMIN','OPERADOR','AUDITOR','TRABAJADOR'))` | Rol que tendrá la sesión. NULL mientras no se apruebe. |
+| `rol_sesion` | `VARCHAR` NULL, `CHECK (rol_sesion IN ('ADMIN','OPERADOR','AUDITOR'))` | Rol que tendrá la sesión. NULL mientras no se apruebe. |
 | `rol_dispositivo` | `TEXT` | `SERVIDOR_LOCAL` \| `LOCAL` (recalculado en cada login). |
 | `activo` | `BOOLEAN` | `false` en un equipo `PENDIENTE`/`RECHAZADO` (no consume cupo). |
 
