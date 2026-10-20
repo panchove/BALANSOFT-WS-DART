@@ -3,7 +3,7 @@
 # BALANSOFT-WS - Entorno para el E2E de Flutter (H2b)
 #
 # Levanta en una base de datos AISLADA lo que la app necesita para correr
-# `frontend/integration_test/pesaje_flow_test.dart` contra la API real:
+# `src/frontend/integration_test/pesaje_flow_test.dart` contra la API real:
 #
 #   1. Crea la BD  (E2E_DB, por defecto balansoft_ws_e2e_flutter)
 #   2. Aplica el esquema canónico del rol local (balansoft-ws-local.sql)
@@ -56,7 +56,7 @@ fi
 if [[ -z "${DATABASE_URL_SYNC:-}" && -f .env ]]; then
   DATABASE_URL_SYNC="$(grep -E '^DATABASE_URL_SYNC=' .env | head -1 | sed 's/^DATABASE_URL_SYNC=//' | tr -d '"'"'" | tr -d "'")"
 fi
-[[ -n "${DATABASE_URL_SYNC:-}" ]] || fail "Define DATABASE_URL_SYNC (o backend/.env)."
+[[ -n "${DATABASE_URL_SYNC:-}" ]] || fail "Define DATABASE_URL_SYNC (o src/backend/.env)."
 
 # Reescribe el nombre de la BD para obtener la URL del entorno E2E.
 # Formato: esquema://usuario:clave@host:puerto/basededatos
@@ -110,7 +110,7 @@ case "$modo" in
       psql -w "$SERVER_URI" -c "CREATE DATABASE \"${E2E_DB}\"" >/dev/null
     fi
 
-    log "2/5 esquema canónico + migraciones (balansoft-ws-local.sql, 001-020)"
+    log "2/5 esquema canónico + migraciones (balansoft-ws-local.sql, 001-025)"
     # Orden de instalación real (ver wserver.py:asegurar_db): primero el esquema
     # base y después TODAS las migraciones; son idempotentes y `id_serie`
     # (series de numeración) solo existe a partir de la migración 015.

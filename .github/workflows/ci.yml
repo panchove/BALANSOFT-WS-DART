@@ -55,16 +55,16 @@ jobs:
           enable-cache: true
 
       - name: Instalar dependencias (backend)
-        run: uv sync --directory backend --all-groups
+        run: uv sync --directory src/backend --all-groups
 
       - name: Lint (ruff)
-        run: uv run --directory backend ruff check app tests
+        run: uv run --directory src/backend ruff check app tests
 
       - name: Tipos (mypy)
-        run: uv run --directory backend mypy tests/
+        run: uv run --directory src/backend mypy tests/
 
       - name: Tests (pytest)
-        run: uv run --directory backend pytest -q -m "not e2e"
+        run: uv run --directory src/backend pytest -q -m "not e2e"
 
   e2e:
     name: E2E (stub LM + contrato firmado)
@@ -112,15 +112,15 @@ jobs:
           enable-cache: true
 
       - name: Instalar dependencias (backend)
-        run: uv sync --directory backend --all-groups
+        run: uv sync --directory src/backend --all-groups
 
       - name: Generar claves Ed25519 de test
         run: |
           mkdir -p /tmp/lm-keys
-          uv run --directory backend python scripts/generate_signing_keys.py /tmp/lm-keys
+          uv run --directory src/backend python scripts/generate_signing_keys.py /tmp/lm-keys
 
       - name: Tests E2E
-        run: uv run --directory backend pytest tests/e2e -q
+        run: uv run --directory src/backend pytest tests/e2e -q
         env:
           LICENSE_PRIVATE_KEY_PATH: /tmp/lm-keys/key_privada.pem
           LICENSE_PUBLIC_KEY_PATH: /tmp/lm-keys/key_publica.pem
@@ -140,13 +140,13 @@ jobs:
           cache: true
 
       - name: Dependencias
-        run: cd frontend && flutter pub get
+        run: cd src/frontend && flutter pub get
 
       - name: Análisis estático
-        run: cd frontend && flutter analyze
+        run: cd src/frontend && flutter analyze
 
       - name: Tests
-        run: cd frontend && flutter test
+        run: cd src/frontend && flutter test
 
   e2e-flutter:
     name: E2E Flutter (login → entrada → salida → CERRADO)
@@ -190,7 +190,7 @@ jobs:
           enable-cache: true
 
       - name: Dependencias (backend)
-        run: uv sync --directory backend --all-groups
+        run: uv sync --directory src/backend --all-groups
 
       - uses: subosito/flutter-action@v2
         with:
@@ -202,16 +202,16 @@ jobs:
         run: flutter config --enable-linux-desktop
 
       - name: Dependencias
-        run: cd frontend && flutter pub get
+        run: cd src/frontend && flutter pub get
 
       - name: Levantar entorno E2E (BD + seed + stub LM + API)
-        run: bash backend/scripts/e2e_flutter.sh up
+        run: bash src/backend/scripts/e2e_flutter.sh up
 
       # El runner no tiene display: xvfb da el servidor gráfico que necesita
       # el runner GTK. El retry absorbe la deriva del primer arranque.
       - name: E2E Flutter
         run: |
-          cd frontend
+          cd src/frontend
           xvfb-run -a flutter test integration_test/pesaje_flow_test.dart \
             -d linux --no-pub || \
           xvfb-run -a flutter test integration_test/pesaje_flow_test.dart \
