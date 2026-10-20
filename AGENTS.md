@@ -125,16 +125,26 @@ copia esas rutas — no las de un repo plano.
   el test.
 - `TODO.md` y `PRD.md` están en `sdd/_inbox/`, no en la raíz; el comando `/update-all`
   (`.opencode/commands/update-all.md`) todavía los busca en la raíz.
-- **El E2E de UI no corre en local**: `lib/core/services/wserver_manager.dart` hace
-  `fuser -k 8000/tcp` al cerrar la app → con la estación viva, el E2E Flutter falla por el puerto.
-  Ejecutar con la estación detenida o en CI con `xvfb`.
-- E2E Flutter de CI: necesita `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-  libstdc++-12-dev xvfb libsecret-1-dev` (`libsecret-1-dev` lo exige `flutter_secure_storage_linux`)
-  y `flutter config --enable-linux-desktop`.
+- **El E2E de UI choca con la estación viva**: `lib/core/services/wserver_manager.dart` hace
+  `fuser -k 8000/tcp` al cerrar la app → si la app Flutter está corriendo, el E2E falla por el
+  puerto. **Sí se puede correr en local** (verificado) con la estación detenida:
+  ```bash
+  cd src/backend
+  DATABASE_URL_SYNC=postgresql+psycopg2://sqlman:7767@localhost:5432/balansoft_ws_test \
+    ./scripts/e2e_flutter.sh up      # BD + seed + stub LM + API en :8000
+  cd ../frontend
+  xvfb-run -a flutter test integration_test/pesaje_flow_test.dart -d linux
+  cd ../backend && ./scripts/e2e_flutter.sh down
+  ```
+  Requiere `xvfb` + `libgtk-3-dev` + `libsecret-1-dev` (`flutter_secure_storage_linux`).
 - `make test-e2e-ui` invoca `flutter test integration_test/… -d linux` **sin** `xvfb` → en headless
   falla; usar `xvfb-run -a`.
 - `scripts/reset_total.sh` (raíz) respalda con `pg_dump -Fc` y **aborta si falta pg_dump**:
   los datos pesan más que la comodidad del reset.
+- **Migraciones**: `setup_db.sh aplicar-migraciones` y el runtime WServer ignoran las variantes
+  `*.mssql.sql` (son T-SQL). Si añades una migración para SQL Server, créala con ese sufijo.
+- `scripts/setup_db.sh` y `e2e_flutter.sh` exigen `DATABASE_URL_SYNC` en el entorno o en
+  `src/backend/.env` — incluso en modos que no tocan la BD (`down`).
 
 ## Versionado y releases
 
