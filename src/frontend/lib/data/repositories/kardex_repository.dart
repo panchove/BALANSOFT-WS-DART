@@ -13,11 +13,16 @@ import '../../domain/entities/kardex.dart';
 import '../../domain/repositories/i_kardex_repository.dart';
 import '../datasources/remote/api_client.dart';
 
+/// Implementación del repositorio de Kardex contra el backend REST de la estación.
+///
+/// Gestiona la interacción con los endpoints `/api/v1/kardex` bajo ISO/IEC 17025 y OIML R 76-1.
 class KardexRepository implements IKardexRepository {
   final ApiClient _api;
 
+  /// Crea una instancia inyectando el cliente HTTP [apiClient].
   KardexRepository({required ApiClient apiClient}) : _api = apiClient;
 
+  /// Consulta el balance de movimientos de inventario en el rango de fechas indicado.
   @override
   Future<KardexDetalle> detalle({
     required DateTime desde,
@@ -34,6 +39,7 @@ class KardexRepository implements IKardexRepository {
     return KardexDetalle.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Descarga el reporte de Kardex en formato Excel (.xlsx).
   @override
   Future<Response> exportExcel({
     required DateTime desde,
@@ -49,6 +55,7 @@ class KardexRepository implements IKardexRepository {
         if (idAlmacen != null && idAlmacen.isNotEmpty) 'id_almacen': idAlmacen,
       });
 
+  /// Descarga el reporte de Kardex en formato imprimible PDF.
   @override
   Future<Response> exportPdf({
     required DateTime desde,

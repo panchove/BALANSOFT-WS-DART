@@ -15,6 +15,10 @@ import '../../../../domain/usecases/weighing_usecases.dart';
 part 'weighing_event.dart';
 part 'weighing_state.dart';
 
+/// BLoC central para la gestión del ciclo de vida metrológico de pesajes industriales.
+///
+/// Coordina la captura de peso de entrada, salida, anulación, consultas y sincronización
+/// offline según las normas ISO/IEC 17025 y OIML R 76-1.
 class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
   final CreateWeighingUseCase _createUseCase;
   final CloseWeighingUseCase _closeUseCase;
@@ -24,6 +28,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
   final SyncWeighingsUseCase _syncUseCase;
   final GetFailedWeighingsCountUseCase? _failedCountUseCase;
 
+  /// Crea el BLoC inyectando todos los casos de uso requeridos para la operación metrológica.
   WeighingBloc({
     required CreateWeighingUseCase createUseCase,
     required CloseWeighingUseCase closeUseCase,
@@ -48,6 +53,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     on<SyncWeighingsEvent>(_onSync);
   }
 
+  /// Maneja el registro inicial de una pesada (`CreateWeighingEvent`).
   Future<void> _onCreate(
       CreateWeighingEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingLoading());
@@ -60,6 +66,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     }
   }
 
+  /// Maneja el cierre definitivo de un boleto capturando pesada de salida (`CloseWeighingEvent`).
   Future<void> _onClose(
       CloseWeighingEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingLoading());
@@ -72,6 +79,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     }
   }
 
+  /// Maneja la anulación justificada de un boleto (`AnularWeighingEvent`).
   Future<void> _onAnular(
       AnularWeighingEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingLoading());
@@ -84,6 +92,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     }
   }
 
+  /// Maneja la consulta paginada y filtrada de boletos (`ListWeighingsEvent`).
   Future<void> _onList(
       ListWeighingsEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingLoading());
@@ -100,6 +109,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     }
   }
 
+  /// Maneja la consulta del detalle de un boleto específico (`GetWeighingEvent`).
   Future<void> _onGet(
       GetWeighingEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingLoading());
@@ -115,6 +125,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
     }
   }
 
+  /// Maneja la sincronización hacia el servidor de boletos pendientes (`SyncWeighingsEvent`).
   Future<void> _onSync(
       SyncWeighingsEvent event, Emitter<WeighingState> emit) async {
     emit(WeighingSyncing());

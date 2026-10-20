@@ -15,11 +15,15 @@ import '../../../../domain/usecases/license_usecases.dart';
 part 'license_event.dart';
 part 'license_state.dart';
 
+/// BLoC para la gestión del ciclo de vida y validación de licencias de uso.
+///
+/// Implementa los controles de acceso y activación bajo ISO/IEC 27001.
 class LicenseBloc extends Bloc<LicenseEvent, LicenseState> {
   final ValidateLicenseUseCase _validateUseCase;
   final GetCachedLicenseUseCase _getCachedUseCase;
   final ClearLicenseCacheUseCase _clearCacheUseCase;
 
+  /// Crea el BLoC inyectando casos de uso de validación, consulta y limpieza de caché.
   LicenseBloc({
     required ValidateLicenseUseCase validateUseCase,
     required GetCachedLicenseUseCase getCachedUseCase,
@@ -33,6 +37,7 @@ class LicenseBloc extends Bloc<LicenseEvent, LicenseState> {
     on<ClearLicenseCacheEvent>(_onClearCache);
   }
 
+  /// Maneja el evento [ValidateLicenseEvent] validando remotamente la clave ingresada.
   Future<void> _onValidate(
       ValidateLicenseEvent event, Emitter<LicenseState> emit) async {
     emit(LicenseLoading());
@@ -44,6 +49,7 @@ class LicenseBloc extends Bloc<LicenseEvent, LicenseState> {
     }
   }
 
+  /// Maneja el evento [CheckCachedLicenseEvent] leyendo la licencia persistida en el almacenamiento seguro.
   Future<void> _onCheckCached(
       CheckCachedLicenseEvent event, Emitter<LicenseState> emit) async {
     final license = await _getCachedUseCase.execute();
@@ -52,6 +58,7 @@ class LicenseBloc extends Bloc<LicenseEvent, LicenseState> {
     }
   }
 
+  /// Maneja el evento [ClearLicenseCacheEvent] eliminando la licencia de la estación.
   Future<void> _onClearCache(
       ClearLicenseCacheEvent event, Emitter<LicenseState> emit) async {
     await _clearCacheUseCase.execute();

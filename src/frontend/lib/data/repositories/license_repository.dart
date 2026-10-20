@@ -14,11 +14,15 @@ import '../../core/security/device_info.dart';
 import '../datasources/remote/api_client.dart';
 import '../datasources/local/local_storage.dart';
 
+/// Implementación del repositorio de licencias combinando validación remota y caché local cifrada.
+///
+/// Gestiona la interacción con el servidor de licencias (LM) bajo ISO/IEC 27001.
 class LicenseRepository implements ILicenseRepository {
   final ApiClient _apiClient;
   final LocalStorage _localStorage;
   final Connectivity _connectivity;
 
+  /// Crea una instancia inyectando el cliente API, almacenamiento local y detector de conectividad.
   LicenseRepository({
     required ApiClient apiClient,
     required LocalStorage localStorage,
@@ -32,6 +36,7 @@ class LicenseRepository implements ILicenseRepository {
     return results.any((r) => r != ConnectivityResult.none);
   }
 
+  /// Valida una clave de licencia enviando la huella de hardware del dispositivo.
   @override
   Future<License> validateLicense(String licenseKey) async {
     if (!await _isConnected) {
@@ -55,6 +60,7 @@ class LicenseRepository implements ILicenseRepository {
     return license;
   }
 
+  /// Activa la clave de licencia enlazándola de forma permanente a la estación de pesaje.
   @override
   Future<License> activateLicense(String licenseKey) async {
     final hwInfo = await DeviceInfo.getHardwareInfo();
@@ -72,6 +78,7 @@ class LicenseRepository implements ILicenseRepository {
     return license;
   }
 
+  /// Obtiene la licencia almacenada en el almacenamiento seguro local.
   @override
   Future<License?> getCachedLicense() async {
     final data = await _localStorage.getCachedLicenseAsync();
@@ -79,16 +86,19 @@ class LicenseRepository implements ILicenseRepository {
     return License.fromJson(data);
   }
 
+  /// Persiste los datos de licencia serializados en almacenamiento seguro local.
   @override
   Future<void> cacheLicense(License license) async {
     await _localStorage.cacheLicense(license.toJson());
   }
 
+  /// Elimina los registros locales de licencia.
   @override
   Future<void> clearCache() async {
     await _localStorage.clearLicense();
   }
 
+  /// Refresca el estado de la licencia contra el servidor conservando la versión previa en caso de fallo.
   @override
   Future<License?> refreshLicense(String licenseKey) async {
     try {
