@@ -57,6 +57,18 @@ _nonces_vistos: set[str] = set()
 
 
 def _now_naive() -> datetime:
+    """Obtiene la fecha y hora actual sin zona horaria.
+    
+    Returns:
+        datetime: La fecha y hora actuales sin información de timezone.
+    
+    Notes:
+        - Utilizado para operaciones de validación de licencias donde no es necesario 
+          especificar la zona horaria.
+        - El resultado tiene el tzinfo removido para compatibilidad con comparaciones 
+          directas en la base de datos.
+        - Se usa en validaciones de vencimiento de licencias y sincronización de estado.
+    """
     return datetime.now(UTC).replace(tzinfo=None)
 
 
@@ -73,6 +85,25 @@ def _sanitize_mac(value: str | None) -> str | None:
 
 
 def _sanitize_text(value: str | None, max_length: int) -> str | None:
+    """Normaliza y limita un texto para su uso en licencias.
+    
+    Args:
+        value: Texto a sanitizar. Puede ser None.
+        max_length: Longitud máxima permitida para el texto.
+    
+    Returns:
+        str | None: El texto sanitizado recortado a max_length, o None si el valor 
+        original es None.
+    
+    Notes:
+        - Si el valor es None, retorna None inmediatamente.
+        - El valor se strippea (quita espacios al principio y al final) antes de 
+          validar la longitud.
+        - Si el texto excede max_length, se recorta a exactamente max_length 
+          caracteres.
+        - Se usa en la sanitización de identificadores de hardware y textos 
+          libres en validaciones de licencias.
+    """
     if not value:
         return None
     value = value.strip()

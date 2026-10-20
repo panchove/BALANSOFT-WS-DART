@@ -56,6 +56,21 @@ TOLERANCIA_CAPACIDAD = 1.05
 
 
 def _separar_tokens(texto: str) -> list[str]:
+    """Separa una trama de báscula en tokens (tokens/field delimitados).
+    
+    Args:
+        texto: Línea de texto emitida por la báscula a tokenizar.
+    
+    Returns:
+        list[str]: Lista de tokens extraídos de la trama, sin valores nulos o vacíos.
+    
+    Notes:
+        - Utiliza el separador configurado `_RE_SEPARADOR` (por defecto 'lf' / newline).
+        - Los tokens vacíos o solo espacios son filtrados automáticamente.
+        - Este método es el paso inicial de parsing antes de extraer el payload 
+          y checksum de la trama.
+        - El resultado se usa en `_extraer_payload` para extraer peso y estado.
+    """
     return [t for t in _RE_SEPARADOR.split(texto.strip()) if t]
 
 

@@ -57,6 +57,23 @@ async def list_productos(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProductoOut]:
+    """Lista todos los productos activos de la empresa.
+    
+    Args:
+        empresa: Empresa cuyas productos se listan.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        list[ProductoOut]: Lista de productos activos ordenados por nombre.
+    
+    Raises:
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Solo incluye productos con estado activo.
+        - Los resultados se ordenan alfabéticamente por nombre.
+        - Se registra auditoría del evento de consulta.
+    """
     rows = await _SERVICE.list_by_name(db, empresa.id_empresa, "productos")
     categorias = {
         c.id_categoria: c.nombre
@@ -148,6 +165,23 @@ async def list_categorias(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[CategoriaOut]:
+    """Lista todas las categorías activas de la empresa.
+    
+    Args:
+        empresa: Empresa cuyas categorías se listan.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        list[CategoriaOut]: Lista de categorías activas ordenadas por nombre.
+    
+    Raises:
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Solo incluye categorías con estado activo.
+        - Los resultados se ordenan alfabéticamente por nombre.
+        - Se registra auditoría del evento de consulta.
+    """
     rows = await _SERVICE.list_by_name(db, empresa.id_empresa, "categorias")
     return [CategoriaOut(**r) for r in rows]
 

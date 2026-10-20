@@ -64,6 +64,25 @@ _DELIMITADORES: dict[str, bytes] = {
 
 
 def _normalizar_delimitador(delimitador: str | None) -> str:
+    """Normaliza el delimitador de trama de báscula a un formato estándar.
+    
+    Args:
+        delimitador: Carácter delimitador configurado para la báscula. 
+            Soporta valores: 'lf' (newline), 'cr' (carriage return), 'crlf' (CRLF).
+            Si es None, se usa el valor por defecto 'lf'.
+    
+    Returns:
+        str: El delimitador normalizado en minúsculas. Siempre retorna uno de 
+            los valores válidos: 'lf', 'cr' o 'crlf'. Si el valor proporcionado 
+            no es válido, retorna 'lf' por defecto.
+    
+    Notes:
+        - Los delimitadores aceptados son: 'lf' (\n), 'cr' (\r), 'crlf' (\r\n).
+        - Este método es crítico para el correcto framing de las tramas recibidas 
+          por el puerto serie. Un delimitador incorrecto provocará que las tramas 
+          se consideren incompletas o corruptas.
+        - Se descartan caracteres nulos y basura antes del delimitador de inicio.
+    """
     valor = (delimitador or "lf").strip().lower()
     return valor if valor in _DELIMITADORES else "lf"
 

@@ -211,6 +211,35 @@ async def create_weighing(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
+    """Registra un nuevo pesaje de entrada o salida en la estación.
+    
+    Args:
+        payload: Datos del pesaje (vehículo, placa, pesos, producto, conductor, guía).
+        request: Objeto de solicitud HTTP para capturar la dirección IP.
+        current_user: Usuario autenticado que realiza el pesaje.
+        empresa: Empresa asociada al pesaje (contexto multi-tenant).
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        WeighingOut: Objeto del pesaje creado en estado PENDIENTE.
+    
+    Raises:
+        HTTPException 400: Si el peso viola invariantes metrológicas 
+            (bruto < tara, peso negativo, sobrecapacidad > 105%).
+        HTTPException 400: Si el vehículo ya tiene un boleto PENDIENTE activo 
+            (anti-duplicidad).
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+        HTTPException 403: Si la licencia de la empresa está vigente y 
+            corresponde al tier correspondiente.
+    
+    Notes:
+        - El boleto nace en estado `PENDIENTE` al crear la entrada.
+        - Se validan tolerancias de capacidad (`TOLERANCIA_CAPACIDAD = 1.05`).
+        - El peso neto se firma al cerrar el boleto (no editable después).
+        - Si `es_peso_manual=True`, el peso se registra explícitamente como manual
+          y requiere autorización de roles ADMIN/SUPERVISOR.
+        - Se bloquea la creación si el vehículo tiene un boleto PENDIENTE previo.
+    """
     _verificar_peso_manual(payload.es_peso_manual, current_user)
 
     # Validar licencia contra el LM con caché por turno y sin bloquear el event
@@ -308,6 +337,35 @@ async def close_weighing(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
+    """Cierra un boleto de pesaje abierto y registra la salida del vehículo.
+    
+    Args:
+        boleto: Identificador del boleto de pesaje (número de serie o UUID).
+        payload: Datos de cierre (peso salida, remolque, conductor, producto, guía).
+        request: Objeto de solicitud HTTP para capturar la dirección IP.
+        current_user: Usuario autenticado que cierra el pesaje.
+        empresa: Empresa asociada al boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        WeighingOut: Objeto del pesaje cerrado en estado CERRADO con cálculos de neto.
+    
+    Raises:
+        HTTPException 404: Si el boleto no existe o no está en estado PENDIENTE.
+        HTTPException 400: Si el peso de salida es inválido o inconsistente
+            respecto a la entrada.
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+        HTTPException 403: Si la licencia expira o no corresponde al tier.
+    
+    Notes:
+        - Al cerrar, el boleto pasa estado `PENDIENTE` → `CERRADO`.
+        - Se calcula el peso neto: `abs(pe_c - ps_c)` para camión, `abs(pe_r - ps_r)` para remolque.
+        - Se incrementa `ediciones_count` y se registra `BoletoEdicion` si hay cambios.
+        - Si `es_peso_manual=True`, la modificación pasa el boleto a estado `MODIFICADO`.
+        - Se genera la advertencia de tolerancia si el peso está en rango crítico.
+        - Se emite el ticket de pesaje formateado (térmico/hoja suelta PDF).
+        - Se actualiza el Kardex de inventario con movimiento ID 60 (DESPACHO) o ID 10 (INGRESO).
+    """
     _verificar_peso_manual(payload.es_peso_manual, current_user)
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
@@ -340,6 +398,35 @@ async def anular_weighing(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
+    """Anula un boleto de pesaje cerrado previamente.
+    
+    Args:
+        boleto: Identificador del boleto de pesaje a anular.
+        payload: Motivo de anulación (mínimo 10 caracteres).
+        request: Objeto de solicitud HTTP para capturar la dirección IP.
+        current_user: Usuario autenticado que anula el boleto.
+        empresa: Empresa asociada al boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        WeighingOut: Objeto del boleto en estado ANULADO.
+    
+    Raises:
+        HTTPException 400: Si el motivo de anulación tiene menos de 10 caracteres.
+        HTTPException 404: Si el boleto no existe o no está en estado CERRADO.
+        HTTPException 401: Si el usuario no tiene permisos ADMIN or SUPERVISOR.
+        HTTPException 409: Si el boleto ya fue anulado previamente.
+    
+    Notes:
+        - La anulación solo es posible sobre boletos en estado CERRADO.
+        - Se requiere obligatoriamente un `motivo_anulacion` de mínimo 10 caracteres.
+        - Al anular, se registra un contra-asiento en Kardex con movimiento inverso 
+          exacto para mantener paridad contable/física.
+        - El boleto pasa estado `CERRADO` → `ANULADO`.
+        - Se libera el vehículo (quita la restricción de PENDIENTE por placa).
+        - Se registra auditoría completa con usuario, IP y motivo de anulación.
+        - El historial del boleto se preserva; no se borra la transacción.
+    """
     _verificar_anulacion(current_user)
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
@@ -366,6 +453,29 @@ async def list_pendientes(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[WeighingOut]:
+    """Lista los boletos de pesaje pendientes de la empresa.
+    
+    Args:
+        skip: Número de registros a saltar para paginación (default: 0).
+        limit: Número máximo de registros a retornar (default: 100, max: 1000).
+        empresa: Empresa cuyos boletos pendientes se listan.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        list[WeighingOut]: Lista de boletos de pesaje en estado PENDIENTE.
+    
+    Raises:
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Solo incluye boletos con estado PENDIENTE.
+        - Los resultados incluyen enriquecimiento de datos de ticket mediante 
+          `_enriquecer_pesajes_lista`.
+        - Los resultados finales son resoluciones a formato WeighingOut 
+          (pesos neto, bruto, tara, etc.).
+        - Esta consulta es útil para el panel de control operador 
+          para monitorear boletos pendientes por procesar.
+    """
     rows = await _SERVICE.pendientes(db, empresa, skip=skip, limit=limit)
     rows = await _enriquecer_pesajes_lista(db, rows)
     return [_resolve_to_weighing_out(r) for r in rows]
@@ -382,6 +492,33 @@ async def list_weighings(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[WeighingOut]:
+    """Lista los boletos de pesaje de la empresa con filtros opcionales.
+    
+    Args:
+        skip: Número de registros a saltar para paginación (default: 0).
+        limit: Número máximo de registros a retornar (default: 100, max: 1000).
+        date_from: Fecha inicial para filtrar (inclusive).
+        date_to: Fecha final para filtrar (inclusive).
+        vehicle_id: ID del vehículo para filtrar por placa o identificador.
+        estado: Filtrar por estado del boleto (PENDIENTE, CERRADO, MODIFICADO, ANULADO).
+        empresa: Empresa cuyos boletos se listan.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        list[WeighingOut]: Lista de boletos de pesaje con los cálculos de neto correspondientes.
+    
+    Raises:
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Los resultados incluyen enriquecimiento de datos de ticket mediante 
+          `_enriquecer_pesajes_lista`.
+        - Los resultados finales son resoluciones a formato WeighingOut 
+          (pesos neto, bruto, tara, etc.).
+        - Se pueden filtrar por rango de fechas para análisis de producción.
+        - El filtrado por vehículo busca en la placa o identificador del vehículo.
+        - El filtrado por estado permite ver boletos por su fase en el ciclo de vida.
+    """
     rows, _ = await _SERVICE.list(
         db,
         empresa,
@@ -402,6 +539,26 @@ async def get_weighing_by_boleto(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
+    """Obtiene un boleto de pesaje por su identificador.
+    
+    Args:
+        boleto: Identificador del boleto de pesaje (número de serie o UUID).
+        empresa: Empresa a la que pertenece el boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        WeighingOut: Boleto de pesaje con los cálculos de neto correspondientes.
+    
+    Raises:
+        HTTPException 404: Si el boleto no existe.
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Busca el boleto por número de serie o UUID, incluyendo en la empresa especificada.
+        - Si el boleto no existe, lanza error 404 con detalle descriptivo.
+        - Se Enriquece el ticket con datos de catálogo (conductores, productos, almacenes, etc.)
+        - El resultado final incluye pesos neto, bruto, tara y diferencias calculadas.
+    """
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
@@ -524,6 +681,43 @@ async def get_weighing_pdf(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    """Genera el PDF del ticket de pesaje para el boleto especificado.
+    
+    Args:
+        boleto: Identificador del boleto de pesaje (número de serie o UUID).
+        request: Objeto de solicitud HTTP para resolución de idioma y cliente.
+        idioma: Código de idioma para el ticket (ej: 'es', 'en', 'pt'). 
+            Si es None, usa el idioma de la empresa.
+        copias: Número de copias del ticket (mínimo 1, máximo 10).
+        tamano_papel: Formato de papel ('Letter', 'Legal', 'A4', '58mm', '80mm').
+        orientacion: Orientación del ticket ('portrait' o 'landscape').
+        mostrar_encabezado: Si incluir el encabezado de la estación en el ticket.
+        mostrar_detalles: Si incluir los detalles completos del pesaje en el ticket.
+        mostrar_qr: Si incluir el bloque QR del boleto (configurable en Diseño de ticket).
+        tipo_ticket: Tipo de formato de ticket ('simple', 'avanzado', 'completo').
+        empresa: Empresa a la que pertenece el boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        Response: Archivo PDF del ticket de pesaje con el formato especificado.
+    
+    Raises:
+        HTTPException 404: Si el boleto no existe.
+        HTTPException 400: Si el formato de papel o tipo de ticket no es válido.
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - El idioma se resolve mediante la cabecera Accept-Language o el idioma 
+          configurado en la empresa.
+        - El tamaño de papel y orientación deben ser consistentes con la 
+          impresora configurada en la estación.
+        - El bloque QR se genera según la configuración del diseño de ticket 
+          en la estación, no necesariamente aquí.
+        - El ticket puede ser 'simple' (solo pesos) o 'avanzado' (con datos completos 
+          de tercero, conductor, transporte, etc.).
+        - Se respeta la configuración de la estación para formato de ticket térmico 
+          (58mm/80mm) u hoja suelta (Letter/A4).
+    """
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
@@ -552,6 +746,35 @@ async def get_weighing_txt(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    """Genera el ticket de pesaje en formato de texto plano (TXT).
+    
+    Args:
+        boleto: Identificador del boleto de pesaje (número de serie o UUID).
+        request: Objeto de solicitud HTTP para resolución de idioma y cliente.
+        idioma: Código de idioma para el ticket (ej: 'es', 'en', 'pt'). 
+            Si es None, usa el idioma de la empresa.
+        tipo_ticket: Tipo de formato de ticket ('simple', 'avanzado', 'completo').
+        empresa: Empresa a la que pertenece el boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        Response: Archivo de texto plano (TXT) del ticket de pesaje.
+    
+    Raises:
+        HTTPException 404: Si el boleto no existe.
+        HTTPException 400: Si el tipo de ticket no es válido.
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - El ticket TXT es el formato de texto plano para impresoras matriciales 
+          o visualización rápida en pantalla.
+        - El idioma se resolve mediante la cabecera Accept-Language o el idioma 
+          configurado en la empresa.
+        - El tipo de ticket define el nivel de detalle: 'simple' (solo pesos), 
+          'avanzado' (con datos de tercero/conductor) o 'completo' (todos los datos).
+        - Este formato es útil para impresoras de impacto (Epson/Lexmark) o 
+          visualización rápida sin necesidad de generar PDF.
+    """
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")
@@ -594,6 +817,34 @@ async def update_weighing(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> WeighingOut:
+    """Actualiza un boleto de pesaje ya cerrado o modifica datos complementarios.
+    
+    Args:
+        boleto: Identificador del boleto de pesaje a actualizar.
+        payload: Datos a actualizar (justificacion, idioma, u otros campos).
+        request: Objeto de solicitud HTTP para resolución de idioma y cliente.
+        current_user: Usuario autenticado que realiza la actualización.
+        empresa: Empresa a la que pertenece el boleto.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        WeighingOut: Boleto de pesaje actualizado con los nuevos datos.
+    
+    Raises:
+        HTTPException 404: Si el boleto no existe.
+        HTTPException 400: Si el boleto no está en estado MODIFICADO o CERRADO.
+        HTTPException 401: Si el usuario no tiene permisos ADMIN o SUPERVISOR.
+    
+    Notes:
+        - Solo es posible actualizar boletos en estado MODIFICADO o CERRADO.
+        - El campo `justificacion` es obligatorio para actualizaciones sobre boletos 
+          CERRADO (regla de auditoría).
+        - Se registra un nuevo registro `BoletoEdicion` con el motivo de la modificación.
+        - Si el boleto estaba en estado PENDIENTE, la actualización lo pasa a MODIFICADO.
+        - El idioma se aplica según la configuración de la empresa y el usuario.
+        - Se actualiza el historial de ediciones (`ediciones_count`) y se registra 
+          la fecha/hora de la modificación.
+    """
     pesaje = await _buscar_pesaje(db, empresa.id_empresa, boleto)
     if pesaje is None:
         raise HTTPException(status_code=404, detail="Boleto de pesaje no encontrado")

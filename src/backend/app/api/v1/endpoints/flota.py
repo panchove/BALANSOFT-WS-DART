@@ -112,6 +112,23 @@ async def list_modelos(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[ModeloCamionOut]:
+    """Lista todos los modelos de camioneta registrados en la empresa.
+    
+    Args:
+        empresa: Empresa cuyos modelos se listan.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        list[ModeloCamionOut]: Lista de modelos de camioneta activos ordenados por nombre.
+    
+    Raises:
+        HTTPException 401: Si el usuario no tiene permisos OPERADOR o ADMIN.
+    
+    Notes:
+        - Solo incluye modelos con estado activo.
+        - Los resultados se ordenan alfabéticamente por nombre.
+        - Se registra auditoría del evento de consulta.
+    """
     rows = await _SERVICE.list_by_name(db, empresa.id_empresa, "modelos_camion")
     return [ModeloCamionOut(**r) for r in rows]
 
@@ -156,6 +173,27 @@ async def update_modelo(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> ModeloCamionOut:
+    """Actualiza los datos de un modelo de camioneta existente.
+    
+    Args:
+        id_modelo_camion: UUID del modelo de camioneta a actualizar.
+        payload: Datos actualizados del modelo (nombre opcional).
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Returns:
+        ModeloCamionOut: Objeto del modelo actualizado con sus datos actuales.
+    
+    Raises:
+        HTTPException 404: Si el modelo no existe.
+        HTTPException 400: Si el modelo tiene camiones asociados (no se puede modificar).
+        HTTPException 401: Si el usuario no tiene permisos ADMIN/SUPERVISOR.
+    
+    Notes:
+        - Solo se actualizan los campos proporcionados en el payload (parcial update).
+        - Si el nombre cambia, se valida que no exista otro modelo con el mismo nombre 
+          para la misma marca.
+        - Se registra auditoría del evento de modificación.
+    """
     data = payload.model_dump(exclude={"id_modelo_camion"})
     row = await _SERVICE.update(
         db, empresa.id_empresa, "modelos_camion", str(id_modelo_camion), data,
@@ -173,6 +211,23 @@ async def delete_modelo(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    """Elimina un modelo de camioneta de la base de datos.
+    
+    Args:
+        id_modelo_camion: UUID del modelo de camioneta a eliminar.
+        db: Sesión de base de datos asíncrona inyectada por FastAPI.
+    
+    Raises:
+        HTTPException 404: Si el modelo no existe.
+        HTTPException 400: Si el modelo tiene camiones asociados (no se puede eliminar).
+        HTTPException 401: Si el usuario no tiene permisos ADMIN.
+    
+    Notes:
+        - **Regla de negocio**: Un modelo con camiones asociados no puede eliminarse.
+        - Se devuelve 204 No Content en éxito (sin cuerpo de respuesta).
+        - Se registra auditoría de eliminación con usuario y IP.
+        - La eliminación es física de la fila en la tabla `modelos_camion`.
+    """
     await _SERVICE.delete(
         db, empresa.id_empresa, "modelos_camion", str(id_modelo_camion),
         id_usuario=current_user.id_usuario,

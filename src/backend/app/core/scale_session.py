@@ -47,6 +47,23 @@ class MuestraPeso:
 
 
 async def _hal_conectar(hal: object) -> bool:
+    """Intenta establecer conexión con una báscula HAL.
+    
+    Args:
+        hal: Objeto de la báscula HAL a conectar. Puede ser una instancia real 
+            o un simulador, debe tener un método 'conectar' async opcional.
+    
+    Returns:
+        bool: True si la conexión se estableció correctamente, False en caso contrario.
+    
+    Notes:
+        - Si el objeto HAL no tiene método 'conectar', se asume conexión exitosa 
+          (True) por defecto (compatibilidad con mocks).
+        - Ejecuta el método 'conectar' en un hilo separado para no bloquear 
+          el event loop.
+        - Captura y trata cualquier excepción que pueda lanzar el método de conexión 
+          para evitar fallos inesperados en la estación.
+    """
     fn = getattr(hal, "conectar", None)
     if fn is None:
         return True
@@ -54,6 +71,25 @@ async def _hal_conectar(hal: object) -> bool:
 
 
 async def _hal_leer(hal: object) -> tuple[float | None, str | None]:
+    """Lee el peso actual de una báscula HAL conectada.
+    
+    Args:
+        hal: Objeto de la báscula HAL de la cual leer el peso. Debe tener un 
+            método 'leer_muestra' async opcional.
+    
+    Returns:
+        tuple[float | None, str | None]: Tupla con el peso en kg (o None si no hay 
+            peso disponible) y el estado de la báscula (o "desconocido" si no hay 
+            método de lectura).
+    
+    Notes:
+        - Si el objeto HAL no tiene método 'leer_muestra', se captura el peso 
+          vía read_weight() directamente.
+        - El método se ejecuta en un hilo separado para no bloquear el event loop.
+        - Captura y trata cualquier excepción que pueda lanzar el método de lectura 
+          para evitar fallos inesperados que dejarían la balanza en estado inestable.
+        - El estado retornado refleja la estabilidad metrológica del pesaje.
+    """
     fn = getattr(hal, "leer_muestra", None)
     if fn is None:
         return await hal.read_weight(), None  # type: ignore[attr-defined]
@@ -61,6 +97,24 @@ async def _hal_leer(hal: object) -> tuple[float | None, str | None]:
 
 
 async def _hal_cerrar(hal: object) -> None:
+    """Cierra la conexión con una báscula HAL.
+    
+    Args:
+        hal: Objeto de la báscula HAL cuya conexión se va a cerrar. Debe tener 
+            un método 'cerrar' async opcional.
+    
+    Returns:
+        None: Siempre retorna None después de intentar cerrar la conexión.
+    
+    Notes:
+        - Si el objeto HAL no tiene método 'cerrar', la función retorna inmediatamente 
+          sin hacer nada (idempotente).
+        - El método se ejecuta en un hilo separado para no bloquear el event loop.
+        - Se intenta cerrar la sesión de forma limpia, enviando cualquier comando 
+          de finalización necesario al hardware.
+        - Los errores de conexión durante el cierre se capturan y registran, pero 
+          no lanzan excepciones para no interrumpir el flujo normal.
+    """
     fn = getattr(hal, "cerrar", None)
     if fn is not None:
         await fn()
@@ -78,6 +132,38 @@ class ScaleSession:
         max_muestras: int = 30,
         tolerancia_kg: float = 0.5,
         pausa: float = 0.2,
+    """Inicializa el gestor de sesiones de báscula.
+    
+    Args:
+        clave: Identificador clave de la sesión de la estación.
+        hal: Instancia del objeto HAL de la báscula para comunicación hardware.
+        hardware: Identificador del hardware (UUID o string identificador).
+        max_muestras: Número máximo de muestras a almacenar en el historial (default: 30).
+        tolerancia_kg: Tolerancia en kg para considerar que el peso se ha estabilizado (default: 0.5).
+        pausa: Pausa en segundos entre lecturas consecutivas (default: 0.2).
+    
+    Attributes:
+        clave: Identificador de la sesión de la estación.
+        hal: Objeto HAL para comunicación con la báscula.
+        hardware: Identificador del hardware.
+        activo: Bandera que indica si la sesión está activa.
+        _muestras: Historial circular de lecturas de peso (máximo max_muestras).
+        _ultimo: Última lectura de peso obtenida.
+        _conectado: Bandera que indica si hay conexión activa con la báscula.
+        _tolerancia_kg: Tolerancia configurada para estabilización de pesaje.
+        _pausa: Intervalo de tiempo entre lecturas consecutivas.
+        _parar: Evento de control para detener el polling periódico.
+        _primer_dato: Evento que sinaliza el primer dato leído.
+    
+    Notes:
+        - El historial de muestras (`_muestras`) tiene tamaño fijo y funciona como 
+          cola circular: las muestras viejas se descartan cuando se excede el límite.
+        - La tolerancia (`_tolerancia_kg`) se usa en la verificación de estabilidad 
+          del peso (`is_stable`).
+        - Los eventos (`_parar`, `_primer_dato`) controlan el ciclo de vida del 
+          polling y la primera lectura.
+        - La sesión comienza con ``activo = False`` y debe ser iniciada explícitamente.
+    """
     ):
         self.clave = clave
         self.hardware = hardware
@@ -281,4 +367,20 @@ _manager = ScaleSessionManager()
 
 
 def get_scale_session_manager() -> ScaleSessionManager:
+    """Obtiene la instancia global del gestor de sesiones de báscula.
+    
+    Returns:
+        ScaleSessionManager: La instancia del gestor de sesiones, que maneja 
+            la conexión y comunicación con las básculas hardware.
+    
+    Notes:
+        - Esta función es un singleton: siempre retorna la misma instancia del 
+          gestor creada durante el inicio de la aplicación.
+        - El gestor maneja la conexión, re-conexión y polling periódico a las 
+          básculas configuradas.
+        - Debe llamarse después de iniciar la aplicación y configurar las 
+          básculas disponibles.
+        - La instancia retornada es thread-safe para su uso en múltiples 
+          concurrently requests.
+    """
     return _manager

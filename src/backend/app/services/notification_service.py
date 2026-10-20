@@ -56,10 +56,38 @@ _RECURRENCIAS = ("daily", "weekly", "monthly")
 
 
 def _ahora() -> datetime:
+    """Obtiene la fecha y hora actual del sistema.
+    
+    Returns:
+        datetime: La fecha y hora actuales sin información de zona horaria.
+    
+    Notes:
+        - Utiliza el timezone UTC por defecto.
+        - El resultado tiene el tzinfo removido para compatibilidad con el 
+          resto del código de la estación.
+        - Se usa este método en notificaciones, timestamps de boletos y 
+          operaciones de sincronización.
+    """
     return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _fmt(dt: datetime | None) -> str:
+    """Formatea una fecha datetime a string con formato dd/mm/yyyy.
+    
+    Args:
+        dt: Fecha y hora a formatear. Si es None, retorna cadena vacía.
+    
+    Returns:
+        str: Fecha formateada como "dd/mm/yyyy" o cadena vacía si dt es None.
+    
+    Notes:
+        - El formato dd/mm/yyyy es el estándar para tickets de pesaje y documentos 
+          de la estación.
+        - Si dt es None, se retorna cadena vacía para evitar errores en la 
+          generación de tickets o reportes.
+        - Este método es usado en la generación de tickets PDF/TXT y reportes 
+          de síntesis.
+    """
     return dt.strftime("%d/%m/%Y") if dt else ""
 
 
