@@ -16,6 +16,13 @@ candidato si trae **signo**, **decimal**, **unidad** o venía precedido de un
 token de signo suelto. Ante ambigüedad (varios números distintos en la línea)
 se rechaza la trama: es preferible ``None`` (y que la sesión reintente) que
 fijar un peso equivocado a un boleto.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

@@ -15,6 +15,13 @@ mantiene **una conexión viva por balanza** y un caché del último peso.
 La sesión es tolerante a HALs sin métodos persistentes (p. ej. dobles de test):
 si ``conectar``/``leer_muestra``/``cerrar`` no existen, se usa
 ``read_weight`` como lectura de un tiro.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

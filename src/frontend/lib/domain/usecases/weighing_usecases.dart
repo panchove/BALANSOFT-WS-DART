@@ -1,3 +1,12 @@
+// ============================================================================
+// Versión: 0.4.2-dev.56
+// Fecha: 2026-10-19
+// Estado: Vigente
+// Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+// Fuente: Sistema BALANSOFT-WS
+// Autor: Lead Architect
+// ============================================================================
+
 import '../entities/weighing.dart';
 import '../repositories/i_weighing_repository.dart';
 

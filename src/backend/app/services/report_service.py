@@ -1,4 +1,12 @@
-"""Servicio de reportes estadísticos de pesaje (agregación SQL)."""
+"""Servicio de reportes estadísticos de pesaje (agregación SQL).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
+"""
 
 from __future__ import annotations
 
@@ -13,7 +21,28 @@ from app.models import Almacen, BoletoPesaje, Empresa, Kardex, Producto, Tercero
 
 
 class ReportService:
+    """Generador de reportes estadísticos de pesaje y consolidados de estación.
+
+    Gobernado bajo ISO/IEC 25010 (Adecuación funcional y rendimiento) e ISO/IEC 17025
+    (invariabilidad metrológica de pesadas consolidadas).
+    """
+
     async def daily(self, db: AsyncSession, empresa: Empresa, day: date) -> dict:
+        """Genera el reporte diario consolidado de operaciones de pesaje de la estación.
+
+        Precondiciones:
+            - `db`: Sesión asíncrona transaccional activa.
+            - `empresa`: Instancia de tenant autenticado.
+            - `day`: Fecha calendario válida a reportar.
+
+        Invariante Multi-Tenant y Metrológico:
+            - Filtro estricto por `id_empresa == empresa.id_empresa`.
+            - Invariante de exclusión: Boletos con estado `ANULADO` jamás se suman en totales ni netos.
+
+        Poscondiciones:
+            - Retorna diccionario con totales de pesajes (abiertos/cerrados), suma neta agregada
+              y desglose individual por producto.
+        """
         start = datetime(day.year, day.month, day.day)
         end = datetime(day.year, day.month, day.day, 23, 59, 59)
 

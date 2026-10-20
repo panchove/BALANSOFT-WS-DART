@@ -1,4 +1,12 @@
-"""Servicio que orquesta la validación de licencias contra el LM local."""
+"""Servicio que orquesta la validación de licencias contra el LM local.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
+"""
 
 from __future__ import annotations
 
@@ -30,8 +38,20 @@ async def sincronizar_licencia_e_identidad(
     device_model: str | None = None,
     os_version: str | None = None,
 ) -> IdentidadLocal:
-    """Sincroniza la licencia en tiempo real contra el LM y actualiza persistentemente
-    tanto Empresa como IdentidadLocal (Mecanismo de detección de licencias SG).
+    """Sincroniza la licencia contra el License Manager (LM) y actualiza la identidad local.
+
+    Precondiciones:
+        - `db`: Sesión transaccional activa de la base de datos local.
+        - `empresa`: Instancia de `Empresa` del tenant activo.
+
+    Invariante Criptográfica (ISO/IEC 27001):
+        - Las licencias remotas deben estar firmadas digitalmente con par Ed25519.
+        - Ante manipulación o falla de red, el sistema degrada a `modo_offline = True`
+          sin abortar la operación industrial de la estación.
+
+    Poscondiciones:
+        - Actualiza campos de `Empresa` y el singleton `IdentidadLocal` en la base local.
+        - Retorna la entidad `IdentidadLocal` actualizada.
     """
     identidad = (
         await db.execute(

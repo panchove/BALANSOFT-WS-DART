@@ -1,12 +1,18 @@
 """Matriz de seguridad por defecto: módulos de la estación × roles.
 
-Fuente: docs/ARCH.md ("Seguridad y Accesos") y decisión del equipo.
 Roles locales: ADMIN, OPERADOR, AUDITOR (CHECK de balansoft-ws-local.sql).
 Acceso: ``ver`` | ``editar`` | ``ninguno``.
 
 Cuando no existe un registro en ``permisos_acceso`` para un (rol, módulo),
 se usa el valor de esta matriz. La pantalla "Seguridad y Accesos" permite a
 ADMIN sobrescribirla por empresa (la sobrescritura se persiste en la tabla).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

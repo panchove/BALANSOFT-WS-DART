@@ -5,6 +5,13 @@ existe en el rol ``local`` (estación). La restauración es exclusiva de ADMIN
 y exige confirmación explícita; la descarga y el listado también son ADMIN.
 Cualquier usuario autenticado local puede disparar el respaldo automático por
 inactividad (el kiosco opera como OPERADOR).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

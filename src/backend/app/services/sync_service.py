@@ -1,4 +1,12 @@
-"""Servicio de sincronización: procesamiento de pesajes offline entrantes."""
+"""Servicio de sincronización: procesamiento de pesajes offline entrantes.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
+"""
 
 from __future__ import annotations
 
@@ -16,10 +24,16 @@ from app.services.weighing_service import normalizar_estado
 
 
 class SyncService:
+    """Motor de ingesta y sincronización determinística de pesajes offline.
+
+    Cumple con el principio de resiliencia y tolerancia a fallos de red bajo ISO/IEC 25010
+    e inmutabilidad metrológica bajo ISO/IEC 17025.
+    """
+
     async def _asignar_numero_boleto(
         self, db: AsyncSession, pesaje: BoletoPesaje
     ) -> None:
-        """Genera numero_boleto (TA-XXXXXX) si el item offline no lo trae."""
+        """Genera numero_boleto secuencial (TA-XXXXXX) si el item offline no lo trae."""
         if pesaje.numero_boleto:
             return
         rows = (await db.execute(select(BoletoPesaje.numero_boleto))).scalars().all()
@@ -39,6 +53,21 @@ class SyncService:
         empresa: Empresa,
         pesajes: list[WeighingSyncItem],
     ) -> tuple[int, int, list[SyncResultItem]]:
+        """Procesa un lote de pesajes capturados offline por terminales o estaciones clientes.
+
+        Precondiciones:
+            - `db`: Sesión transaccional activa.
+            - `empresa`: Tenant autenticado al cual se asignarán los boletos.
+            - `pesajes`: Lista de items de pesaje sincronizados.
+
+        Invariante de Idempotencia y Multi-Tenant:
+            - `Upsert` determinístico por `id_pesaje_externo` o UUID de boleto: no duplica registros existentes.
+            - Se fuerza `id_empresa = empresa.id_empresa` en el 100% de los boletos sincronizados.
+            - Las fechas con zona horaria se convierten rigurosamente a UTC naive antes de persistir.
+
+        Poscondiciones:
+            - Retorna tupla: `(sincronizados, errores, detalle_de_resultados)`.
+        """
         detalle: list[SyncResultItem] = []
         sincronizados = 0
         errores = 0

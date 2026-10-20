@@ -7,6 +7,13 @@ Flujo de validación (anti-fake-server):
 
 La clave pública del LM se embebe aquí (settings.license_public_key) y la
 respuesta de /validate se verifica antes de confiar en el resultado.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

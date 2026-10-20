@@ -4,6 +4,13 @@ Sin autenticación (p. ej. lo consulta la app antes del login durante el modo
 instalación). Reporta si la base de datos (PostgreSQL o SQL Server) es
 alcanzable y con esquema listo, y el estado del hardware de balanza
 (HAL / pyserial), entre otros datos.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

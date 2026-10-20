@@ -4,6 +4,13 @@ El License Manager exige que el ``hardware_id`` coincida con el dispositivo
 registrado en la licencia (tier CENTRAL). El frontend lo calcula con
 ``DeviceInfo`` y lo envía en el login; este helper ofrece el mismo valor en
 el backend cuando aún no está persistido en ``identidad_local``.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

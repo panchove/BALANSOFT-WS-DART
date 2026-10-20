@@ -7,6 +7,13 @@ NO contiene datos operativos del cliente (esos viven en la DB local).
 Usan declarative base propia (ServerBase) con metadata independiente de
 ``app.models.Base`` para que los tests de la estación local no se vean
 afectados por tablas del servidor.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

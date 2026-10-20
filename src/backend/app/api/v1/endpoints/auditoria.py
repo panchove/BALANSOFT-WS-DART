@@ -3,6 +3,13 @@
 Expone el registro funcional completo (acción, entidad, entidad_id, detalle,
 IP, usuario y timestamp UTC) que complementa al estado transaccional del
 boleto. Solo ADMIN y AUDITOR pueden consultarlo.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

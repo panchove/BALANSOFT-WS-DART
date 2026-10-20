@@ -24,6 +24,13 @@ sesión interactiva del operador. El WServer que arranca la tarea programada del
 instalador corre como SYSTEM (sesión 0) y sus avisos no llegan al escritorio;
 los de la app Flutter y los del WServer arrancado por la app sí, porque viven en
 la sesión del usuario.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

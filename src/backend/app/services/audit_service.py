@@ -4,6 +4,13 @@ Complementa a `AuditMiddleware` (que registra en `logs_sistema`) con la
 trazabilidad funcional (accion/entidad/entidad_id/detalle/ip) que exige
 REQ-NF-SEG-001. Nunca rompe la operación principal: si falla, solo se
 registra un warning.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations
@@ -22,7 +29,14 @@ log = logging.getLogger("balansoft_ws.audit")
 
 
 def _serializar(value: Any) -> Any:
-    """Convierte valores no-JSON (Decimal/UUID/datetime) a tipos JSON."""
+    """Convierte de forma recursiva valores no-JSON a tipos serializables estándar.
+
+    Precondiciones:
+        - `value`: Cualquier objeto o estructura anidada de Python.
+
+    Poscondiciones:
+        - Retorna tipos nativos JSON (dict, list, float, str) listos para almacenamiento.
+    """
     if isinstance(value, dict):
         return {k: _serializar(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -47,9 +61,18 @@ async def registrar(
     detalle: dict[str, Any] | None = None,
     ip: str | None = None,
 ) -> None:
-    """Agrega una fila a `auditoria` en la sesión actual (sin commit propio).
+    """Agrega una entrada inmutable de auditoría funcional a la sesión de base de datos activa.
 
-    El commit lo realiza la operación principal para conservar la atomicidad.
+    Precondiciones:
+        - `db`: Sesión asíncrona abierta y transaccional activa.
+        - `accion`: Identificador en mayúsculas de la operación (ej. 'CREAR', 'EDITAR', 'ANULAR').
+        - `entidad`: Nombre de la tabla o entidad de negocio afectada (ej. 'boletos_pesaje').
+
+    Poscondiciones:
+        - Instancia `Auditoria` añadida al contexto de SQLAlchemy (`db.add`).
+        - Atomicidad garantizada: El commit lo realiza la operación principal.
+        - No-bloqueante ante fallos: Si ocurre un error de serialización, emite advertencia en logs
+          sin abortar la transacción de negocio principal.
     """
     try:
         db.add(

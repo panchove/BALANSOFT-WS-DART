@@ -1,3 +1,12 @@
+// ============================================================================
+// Versión: 0.4.2-dev.56
+// Fecha: 2026-10-19
+// Estado: Vigente
+// Norma: ISO/IEC 25010 (Usabilidad/Accesibilidad)
+// Fuente: Sistema BALANSOFT-WS
+// Autor: Lead Architect
+// ============================================================================
+
 /// Entidades de RB-12: aprobación de equipos de la cuenta.
 ///
 /// Espejo del contrato del **servidor central**

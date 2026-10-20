@@ -7,6 +7,13 @@ Dos recursos:
 
 Multi-tenant: el ``id_empresa`` sale **siempre** de la empresa autenticada
 (``get_current_empresa``), nunca de la petición; toda consulta filtra por él.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

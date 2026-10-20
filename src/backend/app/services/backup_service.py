@@ -17,6 +17,13 @@ empresa. Reglas acordadas con PLANIFICADOR/VERIFICADOR:
   ``backup_<id_empresa>_<UTC>.json.gz`` y se rotan con la política GFS
   (abuelo-padre-hijo): último snapshot de cada día/semana/mes dentro de las
   últimas N ventanas (``settings.backup_keep_daily/weekly/monthly``).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

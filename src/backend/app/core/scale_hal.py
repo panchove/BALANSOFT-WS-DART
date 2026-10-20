@@ -31,6 +31,13 @@ no serializa correctamente el IO bloqueante que corre en otro hilo. Sin esto,
 dos lecturas simultáneas (p. ej. ``/probar`` y ``/live``) provocan el error
 clásico de pyserial
 ``"device reports readiness to read but returned no data"``.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

@@ -7,6 +7,13 @@ ISO del cliente Flutter en `POST /sync/push`,Body del servidor central— llega
 *aware* y debe normalizarse, o asyncpg responde `DataError`
 ("can't subtract offset-naive and offset-aware datetimes") y la operación
 —incluido el login— se cae con 500.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

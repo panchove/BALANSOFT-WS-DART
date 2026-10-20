@@ -1,4 +1,12 @@
-"""Servicio de catálogos: operaciones CRUD genéricas por entidad."""
+"""Servicio de catálogos: operaciones CRUD genéricas por entidad.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
+"""
 
 from __future__ import annotations
 
@@ -89,12 +97,24 @@ class CatalogService:
         skip: int = 0,
         solo: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """Devuelve todos los catálogos de la empresa.
+        """Obtiene de forma paginada los catálogos operativos pertenecientes a la empresa.
 
-        ``limite``/``skip`` paginan cada catálogo (H11). Sin ``limite`` el
-        comportamiento es el histórico: se devuelve el catálogo completo. La
-        clave ``__totales__`` lleva el número real de filas por catálogo y
-        ``__truncado__`` indica si alguna respuesta quedó recortada.
+        Precondiciones:
+            - `db`: Sesión asíncrona de base de datos activa.
+            - `empresa_id`: Identificador UUID válido de la empresa activa (tenant).
+            - `skip` >= 0; `limite` > 0 si se especifica.
+            - Si `solo` se suministra, todos sus elementos deben existir en `CATALOGS`.
+
+        Invariante Multi-Tenant (ISO/IEC 27001):
+            - Ninguna entidad de otro tenant (`id_empresa != empresa_id`) puede ser retornada.
+
+        Poscondiciones:
+            - Retorna un diccionario con listas de entidades serializadas bajo su nombre de catálogo.
+            - Retorna `__totales__` con el total absoluto de registros por catálogo en la BD.
+            - Retorna `__truncado__ == True` si la respuesta fue acotada por `limite`.
+
+        Raises:
+            HTTPException (404): Si se solicita un nombre de catálogo no registrado.
         """
         pedidos = [n for n in CATALOGS if solo is None or n in solo]
         desconocidos = [n for n in (solo or []) if n not in CATALOGS]
@@ -159,6 +179,22 @@ class CatalogService:
         id_usuario: uuid.UUID | None = None,
         ip: str | None = None,
     ) -> Any:
+        """Crea un nuevo registro en el catálogo especificado para el tenant activo.
+
+        Precondiciones:
+            - `name`: Nombre del catálogo existente en `CATALOGS`.
+            - `empresa_id`: Tenant autenticado.
+            - `data`: Campos válidos del modelo sin incluir `id_empresa` (se inyecta automáticamente).
+
+        Poscondiciones:
+            - Registro persistido y comiteado en la base de datos.
+            - Asiento de auditoría registrado (`CREATE`).
+            - Retorna la entidad serializada como diccionario.
+
+        Raises:
+            HTTPException (404): Si el catálogo no existe.
+            HTTPException (409): Si existe conflicto de unicidad (código duplicado).
+        """
         cfg = CATALOGS.get(name)
         if cfg is None:
             raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")
@@ -201,6 +237,22 @@ class CatalogService:
         id_usuario: uuid.UUID | None = None,
         ip: str | None = None,
     ) -> Any:
+        """Actualiza campos específicos de una entidad existente en el catálogo.
+
+        Precondiciones:
+            - `name`: Nombre de catálogo registrado en `CATALOGS`.
+            - `id_value`: Identificador de la entidad a actualizar.
+            - `empresa_id`: Tenant activo (evita manipulación de entidades foráneas).
+
+        Poscondiciones:
+            - Campos modificados persistidos y confirmados en la BD.
+            - Asiento de auditoría inmutable registrado (`UPDATE`).
+            - Retorna la entidad actualizada serializada como diccionario.
+
+        Raises:
+            HTTPException (404): Si el catálogo o la entidad no existen.
+            HTTPException (409): Si la actualización viola restricciones de unicidad.
+        """
         cfg = CATALOGS.get(name)
         if cfg is None:
             raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")
@@ -248,6 +300,21 @@ class CatalogService:
         id_usuario: uuid.UUID | None = None,
         ip: str | None = None,
     ) -> None:
+        """Elimina una entidad del catálogo asegurando aislamiento multi-tenant.
+
+        Precondiciones:
+            - `name`: Nombre de catálogo registrado en `CATALOGS`.
+            - `id_value`: Identificador de la entidad a eliminar.
+            - `empresa_id`: Tenant activo (evita eliminar entidades de otras empresas).
+
+        Poscondiciones:
+            - Entidad eliminada y confirmada en la BD.
+            - Asiento de auditoría inmutable registrado (`DELETE`).
+
+        Raises:
+            HTTPException (404): Si el catálogo o la entidad no existen.
+            HTTPException (409): Si la entidad posee claves foráneas activas (ej. boletos de pesaje asociados).
+        """
         cfg = CATALOGS.get(name)
         if cfg is None:
             raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")

@@ -7,6 +7,7 @@
 SHELL := /bin/bash
 
 # Rutas del proyecto
+export PATH := /home/panchove/development/flutter/bin:$(PATH)
 BACKEND_DIR := src/backend
 FRONTEND_DIR := src/frontend
 

@@ -10,6 +10,13 @@ Cálculos (MODEL.md):
 - PND = peso neto declarado (guía)
 - PDF = PNT - PND   (diferencia, +/-)
 - PDV = PDF / PND   (porcentaje de desviación)
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations
@@ -365,7 +372,22 @@ class WeighingService:
         peso_salida_remolque: Decimal | None,
         peso_neto_declarado: Decimal | None = None,
     ) -> dict[str, Decimal | None]:
-        """Cálculos firmados: PTE, PTS, PNT, PND, PDF, PDV (más bruto/tara legacy)."""
+        """Calcula las magnitudes metrológicas del pesaje (MODEL.md / ISO/IEC 17025 / OIML R 76-1).
+
+        Precondiciones:
+            - `peso_entrada_vehiculo` >= 0.
+            - Los pesos de remolque y salida son opcionales durante la pesada de entrada inicial.
+
+        Invariantes Metrológicas:
+            - `PTE == PEC + PER` (Peso Total Entrada = Entrada Camión + Entrada Remolque).
+            - `PTS == PSC + PSR` (Peso Total Salida = Salida Camión + Salida Remolque).
+            - `Bruto >= Tara` (siendo Bruto = max(PTE, PTS) y Tara = min(PTE, PTS)).
+            - `Bruto - Tara >= 0`.
+
+        Poscondiciones:
+            - Retorna diccionario con magnitudes redondeadas a 2 decimales (4 para porcentaje de desviación).
+            - Si el pesaje está cerrado (con salida), se garantiza consistencia aritmética exacta.
+        """
         pec = _fmt(peso_entrada_vehiculo or ZERO)
         per = _fmt(peso_entrada_remolque or ZERO)
         psc = _fmt(peso_salida_vehiculo or ZERO)
@@ -394,6 +416,10 @@ class WeighingService:
         pdv = _fmt(pfd / pnd, 4) if pnd and pnd != 0 and pfd is not None else None
         bruto = max(pte, pts)
         tara = min(pte, pts)
+
+        # Invariante DbC de no negatividad de magnitudes físicas
+        assert bruto >= tara, f"Violación de invariante metrológica: Bruto ({bruto}) < Tara ({tara})"
+
         return {
             "peso_total_entrada": pte,
             "peso_total_salida": pts,

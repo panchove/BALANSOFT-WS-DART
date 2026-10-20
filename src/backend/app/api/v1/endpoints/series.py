@@ -9,6 +9,13 @@
 El "campo de trabajo" elige cuál serie usa cada boleto; los reportes y la
 gestión muestran qué modelo de serie se aplicó. SOLO escrita por ADMIN; el
 resto de roles la leen (REGLA_REQ-NF-SERIE-01).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

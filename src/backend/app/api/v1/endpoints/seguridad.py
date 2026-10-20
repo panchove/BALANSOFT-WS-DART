@@ -5,6 +5,13 @@
 
 Solo ADMIN puede escribir. La matriz por defecto vive en
 ``app/core/seguridad_matrix.py``; los cambios se persisten por empresa.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 27001 / ISO/IEC 25010
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

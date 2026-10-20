@@ -1,3 +1,12 @@
+// ============================================================================
+// Versión: 0.4.2-dev.56
+// Fecha: 2026-10-19
+// Estado: Vigente
+// Norma: ISO/IEC 25010 / ISO/IEC 27001
+// Fuente: Sistema BALANSOFT-WS
+// Autor: Lead Architect
+// ============================================================================
+
 /// Entidades del centro de notificaciones de la estación.
 ///
 /// Espejo del contrato de `backend/app/api/v1/endpoints/notificaciones.py`:

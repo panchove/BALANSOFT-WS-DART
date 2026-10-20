@@ -3,6 +3,13 @@
 docs/MANEJO_DB.md §4 y §9.3: los usuarios locales (ADMIN/OPERADOR/AUDITOR)
 viven en la DB local; crear/modificar implica encolar la entidad
 `usuario` en `sync_queue` para su entrega al servidor (credenciales globales).
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

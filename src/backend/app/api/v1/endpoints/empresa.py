@@ -4,6 +4,13 @@ La empresa local (una por máquina) espeja la cuenta del servidor. Los campos
 editables (nombre fiscal/comercial, RIF, dirección, teléfono, email, logo)
 solo los modifica el ADMIN. El logo se sube por ``POST /api/v1/files/upload``
 y aquí solo se persiste la URL relativa devuelta.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

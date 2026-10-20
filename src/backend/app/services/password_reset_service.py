@@ -3,6 +3,13 @@
 Genera tokens aleatorios de un solo uso; en BD solo se almacena su hash
 SHA-256. El enlace se envía por correo si SMTP está configurado; en
 desarrollo se registra en el log para permitir pruebas sin servidor de correo.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

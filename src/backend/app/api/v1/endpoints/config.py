@@ -3,6 +3,13 @@
 Endpoint ``GET /api/v1/config/account`` combina la identidad local (espejo
 del servidor), la empresa local y una validación en vivo contra el LM para
 que la pantalla de Configuración del Flutter refleje la información real.
+
+Versión: 0.4.2-dev.56
+Fecha: 2026-10-19
+Estado: Vigente
+Norma: ISO/IEC 25010 / ISO/IEC 27001
+Fuente: Sistema BALANSOFT-WS
+Autor: Lead Architect
 """
 
 from __future__ import annotations

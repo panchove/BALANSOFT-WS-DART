@@ -1,5 +1,20 @@
+// ============================================================================
+// Versión: 0.4.2-dev.56
+// Fecha: 2026-10-19
+// Estado: Vigente
+// Norma: ISO/IEC 17025 / OIML R 76-1 / ISO/IEC 25010
+// Fuente: Sistema BALANSOFT-WS
+// Autor: Lead Architect
+// ============================================================================
+
 import '../../core/utils/num_parser.dart';
 
+/// Entidad central de dominio que representa un Boleto de Pesaje industrial.
+///
+/// Implementa los invariantes metrológicos conforme a ISO/IEC 17025 y OIML R 76-1:
+/// - Invariante de No Negatividad: Las magnitudes de peso bruto y tara deben ser >= 0.
+/// - Invariante de Cierre: En boletos cerrados (`CERRADO`), se cumple que `pesoBruto >= pesoTara`.
+/// - Invariante de Inmutabilidad: El peso capturado físicamente en la báscula es inmutable.
 class Weighing {
   final String boleto;
   final String? idVehiculo;
