@@ -1,4 +1,4 @@
-# PRD - BALANSOFT: Sistema de Gestión de Pesaje Industrial
+# PRD - BALANSOFT: Sistema de Gestión de Pesaje Industrial (ISO/IEC 29148)
 
 | Atributo       | Valor                                       |
 |----------------|---------------------------------------------|

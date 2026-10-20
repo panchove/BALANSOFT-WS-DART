@@ -2,7 +2,7 @@
 
 **Versión:** 1.0
 **Fecha:** 2026-10-19
-**Norma:** ISO/IEC 29148, ISO/IEC 42001
+**Norma:** ISO/IEC 29148
 **Propósito:** Estructurar todos los specs del proyecto BALANSOFT-WS con patrón coherente, verificable y completo.
 
 ---

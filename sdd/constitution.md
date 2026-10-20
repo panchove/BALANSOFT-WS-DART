@@ -1,4 +1,4 @@
-# Constitución del Proyecto BALANSOFT-WS
+# Constitución del Proyecto BALANSOFT-WS (ISO/IEC 25010)
 
 ## Principios Rectores
 
@@ -93,4 +93,19 @@ ADR-xxx   -- Decisiones Arquitectónicas (ISO/IEC 42010)
 - **ISO/IEC/IEEE 12207**: Modelos de procesos del ciclo de vida del software
 - **ISO/IEC 25010**: Calidad del producto de software (SQuaRE)
 - **ISO/IEC 17025**: Requisitos para laboratorios de ensayo y calibración
+### IA Asistida en Desarrollo y Validación
+
+El proyecto BALANSOFT-WS utiliza herramientas de IA asistida para la creación, validación y optimización de artefactos del Spec-Driven Development (SDD). Este uso está limitado a:
+
+1. **Fases de desarrollo**: Generación de borradores de specs, sugerencias de validación, optimización de tests.
+2. **Fases de verificación**: Pruebas de regresión, análisis de cobertura, identificación de patrones.
+3. **No uso en operación**: El sistema BALANSOFT-WS en operación es **determinista**; no toma decisiones basadas en IA. Los pesos, estados y cálculos son físicos/eterminados.
+
+4. **Perfil ligero bajo ISO/IEC 42001**: El uso de IA está sujeto a:
+   - Rastreabilidad de prompts y outputs generados
+   - Validación humana de todos los outputs críticos
+   - Sin aprendizaje automático en producción
+   - Datos de entrenamiento segregados del sistema operativo
+
+**Nota**: Este es un perfil ligero de ISO/IEC 42001:2023 enfocado en gestión de IA para procesos de desarrollo, no un SGIA (Sistema de Gestión de IA) completo, dado que el sistema en operación no es un sistema de IA.
 - **OIML R 76-1**: Metrología legal para básculas no automáticas

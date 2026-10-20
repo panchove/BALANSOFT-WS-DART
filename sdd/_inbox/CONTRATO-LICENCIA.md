@@ -1,4 +1,4 @@
-# planes-pagos
+# planes-pagos (ISO/IEC 27001)
 
 **Versión:** 0.4.2-dev.56
 **Fecha:** 2026-10-19

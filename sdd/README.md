@@ -1,4 +1,4 @@
-# SDD - Spec-Driven Development Documentation
+# SDD - Spec-Driven Development Documentation (ISO/IEC 29148, ISO/IEC 42010, ISO/IEC 12207)
 
 ## Overview
 
