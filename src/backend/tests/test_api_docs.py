@@ -105,11 +105,20 @@ class TestDocumentacionDeColumnasReservadas:
             r"multi_despacho_recepcion\s+BOOLEAN\s+NOT\s+NULL\s+DEFAULT\s+FALSE", ddl
         ), "el DDL canónico debe conservar la columna reservada"
 
-    def test_manejodb_la_documenta_como_reservada(self) -> None:
-        """La documentación de la columna reservada debe existir y ser explícita."""
-        doc = (RAIZ / "docs" / "MANEJO_DB.md").read_text(encoding="utf-8")
+    def test_logical_view_la_documenta_como_reservada(self) -> None:
+        """La documentación de la columna reservada debe existir y ser explícita.
+
+        La documentación vivía en ``docs/MANEJO_DB.md`` (§6.3). Ese archivo se
+        migró a la estructura SDD y ya no existe: el contrato ahora vive en la
+        visión lógica (``sdd/architecture/views/logical-view.md``, §2.3.1
+        "Columnas reservadas"). Se conserva la garantía: si alguien borra la
+        sección, este test cae.
+        """
+        doc = (RAIZ.parent / "sdd" / "architecture" / "views" / "logical-view.md").read_text(
+            encoding="utf-8"
+        )
         assert "Columnas reservadas" in doc, (
-            "MANEJO_DB.md debe tener la sección de columnas reservadas (§6.3)"
+            "la visión lógica debe tener la sección de columnas reservadas (§2.3.1)"
         )
         for regla in ("No usarla", "No borrarla", "No quitarla del round-trip"):
-            assert regla in doc, f"falta la regla «{regla}» en §6.3"
+            assert regla in doc, f"falta la regla «{regla}» en §2.3.1"

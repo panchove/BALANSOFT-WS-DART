@@ -42,6 +42,25 @@ La visión lógica describe los componentes del sistema, sus interfaces y las re
 | `licencias`         | `id PK`, `id_cuenta FK`, `tier`, `status`, `hardware_id UK`, `expira`                   | N:1 a cuentas                                 |
 | `permisos_acceso`   | `id_empresa PK`, `rol PK`, `modulo PK`, `acceso`                                        | Identifica por (empresa, rol, modulo)         |
 
+#### 2.3.1 Columnas reservadas
+
+Columnas que existen en el esquema, se persisten y viajan en el round-trip de sincronización,
+pero **no tienen semántica de negocio definida**: ninguna consulta las lee, ninguna UI las expone
+y ningún requisito las especifica. Se conservan de forma deliberada para no romper clientes ni
+el round-trip, pero **no deben usarse** hasta que exista una decisión de negocio explícita.
+
+| Columna | Tabla | Estado | Reglas |
+|---------|-------|--------|--------|
+| `multi_despacho_recepcion` | `boletos_pesaje` | Inerte (persiste y se sincroniza; 0 consultas la leen) | **No usarla**, **No borrarla**, **No quitarla del round-trip**, y no implementarla sin decisión de negocio |
+
+> Origen: investigación de volumen sobre 10 000 boletos — marcar el flag no movió los tiempos
+> de `reports/daily` ni `reports/monthly`, lo que confirma que la funcionalidad nunca se
+> implementó y que la columna es puro costo de round-trip (≈35 bytes/boleto).
+
+> Trazabilidad: `tests/test_api_docs.py::TestDocumentacionDeColumnasReservadas` falla si esta
+> sección desaparece, si la columna se borra del DDL canónico
+> (`src/backend/balansoft-ws-local.sql`) o si se leen sus tres reglas.
+
 ### 2.4 Capa de Integración Hardware (HAL)
 
 | Módulo         | Protocolo                       | Marcas Compatibles                      | Responsabilidad                                                   |
