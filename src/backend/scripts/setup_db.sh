@@ -84,7 +84,13 @@ case "${MODO}" in
 
   aplicar-migraciones)
     echo "→ Aplicando migraciones en orden a '${DBNAME}'..."
+    # Se excluyen las variantes T-SQL (*.mssql.sql): son para SQL Server y
+    # PostgreSQL no las entiende ("UPDATE [dbo]..." -> syntax error). El
+    # runtime WServer aplica la misma regla (wserver.py::_es_migracion_mssql).
     for f in migrations/*.sql; do
+      case "$(basename "${f}" | tr '[:upper:]' '[:lower:]')" in
+        *.mssql.sql) echo "   - ${f} (omitida: variante SQL Server)"; continue ;;
+      esac
       echo "   - ${f}"
       psql "${URI}" -v ON_ERROR_STOP=1 -f "${f}"
     done
