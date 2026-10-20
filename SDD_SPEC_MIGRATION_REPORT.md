@@ -13,18 +13,18 @@ Se ha completado la migración de los 3 módulos de especificaciones (specs) del
 
 ### Módulos migrados
 
-| ID | Módulo | Spec.md | tasks.md | plan.md | Cobertura RF→tarea | Checklist §9 |
-|----|--------|---------|----------|---------|-------------------|--------------|
-| 001 | Gestión de Pesajes | ✅ Reescrito v0.4 | ✅ 27/27 = 100% | ✅ v0.4 | **27/27** | **8 de 8 pasar** |
-| 002 | Series y Numeración | ✅ Reescrito v0.4 | ✅ 25/25 = 100% | ✅ v0.4 | **25/25** | **8 de 8 pasar** |
-| 003 | Catálogos y Permisos | ✅ Reescrito v0.4 | ✅ 30/30 = 100% | ✅ v0.4 | **30/30** | **8 de 8 pasar** |
+| ID  | Módulo               | Spec.md          | tasks.md       | plan.md | Cobertura RF→tarea | Checklist §9     |
+|-----|----------------------|------------------|----------------|---------|--------------------|------------------|
+| 001 | Gestión de Pesajes   | ✅ Reescrito v0.4 | ✅ 27/27 = 100% | ✅ v0.4  | **27/27**          | **8 de 8 pasar** |
+| 002 | Series y Numeración  | ✅ Reescrito v0.4 | ✅ 25/25 = 100% | ✅ v0.4  | **25/25**          | **8 de 8 pasar** |
+| 003 | Catálogos y Permisos | ✅ Reescrito v0.4 | ✅ 30/30 = 100% | ✅ v0.4  | **30/30**          | **8 de 8 pasar** |
 
 ### Artefactos nuevos
 
-| Ruta | Descripción |
-|------|-------------|
+| Ruta                           | Descripción                                                                                                                                          |
+|--------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sdd/docs/SDD_SPEC_PATTERN.md` | Especificación maestra v1.0: estructura obligatoria §1-§13, patrones EARS, trazabilidad de cifras, checklist 8/8, errores comunes, guía de migración |
-| `sdd/traceability-matrix.md` | Matriz global actualizada: cadenas RF→design→tasks para los 3 módulos con estado "MIGRADO" |
+| `sdd/traceability-matrix.md`   | Matriz global actualizada: cadenas RF→design→tasks para los 3 módulos con estado "MIGRADO"                                                           |
 
 ### Hallazgos corregidos (3 errores fácticos detectados y corregidos)
 
@@ -42,12 +42,12 @@ Se ha completado la migración de los 3 módulos de especificaciones (specs) del
 
 ### Cobertura de requisitos
 
-| Módulo | RF declarados | RF con tarea | Cobertura |
-|--------|--------------|--------------|-----------|
-| 001 | 27 | 27 | **100%** (27/27) |
-| 002 | 25 | 25 | **100%** (25/25) |
-| 003 | 30 | 30 | **100%** (30/30) |
-| **Total** | **82** | **82** | **100%** |
+| Módulo    | RF declarados | RF con tarea | Cobertura        |
+|-----------|---------------|--------------|------------------|
+| 001       | 27            | 27           | **100%** (27/27) |
+| 002       | 25            | 25           | **100%** (25/25) |
+| 003       | 30            | 30           | **100%** (30/30) |
+| **Total** | **82**        | **82**       | **100%**         |
 
 ### Checklist §9 — Validación pre-entrega
 
@@ -55,16 +55,16 @@ Se ha completado la migración de los 3 módulos de especificaciones (specs) del
 
 Todos los módulos alcanzan **8 de 8 puntos**:
 
-| Punto | Descripción | Estado módulo 001 | Estado módulo 002 | Estado módulo 003 |
-|-------|-------------|-------------------|-------------------|-------------------|
-| 1 | Cada cifra tiene `archivo:línea`, comando reproducible o cita textual | ✅ | ✅ | ✅ |
-| 2 | Cada API nombrada **existe**, verificada en código fuente | ✅ | ✅ | ✅ |
-| 3 | Cada afirmación sobre comportamiento está **reproducida** o marcada `[VERIFICAR]` | ✅ | ✅ | ✅ |
-| 4 | Los casos límite **no contradicen** los requisitos | ✅ | ✅ | ✅ |
-| 5 | Ninguna cifra procede de un subagente sin verificación propia | ⚠️ (documentado) | ⚠️ (documentado) | ⚠️ (documentado) |
-| 6 | Las APIs nombradas se **compilan**, no solo existen | ✅ | ✅ | ✅ |
-| 7 | Las cifras se verifican **antes** de entregar, no después de un fallo | ✅ | ✅ | ✅ |
-| 8 | Al verificar una cifra ajena se **repite su comando exacto** antes de estrezar el patrón | ✅ | ✅ | ✅ |
+| Punto | Descripción                                                                              | Estado módulo 001 | Estado módulo 002 | Estado módulo 003 |
+|-------|------------------------------------------------------------------------------------------|-------------------|-------------------|-------------------|
+| 1     | Cada cifra tiene `archivo:línea`, comando reproducible o cita textual                    | ✅                 | ✅                 | ✅                 |
+| 2     | Cada API nombrada **existe**, verificada en código fuente                                | ✅                 | ✅                 | ✅                 |
+| 3     | Cada afirmación sobre comportamiento está **reproducida** o marcada `[VERIFICAR]`        | ✅                 | ✅                 | ✅                 |
+| 4     | Los casos límite **no contradicen** los requisitos                                       | ✅                 | ✅                 | ✅                 |
+| 5     | Ninguna cifra procede de un subagente sin verificación propia                            | ⚠️ (documentado)   | ⚠️ (documentado)   | ⚠️ (documentado)   |
+| 6     | Las APIs nombradas se **compilan**, no solo existen                                      | ✅                 | ✅                 | ✅                 |
+| 7     | Las cifras se verifican **antes** de entregar, no después de un fallo                    | ✅                 | ✅                 | ✅                 |
+| 8     | Al verificar una cifra ajena se **repite su comando exacto** antes de estrezar el patrón | ✅                 | ✅                 | ✅                 |
 
 ### Estructura por módulo
 
@@ -106,11 +106,11 @@ Para migrar un spec legacy al patrón actual, se siguió este procedimiento:
 
 ### Estados de módulo
 
-| Módulo | Espec anterior | Espec nueva | Tareas | Comentario |
-|--------|---------------|-------------|--------|------------|
-| 001 | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 27 RF → 27 tareas | Migración completa, QA validada |
-| 002 | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 25 RF → 25 tareas | Migración completa, QA validada |
-| 003 | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 30 RF → 30 tareas | Migración completa, QA validada |
+| Módulo | Espec anterior                   | Espec nueva                  | Tareas            | Comentario                      |
+|--------|----------------------------------|------------------------------|-------------------|---------------------------------|
+| 001    | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 27 RF → 27 tareas | Migración completa, QA validada |
+| 002    | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 25 RF → 25 tareas | Migración completa, QA validada |
+| 003    | Legacy (sin §2.4, sin checklist) | v1.0 con todas las secciones | 30 RF → 30 tareas | Migración completa, QA validada |
 
 ### Próximos pasos sugeridos
 
