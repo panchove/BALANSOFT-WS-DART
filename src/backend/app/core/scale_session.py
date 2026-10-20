@@ -132,39 +132,7 @@ class ScaleSession:
         max_muestras: int = 30,
         tolerancia_kg: float = 0.5,
         pausa: float = 0.2,
-    """Inicializa el gestor de sesiones de báscula.
-    
-    Args:
-        clave: Identificador clave de la sesión de la estación.
-        hal: Instancia del objeto HAL de la báscula para comunicación hardware.
-        hardware: Identificador del hardware (UUID o string identificador).
-        max_muestras: Número máximo de muestras a almacenar en el historial (default: 30).
-        tolerancia_kg: Tolerancia en kg para considerar que el peso se ha estabilizado (default: 0.5).
-        pausa: Pausa en segundos entre lecturas consecutivas (default: 0.2).
-    
-    Attributes:
-        clave: Identificador de la sesión de la estación.
-        hal: Objeto HAL para comunicación con la báscula.
-        hardware: Identificador del hardware.
-        activo: Bandera que indica si la sesión está activa.
-        _muestras: Historial circular de lecturas de peso (máximo max_muestras).
-        _ultimo: Última lectura de peso obtenida.
-        _conectado: Bandera que indica si hay conexión activa con la báscula.
-        _tolerancia_kg: Tolerancia configurada para estabilización de pesaje.
-        _pausa: Intervalo de tiempo entre lecturas consecutivas.
-        _parar: Evento de control para detener el polling periódico.
-        _primer_dato: Evento que sinaliza el primer dato leído.
-    
-    Notes:
-        - El historial de muestras (`_muestras`) tiene tamaño fijo y funciona como 
-          cola circular: las muestras viejas se descartan cuando se excede el límite.
-        - La tolerancia (`_tolerancia_kg`) se usa en la verificación de estabilidad 
-          del peso (`is_stable`).
-        - Los eventos (`_parar`, `_primer_dato`) controlan el ciclo de vida del 
-          polling y la primera lectura.
-        - La sesión comienza con ``activo = False`` y debe ser iniciada explícitamente.
-    """
-    ):
+) -> None:
         self.clave = clave
         self.hardware = hardware
         self._hal = hal
@@ -289,7 +257,7 @@ def _clave_balanza(balanza) -> str:  # noqa: ANN001 - modelo ORM
 
     Incluye ``formato_trama``/``delimitador``/``baudrate`` para que cambiarlos
     recree la sesión (si no, seguiría viva con la configuración anterior).
-    ``delimitador`` se normaliza (NULL ≡ ``lf``) para que guardar la balanza
+    ``delimitador`` se normaliza (NULL ===  ``lf``) para que guardar la balanza
     sin tocar ese campo no provoque una recreación espuria de la sesión.
     """
     delimitador = getattr(balanza, "delimitador", None) or "lf"
