@@ -7,6 +7,10 @@
 // Autor: Lead Architect
 // ============================================================================
 
+/// Entidad representativa de un usuario autenticado en la estación de pesaje.
+///
+/// Encapsula la identidad, roles de seguridad (ADMIN, SUPERVISOR, OPERADOR) y metadatos
+/// de la empresa según ISO/IEC 27001 (control de acceso y principio de menor privilegio).
 class User {
   final String idUsuario;
   final String nombre;
@@ -20,6 +24,7 @@ class User {
   final String? empresaRif;
   final String? empresaDireccion;
 
+  /// Crea una instancia inmutable de [User].
   const User({
     required this.idUsuario,
     required this.nombre,
@@ -32,10 +37,19 @@ class User {
     this.empresaDireccion,
   });
 
+  /// Determina si el usuario posee privilegios totales de administración.
   bool get isAdmin => rol == 'ADMIN';
+
+  /// Determina si el usuario posee rol de supervisión de planta o estación.
   bool get isSupervisor => rol == 'SUPERVISOR';
+
+  /// Determina si el usuario posee permisos de pesaje y despacho operativo.
   bool get isOperador => rol == 'OPERADOR';
 
+  /// Construye un [User] deserializando el payload de respuesta de autenticación.
+  ///
+  /// Poscondiciones:
+  /// - Mapea campos de usuario y perfil de tenant empresarial.
   factory User.fromJson(Map<String, dynamic> json) => User(
         idUsuario: json['id_usuario'],
         nombre: json['nombre'],
@@ -48,6 +62,7 @@ class User {
         empresaDireccion: json['empresa_direccion'],
       );
 
+  /// Serializa la entidad a un mapa JSON para almacenamiento en caché segura local.
   Map<String, dynamic> toJson() => {
         'id_usuario': idUsuario,
         'nombre': nombre,

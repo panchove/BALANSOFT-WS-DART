@@ -10,6 +10,11 @@
 /// Entidades del módulo de Kardex (PRD §9.6).
 library;
 
+/// Registro individual de movimiento en el libro de inventario/Kardex de pesaje.
+///
+/// Refleja la variación de masa neta asociada a un boleto de pesaje:
+/// - Movimientos < 50: Ingresos de materia prima o producto (10: Ingreso Báscula).
+/// - Movimientos >= 50: Despachos de producto terminado (60: Despacho Báscula).
 class KardexMovimiento {
   final String idKardex;
   final String fecha;
@@ -24,6 +29,7 @@ class KardexMovimiento {
   final double valor;
   final double stock;
 
+  /// Crea una instancia inmutable de un movimiento de Kardex.
   const KardexMovimiento({
     required this.idKardex,
     required this.fecha,
@@ -39,6 +45,7 @@ class KardexMovimiento {
     required this.stock,
   });
 
+  /// Construye un [KardexMovimiento] desde un mapa JSON retornado por el backend.
   factory KardexMovimiento.fromJson(Map<String, dynamic> json) =>
       KardexMovimiento(
         idKardex: '${json['id_kardex']}',
@@ -55,13 +62,19 @@ class KardexMovimiento {
         stock: (json['stock'] as num?)?.toDouble() ?? 0,
       );
 
+  /// Determina si el movimiento corresponde a un ingreso a planta (`idMovimiento < 50`).
   bool get esIngreso => idMovimiento < 50;
+
+  /// Etiqueta descriptiva del tipo de movimiento.
   String get etiquetaMovimiento =>
       esIngreso ? '$idMovimiento INGRESO BASC' : '$idMovimiento DESPACHO BASC';
+
+  /// Etiqueta formateada del producto asociado.
   String get etiquetaProducto =>
       nombreProducto ?? (codigoProducto != null ? 'Prod. $codigoProducto' : 'Producto');
 }
 
+/// Detalle consolidado de movimientos y saldos de Kardex para un rango temporal.
 class KardexDetalle {
   final String fechaDesde;
   final String fechaHasta;
@@ -69,6 +82,7 @@ class KardexDetalle {
   final double saldoActual;
   final List<KardexMovimiento> movimientos;
 
+  /// Crea una instancia inmutable de [KardexDetalle].
   const KardexDetalle({
     required this.fechaDesde,
     required this.fechaHasta,
@@ -77,6 +91,7 @@ class KardexDetalle {
     this.movimientos = const [],
   });
 
+  /// Construye un [KardexDetalle] a partir del payload JSON del balance de masa.
   factory KardexDetalle.fromJson(Map<String, dynamic> json) => KardexDetalle(
         fechaDesde: json['fecha_desde'] as String? ?? '',
         fechaHasta: json['fecha_hasta'] as String? ?? '',

@@ -25,6 +25,7 @@ class AuditoriaEvento {
   final String? nombreUsuario;
   final String creadoEn;
 
+  /// Crea una instancia inmutable de un evento de auditoría.
   const AuditoriaEvento({
     required this.idAuditoria,
     required this.tabla,
@@ -37,6 +38,11 @@ class AuditoriaEvento {
     required this.creadoEn,
   });
 
+  /// Construye un [AuditoriaEvento] a partir de un mapa JSON retornado por la API de auditoría.
+  ///
+  /// Poscondiciones:
+  /// - Mapea de forma segura identificadores y valores numéricos a cadenas.
+  /// - Extrae el diccionario de cambios si está presente.
   factory AuditoriaEvento.fromJson(Map<String, dynamic> json) =>
       AuditoriaEvento(
         idAuditoria: '${json['id_audit'] ?? json['id_auditoria'] ?? ''}',
@@ -53,7 +59,7 @@ class AuditoriaEvento {
         creadoEn: json['creado_en'] as String? ?? json['created_at'] as String? ?? '',
       );
 
-  /// Icono representativo de la operación.
+  /// Icono representativo de la operación (CREATE, UPDATE, DELETE).
   String get iconoOperacion {
     switch (operacion.toUpperCase()) {
       case 'CREATE':
@@ -78,6 +84,7 @@ class AuditoriaPage {
   final int skip;
   final int limit;
 
+  /// Crea una página inmutable de eventos de auditoría.
   const AuditoriaPage({
     required this.items,
     required this.total,
@@ -85,6 +92,7 @@ class AuditoriaPage {
     required this.limit,
   });
 
+  /// Construye una [AuditoriaPage] a partir de la respuesta paginada de la API.
   factory AuditoriaPage.fromJson(Map<String, dynamic> json) => AuditoriaPage(
         items: (json['items'] as List? ?? [])
             .map((e) =>
@@ -95,5 +103,6 @@ class AuditoriaPage {
         limit: (json['limit'] as num?)?.toInt() ?? 50,
       );
 
+  /// Indica si existen más registros en páginas posteriores (`skip + limit < total`).
   bool get tieneMore => skip + limit < total;
 }
