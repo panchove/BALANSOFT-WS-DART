@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>BALANSOFT-WS — Dossier de producto</title>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<style>
+@font-face{
+  font-family:'BRMF';
+  src:url('assets/fonts/BLADRMF_.TTF') format('truetype');
+  font-weight:normal;font-style:normal;
+}
+:root{
+  --ink:#0F172A;
+  --navy:#0F172A;
+  --navy2:#1E293B;
+  --accent:#EAB308;
+  --accent2:#FACC15;
+  --paper:#FFFFFF;
+  --soft:#F4F6F9;
+  --line:#E2E8F0;
+  --muted:#5B6B82;
+  --muted2:#8595AB;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:#DDE3EA;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{font-family:'Inter',sans-serif;color:var(--ink);}
+
+@page{size:216mm 279mm;margin:0;}
+
+.page{
+  position:relative;width:216mm;height:279mm;background:var(--paper);
+  overflow:hidden;page-break-after:always;
+  display:flex;flex-direction:column;
+}
+.page:last-child{page-break-after:auto;}
+
+/* ===== cover / dark ===== */
+.dark{
+  background:
+    radial-gradient(150mm 110mm at 105% -15%, rgba(250,204,21,.13), transparent 62%),
+    radial-gradient(120mm 100mm at -15% 115%, rgba(44,95,138,.35), transparent 66%),
+    var(--navy);
+  color:#fff;
+}
+.dark::before{
+  content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(148,163,184,.06) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(148,163,184,.06) 1px,transparent 1px);
+  background-size:9mm 9mm;
+}
+
+/* ===== wordmark ===== */
+.wordmark{font-family:'BRMF',sans-serif;color:var(--accent2);line-height:.84;white-space:nowrap;display:inline-block;}
+.wordmark .wm-main{font-size:28pt;letter-spacing:.012em;}
+.wordmark .wm-ws{font-size:11pt;margin-left:.10em;}
+.wordmark.lg .wm-main{font-size:64pt;}
+.wordmark.lg .wm-ws{font-size:25pt;}
+.wordmark.cover .wm-main{font-size:78pt;}
+.wordmark.cover .wm-ws{font-size:30pt;}
+.wordmark.ink{color:var(--navy);}
+
+/* ===== page chrome ===== */
+.ph{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:11mm 15mm 4mm;
+}
+.ph .brand{font-family:'BRMF',sans-serif;color:var(--navy);line-height:.8;}
+.ph .brand .wm-main{font-size:13pt;}
+.ph .brand .wm-ws{font-size:5.2pt;margin-left:.1em;}
+.ph .meta{font-family:'Roboto Mono',monospace;font-size:6.4pt;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted2);}
+.ph .meta b{color:var(--accent);font-weight:400;}
+.pf{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  margin:0 15mm;padding:3mm 0 8mm;border-top:1px solid var(--line);
+  font-family:'Roboto Mono',monospace;font-size:6pt;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted2);
+}
+.pf .pnum{font-family:'Barlow Condensed',sans-serif;font-size:11pt;font-weight:700;
+  letter-spacing:.05em;color:var(--navy);}
+
+.content{flex:1 1 auto;padding:0 15mm;min-height:0;}
+.content.tight{padding-top:0;}
+
+/* ===== section opener ===== */
+.opener{display:flex;align-items:flex-end;gap:6mm;margin-bottom:6mm;}
+.opener .big{
+  font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:54pt;line-height:.78;
+  color:transparent;-webkit-text-stroke:1.1px var(--accent);letter-spacing:.02em;
+}
+.opener .tt{flex:1;}
+.opener .kicker{font-family:'Roboto Mono',monospace;font-size:6.6pt;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--muted2);margin-bottom:1.6mm;}
+.opener h1{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:27pt;line-height:.95;
+  letter-spacing:.02em;text-transform:uppercase;color:var(--navy);
+}
+.opener h1 em{color:var(--accent);font-style:normal;}
+.lead{font-size:10.4pt;line-height:1.55;color:var(--muted);max-width:170mm;margin-bottom:6mm;}
+.lead b{color:var(--navy);font-weight:700;}
+
+h3.sub{
+  font-family:'Barlow Condensed',sans-serif;font-size:13.5pt;font-weight:700;
+  text-transform:uppercase;letter-spacing:.09em;color:var(--navy);
+  margin:0 0 2.6mm;padding-bottom:1.6mm;border-bottom:2px solid var(--accent);
+  display:inline-block;
+}
+
+/* ===== grids & cards ===== */
+.grid{display:grid;gap:4mm;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+.card{
+  background:var(--soft);border:1px solid var(--line);border-radius:2mm;
+  padding:4mm 4.4mm;
+}
+.card.white{background:#fff;}
+.card h4{font-size:9.6pt;font-weight:700;margin-bottom:1.4mm;line-height:1.2;}
+.card p{font-size:8.6pt;line-height:1.4;color:var(--muted);}
+.card p b{color:var(--navy);}
+.card .ico{
+  font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15pt;line-height:1;
+  color:var(--accent);margin-bottom:1.6mm;display:block;
+}
+.card.accent{background:#FFF9E5;border-color:#F3DE8F;}
+.card.navy{background:var(--navy);border-color:var(--navy);color:#fff;}
+.card.navy h4{color:#fff;}
+.card.navy p{color:#B9C6D6;}
+
+ul.ticks{list-style:none;display:flex;flex-direction:column;gap:2.2mm;}
+ul.ticks li{position:relative;padding-left:6mm;font-size:8.9pt;line-height:1.42;color:var(--muted);}
+ul.ticks li::before{
+  content:"✓";position:absolute;left:0;top:-.2mm;color:#15803D;font-weight:800;font-size:8.4pt;
+}
+ul.ties{list-style:none;display:flex;flex-direction:column;gap:2.2mm;}
+ul.ties li{position:relative;padding-left:6mm;font-size:8.9pt;line-height:1.42;color:var(--muted);}
+ul.ties li::before{
+  content:"×";position:absolute;left:0;top:-.6mm;color:#B42318;font-weight:800;font-size:10pt;
+}
+
+/* ===== tables ===== */
+table.tbl{width:100%;border-collapse:collapse;font-size:8.4pt;}
+table.tbl th{
+  background:var(--navy);color:#fff;text-align:left;font-weight:600;
+  font-size:7.2pt;letter-spacing:.06em;text-transform:uppercase;
+  padding:2.6mm 3mm;
+}
+table.tbl td{padding:2.4mm 3mm;border-bottom:1px solid var(--line);vertical-align:top;color:var(--muted);line-height:1.38;}
+table.tbl tr:nth-child(even) td{background:#F8FAFC;}
+table.tbl td:first-child{color:var(--navy);font-weight:600;}
+table.tbl.small td,table.tbl.small th{font-size:7.9pt;padding:2mm 2.6mm;}
+
+/* ===== pills / kpi ===== */
+.pills{display:flex;flex-wrap:wrap;gap:2mm;}
+.pill{
+  font-family:'Roboto Mono',monospace;font-size:6.8pt;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--navy);background:#FFF7DA;border:1px solid #F1DE9B;border-radius:10mm;
+  padding:1.4mm 3mm;
+}
+.pill.plain{background:var(--soft);border-color:var(--line);color:var(--muted);}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;}
+.kpi{border-left:2px solid var(--accent);padding:1mm 0 1mm 3mm;}
+.kpi .n{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22pt;line-height:.9;color:var(--navy);}
+.kpi .l{font-size:7pt;line-height:1.3;color:var(--muted);margin-top:1mm;text-transform:uppercase;letter-spacing:.06em;}
+
+/* ===== callout ===== */
+.callout{
+  background:linear-gradient(100deg,#FFFBEB,#FFFDF5);
+  border:1px solid #F1E3AE;border-left:3px solid var(--accent);
+  border-radius:1.5mm;padding:4mm 5mm;
+}
+.callout .t{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;
+  text-transform:uppercase;letter-spacing:.1em;color:var(--navy);margin-bottom:1.4mm;}
+.callout p{font-size:9pt;line-height:1.5;color:#4A5568;}
+
+/* ===== steps ===== */
+.steps{display:grid;grid-template-columns:repeat(6,1fr);gap:2.4mm;counter-reset:st;}
+.step{position:relative;padding-top:7mm;}
+.step::before{
+  counter-increment:st;content:counter(st,decimal-leading-zero);
+  position:absolute;top:0;left:0;font-family:'Barlow Condensed',sans-serif;font-weight:800;
+  font-size:12pt;color:var(--accent);
+}
+.step::after{
+  content:"";position:absolute;top:3.2mm;left:7mm;right:0;height:1px;background:var(--line);
+}
+.step:last-child::after{display:none;}
+.step h5{font-size:8.2pt;font-weight:700;margin-bottom:.8mm;}
+.step p{font-size:7.4pt;line-height:1.32;color:var(--muted);}
+
+/* ===== cover ===== */
+.cover-wrap{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:18mm 18mm 14mm;}
+.cover-wrap .top{display:flex;justify-content:space-between;align-items:flex-start;}
+.cover-kicker{font-family:'Roboto Mono',monospace;font-size:7pt;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--muted2);text-align:right;line-height:1.9;}
+.cover-kicker b{color:var(--accent2);font-weight:400;}
+.cover-mid{margin-top:auto;}
+.cover-title{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:40pt;line-height:1.02;
+  color:#fff;max-width:150mm;margin-top:8mm;
+}
+.cover-title em{color:var(--accent2);font-style:normal;display:block;}
+.cover-sub{font-size:10.4pt;line-height:1.6;color:#B9C6D6;max-width:128mm;margin-top:6mm;}
+.cover-chips{display:flex;gap:2.4mm;margin-top:8mm;flex-wrap:wrap;}
+.cover-chips span{
+  border:1px solid rgba(250,204,21,.4);border-radius:10mm;padding:1.6mm 3.4mm;
+  font-family:'Roboto Mono',monospace;font-size:6.6pt;letter-spacing:.12em;
+  text-transform:uppercase;color:#FDE68A;background:rgba(250,204,21,.06);
+}
+.cover-foot{
+  display:flex;justify-content:space-between;align-items:flex-end;margin-top:12mm;
+  border-top:1px solid rgba(148,163,184,.28);padding-top:4mm;
+  font-family:'Roboto Mono',monospace;font-size:6.2pt;letter-spacing:.16em;
+  text-transform:uppercase;color:#7C8CA3;
+}
+
+/* ===== contents ===== */
+.toc{display:grid;grid-template-columns:1fr 1fr;gap:0 10mm;}
+.toc .grp{grid-column:span 2;font-family:'Roboto Mono',monospace;font-size:6.6pt;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--accent);margin:5mm 0 2mm;}
+.toc .grp:first-child{margin-top:0;}
+.toc-item{display:flex;align-items:baseline;gap:2.6mm;padding:1.7mm 0;border-bottom:1px dotted #CBD5E1;}
+.toc-item .n{font-family:'Roboto Mono',monospace;font-size:7pt;color:var(--muted2);min-width:6mm;}
+.toc-item .t{font-size:9pt;color:var(--navy);flex:1;}
+.toc-item .p{font-family:'Barlow Condensed',sans-serif;font-size:10pt;font-weight:700;color:var(--navy);}
+
+/* ===== misc ===== */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:6mm;}
+.split{display:grid;grid-template-columns:1.25fr 1fr;gap:6mm;}
+.mt3{margin-top:3mm;}.mt4{margin-top:4mm;}.mt5{margin-top:5mm;}.mt6{margin-top:6mm;}
+.mb2{margin-bottom:2mm;}.mb3{margin-bottom:3mm;}.mb4{margin-bottom:4mm;}
+.mono{font-family:'Roboto Mono',monospace;}
+.small{font-size:8pt;line-height:1.5;color:var(--muted);}
+.hr{height:1px;background:var(--line);margin:5mm 0;}
+.badge{display:inline-block;font-family:'Roboto Mono',monospace;font-size:6.2pt;letter-spacing:.14em;
+  text-transform:uppercase;background:var(--navy);color:#fff;padding:1.1mm 2.6mm;border-radius:1mm;}
+
+/* dark closing */
+.closing{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:18mm;}
+.closing h1{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:38pt;line-height:1;color:#fff;}
+.closing h1 em{color:var(--accent2);font-style:normal;display:block;}
+.closing p{color:#B9C6D6;font-size:10.5pt;line-height:1.6;max-width:130mm;}
+.closing .box{border:1px solid rgba(148,163,184,.3);border-radius:2mm;padding:6mm;background:rgba(30,41,59,.5);}
+
+/* ===== diagrama de arquitectura ===== */
+.arch{display:flex;flex-direction:column;}
+.node{
+  border:1px solid var(--line);border-radius:2mm;padding:3.6mm 4.4mm;background:var(--soft);
+}
+.node .nd{font-family:'Roboto Mono',monospace;font-size:6pt;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted2);margin-bottom:1.2mm;}
+.node h5{font-size:9.6pt;font-weight:700;margin-bottom:1.2mm;line-height:1.2;}
+.node p{font-size:8.2pt;line-height:1.4;color:var(--muted);}
+.node.hub{background:var(--navy);border-color:var(--navy);}
+.node.hub h5{color:#fff;}
+.node.hub p{color:#B9C6D6;}
+.node.hub .nd{color:#FDE68A;}
+.node.cloud{background:#FFFBEB;border-color:#F1E3AE;}
+.chips{display:flex;flex-wrap:wrap;gap:1.6mm;margin-top:2.2mm;}
+.chips span{font-family:'Roboto Mono',monospace;font-size:6pt;letter-spacing:.08em;text-transform:uppercase;
+  background:#fff;border:1px solid var(--line);border-radius:1mm;padding:1mm 2mm;color:var(--navy);}
+.node.hub .chips span{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#E2E8F0;}
+.vline{position:relative;height:8mm;border-left:1.6px dashed #CBD5E1;margin-left:50%;}
+.vline span{
+  position:absolute;left:3mm;top:1.6mm;white-space:nowrap;background:#fff;padding:0 1.5mm;
+  font-family:'Roboto Mono',monospace;font-size:5.8pt;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted2);
+}
+.archrow{display:grid;gap:3mm;}
+.archrow.r3{grid-template-columns:repeat(3,1fr);}
+.archrow.r4{grid-template-columns:repeat(4,1fr);}
+.archrow .node{padding:3.2mm 3.4mm;}
+.archrow .node h5{font-size:8.8pt;}
+.archrow .node p{font-size:7.6pt;}
+
+/* ===== matriz ===== */
+table.matrix{width:100%;border-collapse:collapse;font-size:7.8pt;}
+table.matrix th{background:var(--navy);color:#fff;padding:1.6mm 2.4mm;text-align:left;
+  font-size:6.6pt;letter-spacing:.08em;text-transform:uppercase;font-weight:600;}
+table.matrix th:nth-child(n+2){text-align:center;width:20mm;}
+table.matrix td{padding:1.15mm 2.4mm;border-bottom:1px solid #EDF1F5;color:var(--navy);}
+table.matrix td:nth-child(n+2){text-align:center;font-family:'Roboto Mono',monospace;font-size:6.6pt;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+table.matrix tr:nth-child(even) td{background:#FAFBFC;}
+table.matrix td .ed{color:#15803D;}
+table.matrix td .no{color:#B42318;}
+
+/* ===== comparativa ===== */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:4mm;}
+.plan{border:1px solid var(--line);border-radius:2mm;padding:4.4mm;background:#fff;}
+.plan.hi{background:var(--navy);border-color:var(--navy);}
+.plan .ph2{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1mm;}
+.plan h4{font-family:'Barlow Condensed',sans-serif;font-size:17pt;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--navy);}
+.plan.hi h4{color:#fff;}
+.plan .sub2{font-family:'Roboto Mono',monospace;font-size:6.2pt;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);}
+.plan ul{list-style:none;margin-top:2.6mm;display:flex;flex-direction:column;gap:1.5mm;}
+.plan ul li{position:relative;padding-left:4.6mm;font-size:8.2pt;line-height:1.36;color:var(--muted);}
+.plan ul li::before{content:"✓";position:absolute;left:0;top:-.2mm;color:#15803D;font-weight:800;font-size:7.6pt;}
+.plan.hi ul li{color:#C6D2E0;}
+.plan.hi ul li::before{color:var(--accent2);}
+
+/* ===== qa / objeciones ===== */
+.qa{display:grid;grid-template-columns:1fr 1fr;gap:3.4mm 5mm;}
+.qa .q2{border-left:2px solid var(--accent);padding-left:3mm;}
+.qa .q2 h4{font-size:8.8pt;font-weight:700;margin-bottom:1mm;line-height:1.25;}
+.qa .q2 p{font-size:8pt;line-height:1.42;color:var(--muted);}
+
+table.obj{width:100%;border-collapse:collapse;font-size:8pt;}
+table.obj th{background:var(--navy);color:#fff;padding:2.2mm 2.6mm;text-align:left;font-size:6.8pt;
+  letter-spacing:.06em;text-transform:uppercase;font-weight:600;}
+table.obj td{padding:1.45mm 2.6mm;border-bottom:1px solid var(--line);vertical-align:top;color:var(--muted);line-height:1.36;}
+table.obj td:first-child{color:var(--navy);font-weight:600;width:38mm;}
+table.obj tr:nth-child(even) td{background:#FAFBFC;}
+
+/* ===== pasos numerados grandes ===== */
+.path{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;}
+.path .st{border-top:2px solid var(--accent);padding-top:2.6mm;}
+.path .st .n{font-family:'Barlow Condensed',sans-serif;font-size:18pt;font-weight:800;color:var(--navy);line-height:.9;}
+.path .st h5{font-size:8.6pt;font-weight:700;margin:.8mm 0 .6mm;}
+.path .st p{font-size:7.4pt;line-height:1.32;color:var(--muted);}
+
+/* ===== variantes compactas ===== */
+.card.slim{padding:3.2mm 3.6mm;}
+.card.slim h4{font-size:8.8pt;line-height:1.2;margin-bottom:1mm;}
+.card.slim h4 .n{color:var(--accent);font-family:'Barlow Condensed',sans-serif;font-weight:800;margin-right:1.2mm;}
+.card.slim p{font-size:7.8pt;line-height:1.32;}
+table.compact td{padding:1.55mm 2.6mm;}
+table.compact th{padding:1.9mm 2.6mm;}
+.p-bond .card{padding:3.1mm 3.9mm;}
+.p-bond .card h4{font-size:9.2pt;}
+.p-bond .card p{font-size:8.2pt;line-height:1.36;}
+.p-bond .grid.g2{gap:2.8mm;}
+</style>
+</head>
+<body>
+
+<!-- ================= PORTADA ================= -->
+<section class="page dark">
+  <div class="cover-wrap">
+    <div class="top">
+      <div class="wordmark cover"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+      <div class="cover-kicker">
+        Dossier de producto<br><b>Distribuidores y canales de venta</b>
+      </div>
+    </div>
+
+    <div class="cover-mid">
+      <div class="mono" style="font-size:6.8pt;letter-spacing:.3em;text-transform:uppercase;color:#FDE68A;">
+        Sistema integral de pesaje industrial
+      </div>
+      <h1 class="cover-title">El control de cada tonelada,<em>en una sola estación.</em></h1>
+      <p class="cover-sub">Pesaje de camiones, inventario, tickets, reportes y auditoría. Diseñado para operar sin internet, integrarse con básculas reales y crecer con su negocio.</p>
+      <div class="cover-chips">
+        <span>Operación sin internet</span>
+        <span>Multi-marca de básculas</span>
+        <span>Trazabilidad metrológica</span>
+        <span>Español · Inglés · Portugués</span>
+      </div>
+    </div>
+
+    <div class="cover-foot">
+      <span>Octubre 2026 · Documento comercial</span>
+      <span>Uso autorizado · Versión 3.28</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CONTENIDO ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>Contenido</b> · Todo el sistema de un vistazo</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:4mm">
+      <div class="big">00</div>
+      <div class="tt">
+        <div class="kicker">Índice general</div>
+        <h1>Contenido</h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Este dossier reúne las funcionalidades, las bondades comerciales y los argumentos de venta. Está pensado para que un distribuidor entienda el producto, califique una oportunidad y conduzca una demostración con seguridad.</p>
+
+    <div class="toc">
+      <div class="grp">El producto</div>
+      <div class="toc-item"><span class="n">01</span><span class="t">El sistema en una página</span><span class="p">03</span></div>
+      <div class="toc-item"><span class="n">02</span><span class="t">10 bondades que venden solas</span><span class="p">04</span></div>
+      <div class="toc-item"><span class="n">03</span><span class="t">Arquitectura de despliegue</span><span class="p">05</span></div>
+      <div class="toc-item"><span class="n">04</span><span class="t">Mapa funcional completo</span><span class="p">06</span></div>
+
+      <div class="grp">La operación</div>
+      <div class="toc-item"><span class="n">05</span><span class="t">Operación de pesaje</span><span class="p">07</span></div>
+      <div class="toc-item"><span class="n">06</span><span class="t">Catálogos maestros</span><span class="p">08</span></div>
+      <div class="toc-item"><span class="n">07</span><span class="t">Inventario y Kardex</span><span class="p">09</span></div>
+      <div class="toc-item"><span class="n">08</span><span class="t">Reportes y exportación</span><span class="p">10</span></div>
+      <div class="toc-item"><span class="n">09</span><span class="t">Ticket e impresión</span><span class="p">11</span></div>
+      <div class="toc-item"><span class="n">10</span><span class="t">Trazabilidad y auditoría</span><span class="p">12</span></div>
+
+      <div class="grp">El gobierno del sistema</div>
+      <div class="toc-item"><span class="n">11</span><span class="t">Seguridad y roles</span><span class="p">13</span></div>
+      <div class="toc-item"><span class="n">12</span><span class="t">Cuenta, equipos y licencias</span><span class="p">14</span></div>
+      <div class="toc-item"><span class="n">13</span><span class="t">Notificaciones y respaldos</span><span class="p">15</span></div>
+      <div class="toc-item"><span class="n">14</span><span class="t">Configuración y experiencia</span><span class="p">16</span></div>
+      <div class="toc-item"><span class="n">15</span><span class="t">Compatibilidad de hardware</span><span class="p">17</span></div>
+      <div class="toc-item"><span class="n">16</span><span class="t">Planes y alcance</span><span class="p">18</span></div>
+      <div class="toc-item"><span class="n">17</span><span class="t">Implementación</span><span class="p">19</span></div>
+
+      <div class="grp">Para vender</div>
+      <div class="toc-item"><span class="n">18</span><span class="t">Por qué elegir BALANSOFT-WS</span><span class="p">20</span></div>
+      <div class="toc-item"><span class="n">19</span><span class="t">Kit para el distribuidor</span><span class="p">21</span></div>
+      <div class="toc-item"><span class="n">20</span><span class="t">Preguntas frecuentes</span><span class="p">22</span></div>
+      <div class="toc-item"><span class="n">21</span><span class="t">Siguiente paso</span><span class="p">23</span></div>
+    </div>
+
+    <div class="kpis mt6">
+      <div class="kpi"><div class="n">3</div><div class="l">roles con permisos granulares</div></div>
+      <div class="kpi"><div class="n">18</div><div class="l">módulos de acceso configurables</div></div>
+      <div class="kpi"><div class="n">8+</div><div class="l">marcas de básculas compatibles</div></div>
+      <div class="kpi"><div class="n">100%</div><div class="l">operación local sin internet</div></div>
+    </div>
+
+    <div class="callout mt5">
+      <div class="t">Cómo usar este dossier</div>
+      <p>Si busca una demostración, vaya al capítulo 19: guion de 15 minutos, preguntas de calificación y manejo de objeciones. Si busca argumentos, los capítulos 02, 18 y 19 concentran las bondades y los diferenciadores. Si busca especificaciones, los capítulos 03 a 17 cubren arquitectura, módulos, hardware, licencias e implementación.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">02</span></footer>
+</section>
+
+<!-- ================= 01 · EL SISTEMA ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>01</b> · El sistema</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">01</div>
+      <div class="tt">
+        <div class="kicker">El sistema en una página</div>
+        <h1>Una estación.<br><em>Todo el ciclo del pesaje.</em></h1>
+      </div>
+    </div>
+    <p class="lead">BALANSOFT-WS conecta la báscula, los catálogos, el inventario, el ticket y los reportes en un solo flujo. Lo que antes vivía en planillas, radios y llamadas, ahora ocurre en una pantalla y queda registrado con usuario, fecha y hora.</p>
+
+    <div class="two">
+      <div>
+        <h3 class="sub">El problema que resuelve</h3>
+        <ul class="ties">
+          <li>Pesajes anotados a mano y boletos que se pierden o se repiten.</li>
+          <li>Inventario que no cuadra porque las salidas no se registran a tiempo.</li>
+          <li>Reportes armados al final del mes, tarde y con errores.</li>
+          <li>Discusiones sin evidencia: no se sabe quién pesó, cuándo ni con qué báscula.</li>
+          <li>Operación detenida cuando falla internet.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub">Lo que entrega</h3>
+        <ul class="ticks">
+          <li>Un boleto único, numerado y trazable por cada entrada y salida.</li>
+          <li>Kardex automático: cada pesaje mueve el inventario del almacén.</li>
+          <li>Reportes diarios, mensuales y comparativos listos para exportar.</li>
+          <li>Trazabilidad completa: usuario, IP, fecha UTC, ediciones y anulaciones.</li>
+          <li>Operación local que sigue funcionando sin conexión a internet.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt5">
+      <h3 class="sub">¿Para quién es?</h3>
+      <div class="pills">
+        <span class="pill plain">Agroindustria</span><span class="pill plain">Molinos y balanceados</span>
+        <span class="pill plain">Puertos y terminales</span><span class="pill plain">Cemento y áridos</span>
+        <span class="pill plain">Reciclaje</span><span class="pill plain">Químicos y fertilizantes</span>
+        <span class="pill plain">Alimentos y bebidas</span><span class="pill plain">Transporte de carga</span>
+        <span class="pill plain">Plantas de recepción</span><span class="pill plain">Centros de distribución</span>
+      </div>
+    </div>
+
+    <div class="grid g3 mt5">
+      <div class="card"><h4>Para el dueño</h4><p>Control del volumen que entra y sale, inventario confiable y reportes para decidir sin depender de terceros.</p></div>
+      <div class="card"><h4>Para el operador</h4><p>Una pantalla clara, captura de peso en vivo, ticket inmediato y menos pasos manuales por camión.</p></div>
+      <div class="card"><h4>Para el auditor</h4><p>Historial completo, ediciones justificadas, anulaciones con motivo y evidencia fotográfica.</p></div>
+    </div>
+
+    <div class="callout mt5">
+      <div class="t">La idea en una frase</div>
+      <p>BALANSOFT-WS no es solo un programa para leer una báscula: es el sistema operativo de la estación de pesaje. Conecta el hardware con el negocio y convierte cada pesada en un dato confiable.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">03</span></footer>
+</section>
+
+<!-- ================= 02 · BONDADES ================= -->
+<section class="page p-bond">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>02</b> · Propuesta de valor</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">02</div>
+      <div class="tt">
+        <div class="kicker">Propuesta de valor</div>
+        <h1>10 bondades<br><em>que venden solas</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Cada bondad responde a un dolor concreto de la operación. Úselas como argumentos de conversación, no como lista de características.</p>
+
+    <div class="grid g2" style="gap:3.4mm">
+      <div class="card"><span class="ico">01</span><h4>Opera sin internet</h4><p>La estación trabaja contra su base de datos local. Si se cae la red o el central no responde, el pesaje continúa y la sincronización se reanuda después.</p></div>
+      <div class="card"><span class="ico">02</span><h4>Un solo sistema de punta a punta</h4><p>Catálogos, pesaje, inventario, ticket, reportes y auditoría en el mismo lugar. Menos planillas, menos reprocesos, menos errores de transcripción.</p></div>
+      <div class="card"><span class="ico">03</span><h4>Habla con básculas reales</h4><p>Serial RS-232/USB y TCP/IP, con parser multi-marca y detección de formato: Toledo/GSI, Yaohua, Keli, Torrey, Rice Lake, Syneria, Ichiban y más.</p></div>
+      <div class="card"><span class="ico">04</span><h4>El ticket sale como debe salir</h4><p>Rollo térmico de 58/80 mm, media carta, carta y A4; PDF o TXT; logo, QR, copias y campos configurables. La vista previa es el documento final.</p></div>
+      <div class="card"><span class="ico">05</span><h4>Trazabilidad metrológica</h4><p>El peso capturado no se edita. Cada boleto guarda báscula, modo de captura, usuario, fecha UTC y estado de estabilidad; las correcciones se auditan.</p></div>
+      <div class="card"><span class="ico">06</span><h4>Kardex automático</h4><p>Cada pesaje genera el movimiento de ingreso (10) o despacho (60). Al anular, se registra el contra-asiento; la historia nunca se borra.</p></div>
+      <div class="card"><span class="ico">07</span><h4>Reportes para decidir</h4><p>Diario, mensual, por vehículo, transportista, tercero, rango de peso, comparativo mensual y Kardex. Exportables a Excel y PDF con encabezado institucional.</p></div>
+      <div class="card"><span class="ico">08</span><h4>Seguridad por roles</h4><p>Administrador, operador y auditor, con permisos por módulo (ver, editar o ninguno). Cada empresa configura su matriz y todo queda auditado.</p></div>
+      <div class="card"><span class="ico">09</span><h4>Crece con la operación</h4><p>Una estación titular y estaciones operadoras en la misma red. Cuenta central para licencia, equipos y sincronización; aprobación de equipos y llaves de activación.</p></div>
+      <div class="card"><span class="ico">10</span><h4>Implementación rápida</h4><p>WServer se instala como un único ejecutable, crea su base y levanta la API. Sin dependencias de Python en la estación y con puesta en marcha acompañada.</p></div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">La suma de las bondades</div>
+      <p>Menos errores, más control y menor costo operativo. El cliente no compra un lector de báscula: compra tranquilidad para cerrar el mes, responder a una auditoría y saber qué pasó con cada camión.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">04</span></footer>
+</section>
+
+<!-- ================= 03 · ARQUITECTURA ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>03</b> · Arquitectura</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">03</div>
+      <div class="tt">
+        <div class="kicker">Arquitectura de despliegue</div>
+        <h1>Una estación titular.<br><em>Las operadoras alrededor.</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La estación titular concentra la base de datos y la API local. Las estaciones operadoras se conectan por la red del cliente y trabajan contra ella. La cuenta central valida la licencia y sincroniza, pero <b>no es necesaria para pesar</b>.</p>
+
+    <div class="arch">
+      <div class="node cloud">
+        <div class="nd">Cuenta central · nube</div>
+        <h5>License Manager y panel del proveedor</h5>
+        <p>Valida la licencia firmada, administra cuentas, equipos y tiers. Recibe la sincronización cuando hay enlace.</p>
+        <div class="chips"><span>Licencia Ed25519</span><span>Panel del proveedor</span><span>Sincronización</span></div>
+      </div>
+      <div class="vline"><span>HTTPS · validación y sync (cuando hay internet)</span></div>
+
+      <div class="node hub">
+        <div class="nd">Estación titular · en planta</div>
+        <h5>WServer + PostgreSQL + API local + tickets</h5>
+        <p>Es el corazón de la operación. Guarda catálogos, boletos, Kardex, auditoría y respaldos. Responde a las operadoras y a la interfaz de pesaje.</p>
+        <div class="chips"><span>WServer one-file</span><span>PostgreSQL</span><span>API REST</span><span>Respaldos GFS</span><span>Sin internet</span></div>
+      </div>
+      <div class="vline"><span>LAN del cliente · API en puerto 8000</span></div>
+
+      <div class="archrow r3">
+        <div class="node"><div class="nd">Puesto 01</div><h5>Estación operadora</h5><p>Pesaje, tickets y consultas. Consume una sesión.</p></div>
+        <div class="node"><div class="nd">Puesto 02</div><h5>Estación operadora</h5><p>Recepción o despacho según el turno.</p></div>
+        <div class="node"><div class="nd">Puesto 03</div><h5>Estación operadora</h5><p>Aprobación del titular y rol asignado.</p></div>
+      </div>
+
+      <div class="vline" style="height:6mm"><span>Serial RS-232 / USB · TCP/IP</span></div>
+      <div class="archrow r4">
+        <div class="node"><div class="nd">Entrada</div><h5>Indicador de báscula</h5><p>Lectura continua o por comando.</p></div>
+        <div class="node"><div class="nd">Salida</div><h5>Ticket térmico</h5><p>Rollo de 58 mm y 80 mm.</p></div>
+        <div class="node"><div class="nd">Oficina</div><h5>Impresora láser</h5><p>Carta, A4 y media carta.</p></div>
+        <div class="node"><div class="nd">Archivo</div><h5>PDF / TXT</h5><p>Carpeta de tickets y reportes.</p></div>
+      </div>
+    </div>
+
+    <div class="grid g3 mt5">
+      <div class="card"><h4>Si se cae internet</h4><p>La titular y las operadoras siguen pesando. La cola de sincronización reintenta cuando el enlace vuelve.</p></div>
+      <div class="card"><h4>Si se cae una operadora</h4><p>El resto sigue trabajando. Al reconectar, retoma su sesión contra la misma base.</p></div>
+      <div class="card"><h4>Si se cae la titular</h4><p>Se restaura el respaldo en el equipo de reemplazo. El cliente conserva la base y los archivos.</p></div>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">05</span></footer>
+</section>
+
+<!-- ================= 04 · MAPA FUNCIONAL ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>04</b> · Mapa funcional</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">04</div>
+      <div class="tt">
+        <div class="kicker">Mapa funcional completo</div>
+        <h1>Todo lo que necesita<br><em>una estación de pesaje</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Quince familias funcionales que comparten la misma base de datos. Cada módulo responde a una tarea real de la operación; no hay pantallas de relleno.</p>
+
+    <table class="tbl small compact">
+      <thead><tr><th style="width:34mm">Familia funcional</th><th>Qué resuelve</th><th style="width:52mm">Beneficio para el cliente</th></tr></thead>
+      <tbody>
+        <tr><td>Pesaje</td><td>Entrada, salida, peso en vivo, captura manual autorizada, camión y remolque, neto y anulación.</td><td>El ciclo completo en una sola pantalla.</td></tr>
+        <tr><td>Catálogos</td><td>Terceros, camiones, remolques, marcas, conductores, transportes, productos y almacenes.</td><td>Datos cargados una vez, sin tipeo repetido.</td></tr>
+        <tr><td>Inventario y Kardex</td><td>Movimientos 10/60, saldo a fecha de corte, detalle, ajustes autorizados y stock por almacén.</td><td>Inventario que cuadra con la operación real.</td></tr>
+        <tr><td>Reportes y exportación</td><td>Diario, mensual, por vehículo, transportista, tercero, rango de peso, comparativo y Kardex; Excel y PDF con identidad institucional.</td><td>Decisiones con datos y informes listos para gerencia o auditoría.</td></tr>
+        <tr><td>Ticket</td><td>58/80 mm, media carta, carta y A4; PDF/TXT; logo, QR, copias, campos y vista previa.</td><td>Documento profesional y consistente en cada pesada.</td></tr>
+        <tr><td>Trazabilidad</td><td>Auditoría completa, ediciones con motivo, anulaciones, imágenes y marcas de tiempo UTC.</td><td>Evidencia para auditorías y reclamos.</td></tr>
+        <tr><td>Seguridad</td><td>Roles, matriz de permisos por módulo, JWT, hash de contraseñas, aislamiento por empresa y rate limiting.</td><td>Acceso correcto para cada persona.</td></tr>
+        <tr><td>Equipos, sesiones y panel</td><td>Titular, operadoras, aprobación de equipos, límite de sesiones, llaves de activación y panel del proveedor.</td><td>Control de quién entra y desde dónde.</td></tr>
+        <tr><td>Continuidad</td><td>Centro de avisos, recordatorios con recurrencia, respaldo automático y manual, restauración y rotación GFS.</td><td>Nada se pierde y nada se olvida.</td></tr>
+        <tr><td>Empresa</td><td>Perfil fiscal, logo, formatos de ticket y reporte, carpeta de exportación y series de numeración.</td><td>Identidad propia y numeración controlada.</td></tr>
+        <tr><td>Configuración</td><td>Idioma, tipografía, tema, atajos, pantalla completa, diagnóstico y conexiones.</td><td>Una experiencia cómoda para cada operador.</td></tr>
+        <tr><td>Hardware</td><td>Básculas serial/TCP, detección de formato, prueba de balanza y peso en vivo.</td><td>Integración con el equipo que ya existe.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout mt3">
+      <div class="t">Sin módulos de relleno · una sola fuente de verdad · preparado para auditar</div>
+      <p>Cada pantalla responde a una tarea real de la estación: el operador no navega por menús que no usa. El catálogo, el boleto, el Kardex y el reporte salen de la misma base, sin hojas paralelas que reconciliar. Y cada cambio deja rastro: la pregunta “¿quién lo hizo?” tiene respuesta sin buscar en correos.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">06</span></footer>
+</section>
+
+<!-- ================= 05 · OPERACIÓN ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>05</b> · Operación</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">05</div>
+      <div class="tt">
+        <div class="kicker">Operación de pesaje</div>
+        <h1>El corazón del sistema:<br><em>pesar bien y con evidencia</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">El operador captura la entrada, el sistema calcula, el ticket se genera y el inventario se mueve. La salida cierra el ciclo y el neto queda registrado. Todo en la misma pantalla.</p>
+
+    <div class="steps mb4">
+      <div class="step"><h5>Entrada</h5><p>Placa, vehículo, producto y datos del boleto.</p></div>
+      <div class="step"><h5>Peso bruto</h5><p>Báscula o manual autorizado, con captura fija.</p></div>
+      <div class="step"><h5>Salida</h5><p>Segunda pesada y validación del ciclo.</p></div>
+      <div class="step"><h5>Neto</h5><p>Cálculo por camión, remolque y total.</p></div>
+      <div class="step"><h5>Ticket</h5><p>PDF/TXT listo para imprimir o archivar.</p></div>
+      <div class="step"><h5>Kardex</h5><p>Movimiento automático de ingreso o despacho.</p></div>
+    </div>
+
+    <div class="two">
+      <div>
+        <h3 class="sub">Peso en vivo y captura confiable</h3>
+        <ul class="ticks">
+          <li>Lectura continua desde la balanza por serial o TCP.</li>
+          <li>Indicador de estabilidad y peso en vivo en pantalla.</li>
+          <li>Botón de captura para fijar la lectura del momento.</li>
+          <li>Prueba de balanza y descubrimiento de equipos.</li>
+          <li>Modo manual solo para perfiles autorizados y auditado.</li>
+          <li>Pesos separados de vehículo y remolque, con neto total.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub">Ciclo de vida controlado</h3>
+        <ul class="ticks">
+          <li><b>PENDIENTE:</b> entrada registrada, esperando salida.</li>
+          <li><b>CERRADO:</b> ciclo completo con neto calculado.</li>
+          <li><b>MODIFICADO:</b> datos complementarios ajustados con motivo.</li>
+          <li><b>ANULADO:</b> cancelación con motivo y contra-asiento.</li>
+          <li>Bloqueo de dos boletos pendientes para la misma placa.</li>
+          <li>Documento, guía, medida, densidad, litros, flete y fotos.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt5">
+      <h3 class="sub">Reglas que protegen la operación</h3>
+      <div class="grid g3">
+        <div class="card navy"><h4>El peso no se edita</h4><p>La lectura capturada es la verdad física del momento; cualquier corrección se registra como edición auditada.</p></div>
+        <div class="card navy"><h4>Control de sobrecapacidad</h4><p>El parser rechaza lecturas que superan el 105 % de la capacidad configurada de la balanza.</p></div>
+        <div class="card navy"><h4>Numeración secuencial</h4><p>Cada boleto recibe un número único con bloqueo transaccional; no se reasigna ni se reutiliza.</p></div>
+      </div>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">07</span></footer>
+</section>
+
+<!-- ================= 06 · CATÁLOGOS ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>06</b> · Datos maestros</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">06</div>
+      <div class="tt">
+        <div class="kicker">Catálogos maestros</div>
+        <h1>Catálogos que ordenan<br><em>toda la operación</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Un pesaje bien hecho empieza por un catálogo bien cargado. BALANSOFT-WS organiza los datos que se repiten para que el operador solo elija y confirme.</p>
+
+    <table class="tbl small">
+      <thead><tr><th style="width:34mm">Catálogo</th><th>Qué registra</th><th style="width:56mm">Uso en la operación</th></tr></thead>
+      <tbody>
+        <tr><td>Terceros</td><td>Clientes, proveedores y ambos; identificación fiscal, contacto y dirección.</td><td>Identifica a quién se recibe o despacha.</td></tr>
+        <tr><td>Camiones</td><td>Placa, modelo, marca, transporte, color, tara habitual y foto real.</td><td>Selección rápida y ticket con datos correctos.</td></tr>
+        <tr><td>Remolques</td><td>Placa, tipo, tara habitual y foto.</td><td>Pesaje de camión con remolque.</td></tr>
+        <tr><td>Marcas y modelos</td><td>Marca, modelo, capacidad de carga y número de ejes.</td><td>Ficha técnica del vehículo.</td></tr>
+        <tr><td>Conductores</td><td>Cédula/DNI, nombre, teléfono, licencia y foto.</td><td>Responsable del vehículo en cada pesada.</td></tr>
+        <tr><td>Transportes</td><td>Razón social, identificación fiscal, contacto y teléfono.</td><td>Reportes por transportista y control de flota.</td></tr>
+        <tr><td>Categorías y productos</td><td>Código, nombre, unidad, densidad, tolerancia, peso por unidad y marca de Kardex.</td><td>Cálculos, inventario y reportes por producto.</td></tr>
+        <tr><td>Almacenes</td><td>Código, nombre, ubicación y capacidad en toneladas.</td><td>Stock por almacén y destino del movimiento.</td></tr>
+        <tr><td>Series</td><td>Prefijo, cantidad de dígitos y contador transaccional por empresa.</td><td>Numeración única de boletos.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="two mt4">
+      <div class="card accent">
+        <h4>Producto con reglas propias</h4>
+        <p>Cada producto define unidad de medida, densidad estándar, tolerancia comercial y peso por unidad. El sistema usa esos datos para cálculos, conversiones y alertas de desviación. Solo los productos marcados para Kardex generan movimiento de inventario.</p>
+      </div>
+      <div class="card accent">
+        <h4>Series de numeración protegidas</h4>
+        <p>La empresa define prefijo y cantidad de dígitos. El contador es transaccional y resiste operadores concurrentes. Una serie con boletos asociados no se puede borrar: la historia se protege. Ejemplo: <b>TA-00000001</b>.</p>
+      </div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">El beneficio comercial</div>
+      <p>Cargar el catálogo una vez elimina el tipeo repetido, reduce los errores de placa y producto y acelera cada pesada. En una operación de decenas de camiones por día, esos segundos se convierten en horas y esos errores se convierten en dinero.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">08</span></footer>
+</section>
+
+<!-- ================= 07 · KARDEX ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>07</b> · Inventario</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">07</div>
+      <div class="tt">
+        <div class="kicker">Inventario y Kardex</div>
+        <h1>Kardex automático,<br><em>sin hojas paralelas</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Cada pesaje que mueve inventario genera un movimiento de Kardex. El sistema distingue ingreso y despacho, permite ajustes autorizados y conserva la historia aunque un boleto se anule.</p>
+
+    <div class="grid g3 mb4">
+      <div class="card"><span class="ico" style="color:#15803D">10 · +</span><h4>Ingreso</h4><p>Recepción de materia prima o compra. Suma existencias en el almacén del producto. Se genera al cerrar un boleto cuyo neto corresponde a ingreso.</p></div>
+      <div class="card"><span class="ico" style="color:#B45309">60 · −</span><h4>Despacho</h4><p>Venta o salida de planta. Resta existencias del almacén. Se genera al cerrar un boleto cuyo neto corresponde a despacho.</p></div>
+      <div class="card"><span class="ico">↺</span><h4>Anulación con contra-asiento</h4><p>Si se anula un boleto cerrado, el sistema registra el movimiento inverso exacto. No se borra el original: se compensa.</p></div>
+    </div>
+
+    <div class="two">
+      <div>
+        <h3 class="sub">Consultas de inventario</h3>
+        <ul class="ticks">
+          <li>Saldo por producto y almacén a una fecha de corte.</li>
+          <li>Detalle de movimientos por rango de fechas.</li>
+          <li>Stock consolidado con capacidad y ocupación.</li>
+          <li>Historial completo con referencia al boleto de origen.</li>
+          <li>Exportación de Kardex a Excel y PDF.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub">Ajustes de inventario</h3>
+        <ul class="ticks">
+          <li>Registro de ingreso o despacho manual justificado.</li>
+          <li>Acceso restringido a perfiles autorizados.</li>
+          <li>Selección de producto, almacén y cantidad.</li>
+          <li>Visible en el Kardex como cualquier otro movimiento.</li>
+          <li>Auditoría del usuario que lo registró.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt4">
+      <h3 class="sub">Cómo se lee un movimiento</h3>
+      <table class="tbl small">
+        <thead><tr><th style="width:30mm">Movimiento</th><th style="width:16mm">Signo</th><th>Se origina en</th><th style="width:56mm">Efecto</th></tr></thead>
+        <tbody>
+          <tr><td>10 · Ingreso</td><td>+</td><td>Cierre de boleto con neto de ingreso.</td><td>Suma existencias al almacén del producto.</td></tr>
+          <tr><td>60 · Despacho</td><td>−</td><td>Cierre de boleto con neto de despacho.</td><td>Resta existencias del almacén del producto.</td></tr>
+          <tr><td>Ajuste autorizado</td><td>+ / −</td><td>Registro manual desde Ajustes de inventario.</td><td>Corrige el saldo con justificación y auditoría.</td></tr>
+          <tr><td>Contra-asiento</td><td>Inverso</td><td>Anulación de un boleto cerrado.</td><td>Revierte el movimiento original sin borrarlo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">Por qué importa</div>
+      <p>El inventario deja de ser una estimación mensual y pasa a ser un reflejo de lo que realmente entró y salió por la báscula. Cuando hay una diferencia, se puede rastrear hasta el boleto, el producto, el almacén y el usuario.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">09</span></footer>
+</section>
+
+<!-- ================= 08 · REPORTES ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>08</b> · Reportes</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">08</div>
+      <div class="tt">
+        <div class="kicker">Reportes y exportación</div>
+        <h1>La operación convertida<br><em>en decisiones</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">No basta con pesar: hay que entender qué pasó. Los reportes responden preguntas concretas y se exportan con la identidad de la empresa.</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:52mm">Reporte</th><th>Pregunta que responde</th></tr></thead>
+      <tbody>
+        <tr><td>Diario</td><td>¿Cuánto entró y salió hoy? ¿Cuántos boletos se cerraron?</td></tr>
+        <tr><td>Mensual</td><td>¿Cómo se comportó el volumen del mes? ¿Cuál es el neto acumulado?</td></tr>
+        <tr><td>Por vehículo</td><td>¿Cuántos viajes y cuánto peso movió una placa?</td></tr>
+        <tr><td>Por transportista</td><td>¿Qué transportista movió más volumen en el período?</td></tr>
+        <tr><td>Por tercero</td><td>¿Cuánto se recibió o despachó a cada cliente o proveedor?</td></tr>
+        <tr><td>Por rango de peso</td><td>¿Cómo se distribuyen los boletos por rangos de neto?</td></tr>
+        <tr><td>Comparativo mensual</td><td>¿Cómo está el mes actual frente al anterior?</td></tr>
+        <tr><td>Kardex · saldo</td><td>¿Cuánto había en inventario a una fecha de corte?</td></tr>
+        <tr><td>Kardex · detalle</td><td>¿Qué movimientos explican ese saldo?</td></tr>
+      </tbody>
+    </table>
+
+    <div class="two mt4">
+      <div class="card accent">
+        <h4>Exportación con identidad</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Excel (.xlsx) y PDF con encabezado institucional.</li>
+          <li>Logo y datos fiscales de la empresa.</li>
+          <li>Etiquetas traducidas al idioma de la empresa.</li>
+          <li>Filtros por fecha, producto, vehículo y tercero.</li>
+          <li>Diseño listo para imprimir o enviar.</li>
+        </ul>
+      </div>
+      <div class="card accent">
+        <h4>Panel de inicio</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Boletos abiertos y cerrados.</li>
+          <li>Peso neto acumulado del listado.</li>
+          <li>Vehículos en planta.</li>
+          <li>Últimos pesajes registrados.</li>
+          <li>Aviso de pesajes con sincronización fallida.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">El argumento de venta</div>
+      <p>“Al cierre del mes, su equipo no arma un Excel desde cero: abre el reporte, elige el período y exporta.” Esa frase resume el ahorro administrativo que el cliente percibe desde la primera semana.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">10</span></footer>
+</section>
+
+<!-- ================= 09 · TICKET ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>09</b> · Documento</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">09</div>
+      <div class="tt">
+        <div class="kicker">Ticket e impresión</div>
+        <h1>El ticket que<br><em>el cliente se lleva</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">El boleto es la cara visible del sistema. Se genera con la identidad de la empresa, en el formato que la operación necesita y con una vista previa idéntica al documento final.</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:34mm">Formato</th><th>Uso típico</th><th style="width:54mm">Ventaja</th></tr></thead>
+      <tbody>
+        <tr><td>Rollo 80 mm</td><td>Impresora térmica de mostrador o caseta.</td><td>Ticket rápido, compacto y resistente.</td></tr>
+        <tr><td>Rollo 58 mm</td><td>Impresoras portátiles o de espacio reducido.</td><td>Movilidad y bajo consumo de papel.</td></tr>
+        <tr><td>Media carta</td><td>Entrega al conductor o archivo físico.</td><td>Más espacio para datos y firmas.</td></tr>
+        <tr><td>Carta</td><td>Oficina, archivo y presentación al cliente.</td><td>Formato estándar y legible.</td></tr>
+        <tr><td>A4</td><td>Exportación corporativa y expedientes.</td><td>Integración con archivos existentes.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="two mt4">
+      <div>
+        <h3 class="sub">Configurable por empresa</h3>
+        <ul class="ticks">
+          <li>Logo, nombre fiscal, RIF, dirección y contacto.</li>
+          <li>Título del boleto y textos de encabezado.</li>
+          <li>Tamaño de papel, orientación y escala tipográfica.</li>
+          <li>Campos visibles: encabezado, detalles, lecturas y firmas.</li>
+          <li>Cantidad de copias por emisión.</li>
+          <li>QR opcional con los datos clave del pesaje.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub">Contenido del boleto</h3>
+        <ul class="ticks">
+          <li>Número de boleto y estado.</li>
+          <li>Fecha y hora de entrada y salida.</li>
+          <li>Vehículo, remolque, conductor, producto y tercero.</li>
+          <li>Tabla de lecturas de cinco columnas: entrada, salida, netos y peso neto.</li>
+          <li>Documento, guía, flete, densidad y litros.</li>
+          <li>Firmas y pie institucional.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid g2 mt4">
+      <div class="card navy"><h4>Boleto anulado</h4><p>Se imprime con marca de agua diagonal <b>ANULADO</b> en rojo y el motivo visible. El documento no se confunde con uno vigente.</p></div>
+      <div class="card navy"><h4>Salida PDF o TXT</h4><p>El sistema genera el archivo y lo guarda en la carpeta de tickets. Se imprime con cualquier impresora instalada: térmica, matricial o láser.</p></div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">Paridad visual</div>
+      <p>La vista previa de la app usa la misma estructura que el PDF: la tabla de lecturas, las etiquetas y los totales coinciden. Lo que el operador ve en pantalla es lo que sale impreso.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">11</span></footer>
+</section>
+
+<!-- ================= 10 · TRAZABILIDAD ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>10</b> · Confianza</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">10</div>
+      <div class="tt">
+        <div class="kicker">Trazabilidad y auditoría</div>
+        <h1>Todo deja rastro.<br><em>Nada se borra.</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La trazabilidad es lo que separa un sistema de pesaje de una planilla. Cada acción relevante queda registrada con usuario, fecha, hora UTC y detalle, para responder ante una auditoría o un reclamo.</p>
+
+    <div class="two mb4">
+      <div class="card">
+        <h4>Registro de auditoría</h4>
+        <p>Acción, entidad, identificador, detalle, usuario, IP y fecha. La pantalla permite filtrar por entidad, acción y rango de fechas, y separa la vista transaccional del registro completo.</p>
+      </div>
+      <div class="card">
+        <h4>Ediciones con motivo</h4>
+        <p>Los datos complementarios de un boleto cerrado se pueden corregir, pero el boleto pasa a MODIFICADO, se incrementa el contador de ediciones y se exige un motivo. La empresa puede fijar un tope.</p>
+      </div>
+      <div class="card">
+        <h4>Anulaciones controladas</h4>
+        <p>Anular exige motivo y permiso. El boleto queda ANULADO, se libera el vehículo y se registra el contra-asiento de Kardex cuando corresponde.</p>
+      </div>
+      <div class="card">
+        <h4>Evidencia fotográfica</h4>
+        <p>Cada boleto puede llevar imágenes asociadas: recepción, documento, estado de la carga o cualquier evidencia que la operación necesite conservar.</p>
+      </div>
+    </div>
+
+    <h3 class="sub">Qué queda registrado</h3>
+    <table class="tbl">
+      <thead><tr><th style="width:36mm">Evento</th><th>Qué queda registrado</th><th style="width:58mm">Para qué sirve</th></tr></thead>
+      <tbody>
+        <tr><td>Creación del boleto</td><td>Usuario, fecha UTC, báscula, pesos y datos del vehículo.</td><td>Demostrar cuándo y cómo se originó el pesaje.</td></tr>
+        <tr><td>Edición</td><td>Campos modificados, motivo, usuario y contador de ediciones.</td><td>Rastrear correcciones y evitar cambios silenciosos.</td></tr>
+        <tr><td>Anulación</td><td>Motivo, usuario y contra-asiento de inventario.</td><td>Explicar una cancelación y mantener el Kardex cuadrado.</td></tr>
+        <tr><td>Acceso y seguridad</td><td>Inicio de sesión, cambios de permisos y acciones administrativas.</td><td>Auditar quién tuvo acceso a qué.</td></tr>
+        <tr><td>Sincronización</td><td>Estado, errores y reintentos de la cola offline.</td><td>Diagnosticar por qué un pesaje no llegó al central.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout mt5">
+      <div class="t">El valor para el cliente</div>
+      <p>Cuando un cliente reclama un peso o un auditor pregunta por una anulación, la respuesta no es “déjeme buscar”. Está en el sistema, con nombre y fecha. Eso protege a la empresa y a su gente.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">12</span></footer>
+</section>
+
+<!-- ================= 11 · SEGURIDAD ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>11</b> · Seguridad</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">11</div>
+      <div class="tt">
+        <div class="kicker">Seguridad y roles</div>
+        <h1>Cada persona ve<br><em>lo que necesita ver</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:3.4mm">El sistema aplica permisos por rol y por módulo, aísla la información de cada empresa y protege las credenciales. La configuración es parte del producto, no un extra.</p>
+
+    <div class="grid g3 mb4">
+      <div class="card navy"><h4>ADMIN</h4><p>Control total: empresa, usuarios, seguridad, licencia, configuración, catálogos, pesaje, reportes y respaldos.</p></div>
+      <div class="card"><h4>OPERADOR</h4><p>Operación diaria: pesaje, catálogos, reportes y diseño de ticket. Sin acceso a usuarios, seguridad, configuración ni dispositivos.</p></div>
+      <div class="card"><h4>AUDITOR</h4><p>Consulta y análisis: catálogos, pesajes, Kardex y reportes. Sin edición de la operación ni acceso a configuración.</p></div>
+    </div>
+
+    <h3 class="sub" style="margin-bottom:2mm">Matriz de permisos por módulo</h3>
+    <table class="matrix">
+      <thead><tr><th>Módulo</th><th>ADMIN</th><th>OPERADOR</th><th>AUDITOR</th></tr></thead>
+      <tbody>
+        <tr><td>Inicio</td><td class="ed">Editar</td><td class="ed">Editar</td><td class="ed">Editar</td></tr>
+        <tr><td>Terceros</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Usuarios del sistema</td><td class="ed">Editar</td><td class="no">Ninguno</td><td>Ver</td></tr>
+        <tr><td>Camiones / vehículos</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Conductores</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Empresas de transporte</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Categorías</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Productos</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Almacenes</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Kardex</td><td class="ed">Editar</td><td>Ver</td><td>Ver</td></tr>
+        <tr><td>Ingresos (entradas)</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Despachos (salidas)</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Reportes generales</td><td class="ed">Editar</td><td class="ed">Editar</td><td class="ed">Editar</td></tr>
+        <tr><td>Dispositivos de campo</td><td class="ed">Editar</td><td class="no">Ninguno</td><td class="no">Ninguno</td></tr>
+        <tr><td>Seguridad y accesos</td><td class="ed">Editar</td><td class="no">Ninguno</td><td class="no">Ninguno</td></tr>
+        <tr><td>Empresa y documentos</td><td class="ed">Editar</td><td class="no">Ninguno</td><td>Ver</td></tr>
+        <tr><td>Diseño de ticket</td><td class="ed">Editar</td><td class="ed">Editar</td><td>Ver</td></tr>
+        <tr><td>Configuración general</td><td class="ed">Editar</td><td class="no">Ninguno</td><td class="no">Ninguno</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g3 mt4">
+      <div class="card"><h4>Credenciales</h4><p>Contraseñas con hash robusto y sesiones JWT con expiración. Recuperación por correo.</p></div>
+      <div class="card"><h4>Aislamiento</h4><p>Toda consulta filtra por empresa. Un usuario no puede ver datos de otra cuenta.</p></div>
+      <div class="card"><h4>Licencia firmada</h4><p>Validación criptográfica Ed25519 contra el License Manager, con caché para operación offline.</p></div>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">13</span></footer>
+</section>
+
+<!-- ================= 12 · LICENCIAS ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>12</b> · Cuenta y licencias</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">12</div>
+      <div class="tt">
+        <div class="kicker">Cuenta, equipos y licencias</div>
+        <h1>Una cuenta, varias estaciones,<br><em>reglas claras</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La cuenta define quién es el titular y cuántos equipos pueden operar. La licencia se valida contra el central y se puede actualizar sin reinstalar la estación.</p>
+
+    <div class="two mb4">
+      <div class="card">
+        <h4>Estación titular</h4>
+        <p>La primera máquina que activa la cuenta queda como titular. Concentra la base de datos local y la API. Su equipo se identifica por hardware y no puede ser reemplazado por otra estación sin intervención del proveedor.</p>
+      </div>
+      <div class="card">
+        <h4>Estaciones operadoras</h4>
+        <p>Se conectan al titular por la red local. No tienen base de datos propia. Cada una consume una sesión y puede requerir aprobación del titular según el tipo de licencia.</p>
+      </div>
+    </div>
+
+    <h3 class="sub">DEMO y CENTRAL</h3>
+    <table class="tbl">
+      <thead><tr><th style="width:56mm">Alcance</th><th>DEMO</th><th>CENTRAL</th></tr></thead>
+      <tbody>
+        <tr><td>Boletos de pesaje</td><td>Hasta 10 (configurable por el proveedor)</td><td>Sin límite</td></tr>
+        <tr><td>Equipos de la cuenta</td><td>1</td><td>Ilimitados, sujetos a la licencia</td></tr>
+        <tr><td>Sesiones simultáneas</td><td>3</td><td>Según la licencia</td></tr>
+        <tr><td>Sincronización con el central</td><td>No</td><td>Sí</td></tr>
+        <tr><td>Aprobación de equipos</td><td>No aplica (un solo equipo)</td><td>Sí, la controla el titular</td></tr>
+        <tr><td>Módulos funcionales</td><td>Todos</td><td>Todos</td></tr>
+        <tr><td>Marca de agua por plan</td><td>No</td><td>No</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g3 mt4">
+      <div class="card"><h4>Llaves de activación</h4><p>El ADMIN emite una llave de un solo uso por usuario, con vigencia de 7 días por defecto (máximo 90). El instalador la exige para autorizar una nueva estación.</p></div>
+      <div class="card"><h4>Aprobación de equipos</h4><p>En cuentas CENTRAL, un equipo nuevo puede nacer pendiente. El titular lo aprueba o rechaza desde la pantalla de sesiones y le asigna rol.</p></div>
+      <div class="card"><h4>Actualización sin reinstalar</h4><p>El proveedor cambia el tier en el License Manager y la estación lo refleja en la siguiente validación, con sus nuevos límites.</p></div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">Lo importante para el distribuidor</div>
+      <p>La licencia no bloquea módulos por “plan Básico” o “Premium”: todos los módulos están disponibles. Los límites son de cupo (boletos, equipos, sesiones). Eso simplifica la venta y evita discusiones por funciones.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">14</span></footer>
+</section>
+
+<!-- ================= 13 · CONTINUIDAD ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>13</b> · Continuidad</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">13</div>
+      <div class="tt">
+        <div class="kicker">Notificaciones y respaldos</div>
+        <h1>Que nada se pierda<br><em>y nada se olvide</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La estación avisa, respalda y diagnostica. Son las funciones que el cliente agradece cuando algo sale mal y que el distribuidor agradece cuando tiene que dar soporte.</p>
+
+    <div class="two mb4">
+      <div class="card">
+        <h4>Centro de notificaciones</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Bandeja con avisos no leídos, leídos y archivados.</li>
+          <li>Contador visible en la barra superior.</li>
+          <li>Severidades para priorizar lo importante.</li>
+          <li>Acciones directas desde el aviso.</li>
+          <li>Recordatorios programados con recurrencia.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Recordatorios que sí suenan</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Texto libre, fecha, hora y repetición.</li>
+          <li>El programador del WServer los evalúa aunque la app esté cerrada.</li>
+          <li>Aviso nativo del sistema operativo.</li>
+          <li>Gestión exclusiva del ADMIN.</li>
+          <li>Historial de última ejecución.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Respaldos</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Respaldo automático por inactividad y manual.</li>
+          <li>Snapshot comprimido de catálogos y operación.</li>
+          <li>Descarga y restauración con confirmación.</li>
+          <li>Respaldo de seguridad previo a restaurar.</li>
+          <li>Rotación GFS: diario, semanal y mensual.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Diagnóstico y conexiones</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Estado de la API local y de la base de datos.</li>
+          <li>Estado de la licencia y de la sincronización.</li>
+          <li>Versión del sistema y del WServer.</li>
+          <li>URL de la API configurada en la estación.</li>
+          <li>Prueba de conexión y corrección de dirección.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="sub">Rotación de respaldos (GFS, valores por defecto)</h3>
+    <table class="tbl">
+      <thead><tr><th style="width:26mm">Capa</th><th style="width:22mm">Copias</th><th>Propósito</th></tr></thead>
+      <tbody>
+        <tr><td>Diario</td><td>7</td><td>Cubrir la operación de la última semana sin ocupar espacio excesivo.</td></tr>
+        <tr><td>Semanal</td><td>5</td><td>Conservar un punto de retorno por cada una de las últimas cinco semanas.</td></tr>
+        <tr><td>Mensual</td><td>12</td><td>Mantener un histórico anual para auditorías o recuperaciones tardías.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout mt4">
+      <div class="t">El argumento de continuidad</div>
+      <p>“Si se va la luz o se cae la red, sus datos están respaldados y su operación sigue en la estación.” La combinación de base local, respaldo automático y diagnóstico convierte una eventualidad en un incidente controlado. Antes de restaurar se crea un respaldo de seguridad y se pide confirmación explícita.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">15</span></footer>
+</section>
+
+<!-- ================= 14 · EXPERIENCIA ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>14</b> · Experiencia</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">14</div>
+      <div class="tt">
+        <div class="kicker">Configuración y experiencia</div>
+        <h1>Un sistema que se adapta<br><em>a la empresa y a su gente</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La configuración está pensada para que el ADMIN ajuste la identidad, el idioma y la comodidad visual sin tocar código ni reiniciar la operación.</p>
+
+    <div class="two mb4">
+      <div class="card">
+        <h4>Identidad de la empresa</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Nombre fiscal y comercial, RIF, dirección, teléfono y email.</li>
+          <li>Logo que aparece en tickets y reportes.</li>
+          <li>Formato de ticket: PDF o TXT.</li>
+          <li>Formato de reporte: Excel o PDF.</li>
+          <li>Carpeta de exportación de reportes.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Idioma y tipografía</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Español, inglés y portugués en toda la interfaz.</li>
+          <li>Tickets y reportes en el idioma de la empresa.</li>
+          <li>Cinco familias tipográficas para la interfaz.</li>
+          <li>Escala de texto de 0.85 a 1.40 sin reiniciar.</li>
+          <li>Iconos que acompañan la escala.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Comodidad del operador</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Tema claro y oscuro.</li>
+          <li>Pantalla completa y modo kiosco.</li>
+          <li>Atajos de teclado para las tareas frecuentes.</li>
+          <li>Paleta de comandos para navegar rápido.</li>
+          <li>Diseño adaptable a escritorio, tablet y móvil.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Acompañamiento</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Asistente de configuración inicial en el primer login del ADMIN.</li>
+          <li>Guía rápida de bienvenida de siete pasos.</li>
+          <li>Centro de ayuda y soporte desde la app.</li>
+          <li>Mensajes de error accionables.</li>
+          <li>Diagnóstico integrado para soporte remoto guiado.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="kpis mb4">
+      <div class="kpi"><div class="n">621</div><div class="l">claves de traducción por idioma</div></div>
+      <div class="kpi"><div class="n">5</div><div class="l">familias tipográficas</div></div>
+      <div class="kpi"><div class="n">2</div><div class="l">temas: claro y oscuro</div></div>
+      <div class="kpi"><div class="n">7</div><div class="l">pasos de la guía de bienvenida</div></div>
+    </div>
+
+    <div class="callout">
+      <div class="t">La bondad comercial</div>
+      <p>Un sistema en el idioma de la empresa y con la letra que el operador puede leer reduce el entrenamiento y los errores. La configuración de tipografía y tema no es cosmética: es accesibilidad operativa.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">16</span></footer>
+</section>
+
+<!-- ================= 15 · HARDWARE ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>15</b> · Hardware</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">15</div>
+      <div class="tt">
+        <div class="kicker">Compatibilidad de hardware</div>
+        <h1>Se integra con la báscula<br><em>que ya existe</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">BALANSOFT-WS no exige hardware propietario. Lee indicadores industriales por serial o TCP, con un parser multi-marca y configuración por equipo. Si la balanza ya está instalada, el sistema se adapta.</p>
+
+    <table class="tbl small">
+      <thead><tr><th style="width:52mm">Marca / familia</th><th>Protocolo típico</th><th style="width:36mm">Conexión</th></tr></thead>
+      <tbody>
+        <tr><td>Syneria / Ichiban</td><td>Continuo estilo Toledo/GSI o Yaohua “=”</td><td>RS-232 / USB / TCP</td></tr>
+        <tr><td>Yaohua</td><td>XK3190, modo PC continuo de 10 bytes</td><td>RS-232 / USB</td></tr>
+        <tr><td>Keli</td><td>Toledo clon o trama STX/ETX con checksum</td><td>RS-232 / USB</td></tr>
+        <tr><td>Torrey</td><td>LQ, salida continua estilo Toledo/GSI</td><td>RS-232 / USB</td></tr>
+        <tr><td>Rice Lake</td><td>120 / iQ / iQ+, Toledo o dirección adherida</td><td>RS-232 / TCP</td></tr>
+        <tr><td>Excel</td><td>Continuo configurable estilo Toledo</td><td>RS-232 / USB</td></tr>
+        <tr><td>Roccia</td><td>Según el indicador comercializado</td><td>RS-232 / USB</td></tr>
+        <tr><td>Toledo / GSI / MT-SICS</td><td>Tramas estándar de industria</td><td>RS-232 / TCP</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g3 mt4">
+      <div class="card">
+        <h4>Configuración por balanza</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Formato de trama: auto, JSON o ASCII.</li>
+          <li>Baudrate configurable.</li>
+          <li>Delimitador LF, CR, CRLF o STX/ETX.</li>
+          <li>Capacidad máxima para control de sobrecarga.</li>
+          <li>Prueba de balanza y peso en vivo.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Detección y sesión</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Descubrimiento de equipos disponibles.</li>
+          <li>Sesión viva por balanza para no reconectar en cada lectura.</li>
+          <li>Estabilidad por token o por repetición.</li>
+          <li>Reconexión con espera progresiva.</li>
+          <li>Cierre seguro de sockets y puertos.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Impresión</h4>
+        <ul class="ticks" style="margin-top:2mm">
+          <li>Térmica de 58 mm y 80 mm.</li>
+          <li>Matricial de formulario continuo.</li>
+          <li>Láser o inkjet para hoja carta/A4.</li>
+          <li>Salida PDF o TXT.</li>
+          <li>Impresión desde el sistema operativo.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">Verificación antes de cotizar</div>
+      <p>Confirme marca y modelo del indicador, tipo de salida (continua o por comando), conector (RS-232, USB, TCP), baudrate y delimitador. Las básculas que solo emiten por comando requieren activar el modo continuo o cambiar de indicador. Las celdas y junction boxes no hablan protocolo: se leen desde el indicador.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">17</span></footer>
+</section>
+
+<!-- ================= 16 · PLANES ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>16</b> · Planes</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">16</div>
+      <div class="tt">
+        <div class="kicker">Planes y alcance</div>
+        <h1>Dos formas de empezar,<br><em>una sola ruta de crecimiento</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La venta es simple: DEMO para probar con un equipo y CENTRAL para operar en serio con varias estaciones. Los módulos son los mismos; cambian los cupos y la sincronización.</p>
+
+    <div class="cmp mb4">
+      <div class="plan">
+        <div class="ph2"><h4>DEMO</h4><span class="sub2">Para evaluar</span></div>
+        <ul>
+          <li>Un solo equipo titular.</li>
+          <li>Hasta 3 sesiones simultáneas.</li>
+          <li>Hasta 10 boletos (configurable por el proveedor).</li>
+          <li>Todos los módulos disponibles.</li>
+          <li>Sin sincronización con el central.</li>
+          <li>Ideal para piloto, feria o prueba en planta.</li>
+        </ul>
+      </div>
+      <div class="plan hi">
+        <div class="ph2"><h4>CENTRAL</h4><span class="sub2">Para operar</span></div>
+        <ul>
+          <li>Equipos ilimitados, sujetos a licencia.</li>
+          <li>Sesiones según la licencia.</li>
+          <li>Boletos sin límite.</li>
+          <li>Sincronización con el central.</li>
+          <li>Aprobación de equipos por el titular.</li>
+          <li>Ideal para plantas, flotas y multiestación.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="sub">Ruta de crecimiento</h3>
+    <div class="path mb4">
+      <div class="st"><div class="n">01</div><h5>Demo</h5><p>Un equipo, 10 boletos, todos los módulos.</p></div>
+      <div class="st"><div class="n">02</div><h5>Piloto</h5><p>Operación real controlada con una báscula.</p></div>
+      <div class="st"><div class="n">03</div><h5>Central</h5><p>Varias estaciones y sincronización.</p></div>
+      <div class="st"><div class="n">04</div><h5>Expansión</h5><p>Más plantas y más equipos.</p></div>
+    </div>
+
+    <div class="grid g3">
+      <div class="card"><h4>Para cotizar</h4><p>Defina cantidad de estaciones, sesiones simultáneas, volumen de boletos y si requiere sincronización central.</p></div>
+      <div class="card"><h4>Para instalar</h4><p>El instalador define el rol SERVIDOR u OPERADOR y escribe la configuración de la estación.</p></div>
+      <div class="card"><h4>Para activar</h4><p>El ADMIN emite la llave de activación; el instalador la canjea y la estación recibe su cuenta.</p></div>
+    </div>
+
+    <div class="callout mt4">
+      <div class="t">Todos los módulos, sin recortes</div>
+      <p>BALANSOFT-WS no vende “funciones premium” por separado. La licencia define cupos, no módulos. El cliente que empieza con DEMO puede pasar a CENTRAL sin reinstalar y sin perder datos.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">18</span></footer>
+</section>
+
+<!-- ================= 17 · IMPLEMENTACIÓN ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>17</b> · Implementación</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">17</div>
+      <div class="tt">
+        <div class="kicker">Implementación</div>
+        <h1>De la caja a la operación,<br><em>sin misterio</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">La puesta en marcha sigue una secuencia probada. El objetivo es que la estación pese con datos reales en el menor tiempo posible y que el equipo sepa operarla.</p>
+
+    <div class="steps mb4">
+      <div class="step"><h5>Diagnóstico</h5><p>Báscula, red, equipos y catálogos.</p></div>
+      <div class="step"><h5>Instalación</h5><p>WServer, base y API local.</p></div>
+      <div class="step"><h5>Configuración</h5><p>Empresa, series y ticket.</p></div>
+      <div class="step"><h5>Catálogos</h5><p>Productos, vehículos y terceros.</p></div>
+      <div class="step"><h5>Entrenamiento</h5><p>Operadores y administración.</p></div>
+      <div class="step"><h5>Salida a vivo</h5><p>Acompañamiento y ajuste.</p></div>
+    </div>
+
+    <div class="two mb4">
+      <div>
+        <h3 class="sub">Requisitos de referencia</h3>
+        <table class="tbl small">
+          <tbody>
+            <tr><td style="width:26mm">Servidor local</td><td>PC de la estación titular, con PostgreSQL 15+ y WServer.</td></tr>
+            <tr><td>Red</td><td>LAN entre titular y estaciones; puerto de API accesible.</td></tr>
+            <tr><td>Báscula</td><td>Indicador con salida serial o TCP; cable y adaptador según equipo.</td></tr>
+            <tr><td>Impresora</td><td>Térmica, matricial o láser instalada en el sistema.</td></tr>
+            <tr><td>Energía</td><td>UPS recomendado para el titular y la báscula.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 class="sub">Capacitación</h3>
+        <table class="tbl small">
+          <thead><tr><th style="width:24mm">Sesión</th><th style="width:14mm">Duración</th><th>Contenido</th></tr></thead>
+          <tbody>
+            <tr><td>Operación</td><td>2 horas</td><td>Entrada, salida, peso en vivo, ticket, búsqueda, anulación y buenas prácticas.</td></tr>
+            <tr><td>Administración</td><td>2 horas</td><td>Catálogos, usuarios, matriz de permisos, series, reportes, respaldos y diagnóstico.</td></tr>
+          </tbody>
+        </table>
+        <div class="card accent mt3">
+          <h4>Tiempo de referencia</h4>
+          <p>Una instalación estándar puede quedar operativa en uno a tres días, según catálogos, hardware y cantidad de estaciones.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="sub">Checklist de aceptación</h3>
+    <div class="two" style="gap:4mm 8mm">
+      <ul class="ticks">
+        <li>El WServer inicia y la API local responde.</li>
+        <li>La base de datos se crea y aplica sus migraciones.</li>
+        <li>La báscula entrega peso en vivo en la pantalla.</li>
+        <li>Una entrada y una salida cierran un boleto con neto.</li>
+      </ul>
+      <ul class="ticks">
+        <li>El ticket PDF/TXT se genera con logo y datos fiscales.</li>
+        <li>El reporte diario se exporta a Excel y PDF.</li>
+        <li>El respaldo manual se crea y se descarga.</li>
+        <li>Usuarios, roles y permisos quedan configurados.</li>
+      </ul>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">19</span></footer>
+</section>
+
+<!-- ================= 18 · DIFERENCIACIÓN ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>18</b> · Diferenciación</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">18</div>
+      <div class="tt">
+        <div class="kicker">Por qué elegir BALANSOFT-WS</div>
+        <h1>Integración, trazabilidad<br><em>y continuidad</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">El mercado ofrece balanzas, lectores y programas sueltos. BALANSOFT-WS compite por integración, trazabilidad y continuidad: el cliente resuelve el ciclo completo con un solo proveedor.</p>
+
+    <div class="grid g4 mb4">
+      <div class="card slim"><h4><span class="n">01</span>Integración real</h4><p>Báscula, catálogo, inventario y ticket comparten la misma base.</p></div>
+      <div class="card slim"><h4><span class="n">02</span>Operación offline</h4><p>La estación no se detiene por internet. Clave en planta y zona rural.</p></div>
+      <div class="card slim"><h4><span class="n">03</span>Multi-marca</h4><p>Se adapta a la báscula instalada sin cambiar el indicador.</p></div>
+      <div class="card slim"><h4><span class="n">04</span>Trazabilidad</h4><p>Peso inmutable, usuario, báscula y fecha UTC con evidencia.</p></div>
+      <div class="card slim"><h4><span class="n">05</span>Multiestación</h4><p>Titular y operadores en red, con aprobación y control de sesiones.</p></div>
+      <div class="card slim"><h4><span class="n">06</span>Ticket profesional</h4><p>Cinco formatos, QR, logo y vista previa idéntica al documento final.</p></div>
+      <div class="card slim"><h4><span class="n">07</span>Seguridad</h4><p>Roles, permisos por módulo, aislamiento y licencia firmada Ed25519.</p></div>
+      <div class="card slim"><h4><span class="n">08</span>Soporte</h4><p>Panel del proveedor, diagnóstico integrado y respaldos.</p></div>
+    </div>
+
+    <h3 class="sub">Dónde duele y cómo ayuda</h3>
+    <table class="tbl small compact">
+      <thead><tr><th style="width:38mm">Sector</th><th>Dolor típico</th><th style="width:60mm">Cómo responde BALANSOFT-WS</th></tr></thead>
+      <tbody>
+        <tr><td>Agroindustria</td><td>Recepción de materia prima con planillas y demoras.</td><td>Pesaje rápido, ticket y Kardex de ingreso automático.</td></tr>
+        <tr><td>Molinos y balanceados</td><td>Inventario que no cuadra con las salidas.</td><td>Movimiento 60 por despacho y reportes por producto.</td></tr>
+        <tr><td>Puertos y terminales</td><td>Alto volumen y necesidad de evidencia.</td><td>Multiestación, auditoría y reportes por transportista.</td></tr>
+        <tr><td>Cemento y áridos</td><td>Control de sobrecarga y despacho.</td><td>Capacidad máxima, peso en vivo y ticket con neto.</td></tr>
+        <tr><td>Reciclaje</td><td>Compras a terceros y trazabilidad.</td><td>Terceros, productos, Kardex y reportes por proveedor.</td></tr>
+        <tr><td>Químicos y fertilizantes</td><td>Densidad, litros y unidades.</td><td>Datos adicionales y conversiones por producto.</td></tr>
+        <tr><td>Alimentos y bebidas</td><td>Control de recepción y despacho.</td><td>Entrada/salida, fotos y auditoría de cambios.</td></tr>
+        <tr><td>Transporte de carga</td><td>Viajes y toneladas por placa.</td><td>Reporte por vehículo y por transportista.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout mt4">
+      <div class="t">El retorno que se puede prometer</div>
+      <p>Menos tiempo por camión, menos errores de transcripción, menos diferencias de inventario y menos discusiones sin evidencia. No prometemos un porcentaje: prometemos control verificable desde el primer día.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">20</span></footer>
+</section>
+
+<!-- ================= 19 · KIT DE VENTA ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>19</b> · Herramientas de venta</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:2.6mm">
+      <div class="big">19</div>
+      <div class="tt">
+        <div class="kicker">Kit para el distribuidor</div>
+        <h1>Una demostración<br><em>no es recorrer menús</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:2.8mm">Es hacer que el cliente se vea operando. Guion de 15 minutos y preguntas de calificación.</p>
+
+    <div class="two mb4">
+      <div>
+        <h3 class="sub">Guion de demostración · 15 minutos</h3>
+        <div class="path" style="grid-template-columns:1fr;gap:0">
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0 0 1mm 3mm;"><h5 style="margin-top:0">Minuto 0–2 · Contexto</h5><p>Pregunte cuántos camiones pesa al día y cómo registra hoy.</p></div>
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0 0 1mm 3mm;"><h5 style="margin-top:0">Minuto 2–5 · Entrada</h5><p>Cree un boleto con placa, producto y peso en vivo.</p></div>
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0 0 1mm 3mm;"><h5 style="margin-top:0">Minuto 5–8 · Salida y neto</h5><p>Cierre el ciclo y muestre el cálculo.</p></div>
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0 0 1mm 3mm;"><h5 style="margin-top:0">Minuto 8–11 · Ticket</h5><p>Genere el PDF, muestre la vista previa y el formato.</p></div>
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0 0 1mm 3mm;"><h5 style="margin-top:0">Minuto 11–13 · Kardex y reporte</h5><p>Enseñe el movimiento y exporte el día.</p></div>
+          <div class="st" style="border-top:none;border-left:2px solid var(--accent);padding:0;"><h5 style="margin-top:0">Minuto 13–15 · Auditoría y cierre</h5><p>Muestre el registro y proponga el piloto.</p></div>
+        </div>
+      </div>
+      <div>
+        <h3 class="sub">Preguntas de calificación</h3>
+        <ul class="ticks">
+          <li>¿Cuántos camiones/toneladas mueve al día?</li>
+          <li>¿Cuántas básculas y de qué marca/modelo?</li>
+          <li>¿Cómo registra hoy entrada, salida y ticket?</li>
+          <li>¿Lleva inventario por almacén o por producto?</li>
+          <li>¿Cuántas personas operan y quién administra?</li>
+          <li>¿Necesita varias estaciones o una sola?</li>
+          <li>¿Tiene internet estable en la caseta?</li>
+          <li>¿Recibe auditorías o clientes que exigen evidencia?</li>
+          <li>¿Qué reporte pide gerencia cada mes?</li>
+          <li>¿Cuál es el costo de un error de peso o de un boleto perdido?</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="sub">Manejo de objeciones</h3>
+    <table class="obj compact">
+      <thead><tr><th>Objeción</th><th>Respuesta sugerida</th></tr></thead>
+      <tbody>
+        <tr><td>“Ya tengo una báscula.”</td><td>Perfecto: BALANSOFT-WS se integra con su indicador. No tiene que cambiar el equipo; validamos protocolo y configuración.</td></tr>
+        <tr><td>“No tengo internet en la caseta.”</td><td>No es un requisito para operar. La estación trabaja local y sincroniza cuando haya enlace.</td></tr>
+        <tr><td>“Es caro.”</td><td>Compárelo con el costo de un boleto perdido, una diferencia de inventario o una auditoría sin evidencia. El piloto permite medirlo.</td></tr>
+        <tr><td>“Mi gente no sabe de sistemas.”</td><td>La pantalla de pesaje está pensada para operación: elegir, capturar, imprimir. Incluye guía de bienvenida y capacitación.</td></tr>
+        <tr><td>“¿Y si se cae la computadora?”</td><td>Hay respaldo automático, respaldo manual y restauración con respaldo de seguridad previo. El diagnóstico avisa a tiempo.</td></tr>
+        <tr><td>“¿Puedo empezar pequeño?”</td><td>Sí. DEMO permite probar con un equipo y todos los módulos; luego se pasa a CENTRAL sin reinstalar.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g3 mt4">
+      <div class="card"><h4>Señales de oportunidad</h4><p>Planillas manuales, varias personas anotando, inventario que no cuadra, reportes tardíos y auditorías frecuentes.</p></div>
+      <div class="card"><h4>Qué llevar a la visita</h4><p>Laptop con demo, este dossier, checklist de hardware y una hoja de cálculo de volumen diario.</p></div>
+      <div class="card"><h4>Cierre natural</h4><p>Proponer un piloto de una semana con una báscula y un turno, midiendo tiempo por camión y errores.</p></div>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">21</span></footer>
+</section>
+
+<!-- ================= 20 · FAQ ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="brand"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+    <div class="meta"><b>20</b> · Preguntas frecuentes</div>
+  </header>
+  <div class="content">
+    <div class="opener" style="margin-bottom:3.6mm">
+      <div class="big">20</div>
+      <div class="tt">
+        <div class="kicker">Preguntas frecuentes</div>
+        <h1>Lo que suelen preguntar<br><em>antes de comprar</em></h1>
+      </div>
+    </div>
+    <p class="lead" style="margin-bottom:4mm">Respuestas cortas para una conversación comercial. Si la pregunta técnica excede este nivel, escale a soporte con el checklist de hardware.</p>
+
+    <div class="qa">
+      <div class="q2"><h4>¿Funciona sin internet?</h4><p>Sí. La estación titular opera con su base local. La sincronización con el central se reanuda cuando el enlace vuelve.</p></div>
+      <div class="q2"><h4>¿Sirve con mi báscula?</h4><p>Probablemente. Soportamos serial y TCP, con parser multi-marca. Confirme marca, modelo y salida continua.</p></div>
+      <div class="q2"><h4>¿Puedo tener varias estaciones?</h4><p>Sí, con licencia CENTRAL. Una titular y varias operadoras en la misma red, con aprobación de equipos.</p></div>
+      <div class="q2"><h4>¿Cuántos usuarios puede tener?</h4><p>DEMO limita a un usuario y tres sesiones. CENTRAL depende de la licencia; la matriz de permisos permite crear los perfiles necesarios.</p></div>
+      <div class="q2"><h4>¿Dónde se guardan los datos?</h4><p>En la base local de la estación titular. El cliente conserva el control y puede descargar respaldos comprimidos.</p></div>
+      <div class="q2"><h4>¿Se puede cambiar el ticket?</h4><p>Sí. Logo, título, formato, tamaño, campos, QR y copias se configuran desde Diseño de ticket.</p></div>
+      <div class="q2"><h4>¿Qué pasa si me equivoco al pesar?</h4><p>El peso capturado no se edita. Los datos complementarios se corrigen con motivo y auditoría; el boleto puede anularse con contra-asiento.</p></div>
+      <div class="q2"><h4>¿Hay marca de agua en DEMO?</h4><p>No. El ticket no lleva marca por plan. Solo el boleto anulado lleva la marca ANULADO.</p></div>
+      <div class="q2"><h4>¿Cómo paso de DEMO a CENTRAL?</h4><p>El proveedor actualiza el tier en el License Manager. La estación lo refleja en la siguiente validación, sin reinstalar.</p></div>
+      <div class="q2"><h4>¿Quién da soporte?</h4><p>El distribuidor es la primera línea. BALANSOFT acompaña con el panel del proveedor, diagnóstico y escalamiento técnico.</p></div>
+      <div class="q2"><h4>¿Puedo importar mis catálogos?</h4><p>Los catálogos se cargan desde la aplicación y quedan disponibles para todas las estaciones de la cuenta.</p></div>
+      <div class="q2"><h4>¿Qué pasa si se cae la titular?</h4><p>Se restaura el respaldo en el equipo de reemplazo. El cliente conserva la base y los archivos de tickets.</p></div>
+    </div>
+
+    <div class="callout mt5">
+      <div class="t">Una pregunta que conviene hacer siempre</div>
+      <p>“¿Qué pasa hoy cuando un boleto se pierde o un peso se discute?” La respuesta suele abrir la venta mejor que cualquier lista de funciones.</p>
+    </div>
+  </div>
+  <footer class="pf"><span>BALANSOFT-WS · Dossier de producto para distribuidores</span><span class="pnum">22</span></footer>
+</section>
+
+<!-- ================= 21 · CIERRE ================= -->
+<section class="page dark">
+  <div class="closing">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div class="wordmark"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+      <div class="mono" style="font-size:6.4pt;letter-spacing:.26em;text-transform:uppercase;color:#7C8CA3;text-align:right">
+        21 · Siguiente paso
+      </div>
+    </div>
+
+    <div style="margin-top:26mm">
+      <div class="mono" style="font-size:6.8pt;letter-spacing:.3em;text-transform:uppercase;color:#FDE68A;margin-bottom:5mm">
+        Hablemos de su operación
+      </div>
+      <h1>Pesemos su operación.<em>Después vendemos el sistema.</em></h1>
+      <p style="margin-top:7mm">La mejor demostración es un camión real, una báscula real y un ticket real. Coordinemos una sesión de 30 minutos con datos de su planta y salgamos de ella con una propuesta concreta.</p>
+    </div>
+
+    <div class="box" style="margin-top:10mm">
+      <div class="grid g3" style="gap:6mm">
+        <div>
+          <div class="mono" style="font-size:6.2pt;letter-spacing:.2em;text-transform:uppercase;color:#FDE68A;margin-bottom:1.6mm">01 · Diagnóstico</div>
+          <p style="font-size:8.8pt;line-height:1.45;color:#C6D2E0">Revisamos báscula, red, volumen y proceso actual.</p>
+        </div>
+        <div>
+          <div class="mono" style="font-size:6.2pt;letter-spacing:.2em;text-transform:uppercase;color:#FDE68A;margin-bottom:1.6mm">02 · Demo</div>
+          <p style="font-size:8.8pt;line-height:1.45;color:#C6D2E0">Pesamos un caso real y mostramos ticket, Kardex y reporte.</p>
+        </div>
+        <div>
+          <div class="mono" style="font-size:6.2pt;letter-spacing:.2em;text-transform:uppercase;color:#FDE68A;margin-bottom:1.6mm">03 · Propuesta</div>
+          <p style="font-size:8.8pt;line-height:1.45;color:#C6D2E0">Definimos alcance, equipos, licencia e implementación.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto;border-top:1px solid rgba(148,163,184,.28);padding-top:4mm;display:flex;justify-content:space-between;align-items:flex-end;gap:8mm">
+      <div>
+        <div class="mono" style="font-size:6.2pt;letter-spacing:.24em;text-transform:uppercase;color:#FDE68A;margin-bottom:1.4mm">Contacto comercial</div>
+        <div style="font-size:9.4pt;color:#fff;font-weight:600">Solicítelo a su distribuidor autorizado</div>
+        <div style="font-size:7.6pt;color:#7C8CA3;margin-top:1mm">balansoft.com.ve · Dossier de producto v3.28 · Octubre 2026</div>
+      </div>
+      <div class="mono" style="font-size:5.8pt;line-height:1.6;letter-spacing:.04em;color:#64748B;max-width:88mm;text-align:right">
+        Documento comercial para distribuidores autorizados. Las funcionalidades y especificaciones corresponden a la versión 3.28 y pueden variar según licencia, configuración y hardware. Las marcas citadas pertenecen a sus titulares y se mencionan solo como referencia de compatibilidad.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MORE -->
+
+</body>
+</html>

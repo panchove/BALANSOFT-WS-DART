@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>BALANSOFT-WS — Brochure</title>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<style>
+@font-face{
+  font-family:'BRMF';
+  src:url('assets/fonts/BLADRMF_.TTF') format('truetype');
+  font-weight:normal;font-style:normal;
+}
+:root{
+  --bg:#0F172A;
+  --card:#1E293B;
+  --line:#334155;
+  --accent:#FACC15;
+  --text:#FFFFFF;
+  --muted:#94A3B8;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:#0F172A;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{font-family:'Inter',sans-serif;color:var(--text);}
+
+@page{size:140mm 216mm;margin:0;}
+
+.page{
+  position:relative;
+  width:140mm;height:216mm;
+  overflow:hidden;
+  background:var(--bg);
+  page-break-after:always;
+}
+.page:last-child{page-break-after:auto;}
+.page::before{
+  content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(148,163,184,.055) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(148,163,184,.055) 1px,transparent 1px);
+  background-size:8mm 8mm;
+  pointer-events:none;
+}
+.pad{position:relative;padding:8mm;height:100%;display:flex;flex-direction:column;z-index:1;}
+
+/* ---------- wordmark ---------- */
+.wordmark{font-family:'BRMF',sans-serif;color:var(--accent);line-height:.86;white-space:nowrap;}
+.wordmark .wm-main{font-size:43pt;letter-spacing:.015em;}
+.wordmark .wm-ws{font-size:17pt;margin-left:.10em;}
+.wordmark.sm .wm-main{font-size:16pt;}
+.wordmark.sm .wm-ws{font-size:7pt;}
+
+/* ---------- header ---------- */
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;}
+.top .tag{text-align:right;padding-top:1mm;}
+.top .tag .k{font-family:'Roboto Mono',monospace;font-size:6.2pt;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--accent);}
+.top .tag .v{font-size:7.4pt;color:var(--muted);margin-top:1.2mm;max-width:40mm;line-height:1.35;}
+
+.subtitle{
+  margin-top:4mm;font-size:9.6pt;color:var(--muted);letter-spacing:.01em;
+  border-left:2px solid var(--accent);padding-left:3mm;line-height:1.35;
+}
+.rule{height:1px;background:linear-gradient(90deg,var(--accent),rgba(250,204,21,.05));margin:5mm 0 0;}
+
+/* ---------- quote ---------- */
+.quote{
+  margin-top:6mm;background:#1E293B;
+  border:1px solid var(--line);border-left:3px solid var(--accent);
+  padding:4.2mm 5mm;border-radius:1.5mm;
+}
+.quote .q{font-size:9.2pt;line-height:1.5;color:#E2E8F0;}
+.quote .q b{color:var(--accent);font-weight:700;}
+
+/* ---------- sections ---------- */
+.sec{margin-top:6.5mm;}
+.sec-head{display:flex;align-items:baseline;gap:3mm;margin-bottom:3.2mm;}
+.sec-head .num{
+  font-family:'Roboto Mono',monospace;font-size:7pt;letter-spacing:.14em;color:var(--accent);
+  border:1px solid rgba(250,204,21,.45);border-radius:1mm;padding:.6mm 1.6mm;
+}
+.sec-head h2{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14.5pt;
+  letter-spacing:.055em;text-transform:uppercase;line-height:1;
+}
+
+/* ---------- checks ---------- */
+.checks{display:flex;flex-direction:column;gap:2.1mm;}
+.chk{display:flex;gap:2.6mm;align-items:flex-start;font-size:8.1pt;line-height:1.38;color:#CBD5E1;}
+.chk .ic{
+  flex:0 0 auto;width:3.6mm;height:3.6mm;margin-top:.35mm;border-radius:50%;
+  background:transparent;border:1px solid var(--accent);
+  color:var(--accent);font-size:6.2pt;font-weight:800;display:flex;align-items:center;justify-content:center;
+  font-family:'Roboto Mono',monospace;
+}
+
+/* ---------- bondades cards ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:3mm;}
+.bond{
+  background:#1E293B;
+  border:1px solid var(--line);border-radius:1.6mm;padding:3mm 3.2mm;
+  display:flex;gap:2.6mm;
+}
+.bond .idx{
+  font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15pt;line-height:.9;
+  color:var(--accent);opacity:.92;min-width:5mm;
+}
+.bond h4{font-size:8.2pt;font-weight:700;letter-spacing:.005em;line-height:1.2;margin-bottom:1.1mm;}
+.bond p{font-size:7.2pt;line-height:1.34;color:var(--muted);}
+
+/* ---------- sector cards ---------- */
+.sector{
+  background:#1E293B;border:1px solid var(--line);border-radius:1.6mm;
+  padding:2.8mm 3mm;
+}
+.sector h4{font-size:8pt;color:var(--accent);font-weight:700;margin-bottom:1mm;letter-spacing:.02em;}
+.sector p{font-size:6.9pt;line-height:1.3;color:var(--muted);}
+
+/* ---------- key data ---------- */
+.data{
+  border:1px solid var(--line);border-radius:1.6mm;overflow:hidden;
+  background:#1E293B;
+}
+.data .row{display:flex;justify-content:space-between;gap:4mm;padding:2.2mm 3mm;
+  border-bottom:1px solid rgba(51,65,85,.65);}
+.data .row:last-child{border-bottom:none;}
+.data .row .k{font-family:'Roboto Mono',monospace;font-size:6.4pt;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);padding-top:.5mm;}
+.data .row .v{font-size:7.6pt;color:#E2E8F0;text-align:right;line-height:1.3;}
+
+/* ---------- distributor ---------- */
+.dist{
+  margin-top:auto;border:1px solid var(--line);border-radius:2mm;
+  background:#1E293B;
+  padding:4mm 4mm 3.4mm;text-align:center;
+}
+.dist .k{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;
+  letter-spacing:.28em;color:var(--accent);text-transform:uppercase;}
+.dist .logo{
+  margin:2.6mm auto 2mm;background:#fff;border-radius:1.6mm;padding:2.2mm 4mm;
+  display:inline-block;
+}
+.dist .logo img{display:block;height:9.5mm;width:auto;}
+.dist .rif{font-family:'Roboto Mono',monospace;font-size:7.4pt;letter-spacing:.18em;
+  color:#E2E8F0;background:#0F172A;border:1px solid var(--line);
+  border-radius:1mm;padding:1.1mm 2.4mm;display:inline-block;}
+
+/* ---------- footer ---------- */
+.foot{
+  margin-top:4mm;display:flex;justify-content:space-between;align-items:center;
+  border-top:1px solid rgba(51,65,85,.8);padding-top:2.2mm;
+  font-family:'Roboto Mono',monospace;font-size:5.9pt;letter-spacing:.14em;
+  text-transform:uppercase;color:#64748B;
+}
+.foot .pg{color:var(--accent);}
+
+/* ---------- ajuste fino página 2 ---------- */
+.p2 .sec{margin-top:4.4mm;}
+.p2 .sec-head{margin-bottom:2.6mm;}
+.p2 .bond{padding:2.5mm 2.9mm;}
+.p2 .bond h4{font-size:7.9pt;margin-bottom:.9mm;}
+.p2 .bond p{font-size:6.9pt;line-height:1.3;}
+.p2 .sector{padding:2.4mm 2.8mm;}
+.p2 .sector h4{font-size:7.7pt;margin-bottom:.8mm;}
+.p2 .sector p{font-size:6.6pt;}
+.p2 .data .row{padding:1.9mm 3mm;}
+.p2 .dist{padding:3mm 3.4mm 2.6mm;}
+.p2 .dist .logo{margin:2mm auto 1.8mm;padding:1.8mm 3.4mm;}
+.p2 .dist .logo img{height:8.4mm;}
+.p2 .foot{margin-top:3mm;}
+</style>
+</head>
+<body>
+
+<!-- ============================ PÁGINA 1 ============================ -->
+<section class="page">
+  <div class="pad">
+
+    <div class="top">
+      <div class="wordmark"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+      <div class="tag">
+        <div class="k">Software industrial</div>
+        <div class="v">Gestión de pesaje<br>multi-empresa</div>
+      </div>
+    </div>
+
+    <div class="subtitle">Sistema estación pesaje industrial multi-empresa</div>
+    <div class="rule"></div>
+
+    <div class="quote">
+      <p class="q">El cliente no compra un lector de báscula: compra <b>tranquilidad</b> para cerrar el mes, responder a una auditoría y saber qué pasó con cada camión.</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="num">01</span><h2>¿Por qué balnsoft-ws?</h2></div>
+      <div class="checks">
+        <div class="chk"><span class="ic">✓</span><span>Boleto único, numerado y trazable por cada entrada y salida.</span></div>
+        <div class="chk"><span class="ic">✓</span><span>Kardex automático: cada pesaje mueve el inventario del almacén.</span></div>
+        <div class="chk"><span class="ic">✓</span><span>Reportes diarios, mensuales y comparativos exportables.</span></div>
+        <div class="chk"><span class="ic">✓</span><span>Trazabilidad completa: usuario, IP, fecha UTC, ediciones y anulaciones con evidencia.</span></div>
+        <div class="chk"><span class="ic">✓</span><span>Operación local que sigue funcionando sin conexión a internet.</span></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="num">02</span><h2>10 bondades que venden solas</h2></div>
+      <div class="grid2">
+        <div class="bond"><div class="idx">01</div><div><h4>Opera sin internet</h4><p>Trabaja con base local; si falla la red, el pesaje no se detiene.</p></div></div>
+        <div class="bond"><div class="idx">02</div><div><h4>Sistema punta a punta</h4><p>Catálogos, pesaje, inventario, ticket y auditoría integrados.</p></div></div>
+        <div class="bond"><div class="idx">03</div><div><h4>Básculas reales</h4><p>Compatibilidad RS-232/USB y TCP/IP multi-marca.</p></div></div>
+        <div class="bond"><div class="idx">04</div><div><h4>Ticket configurable</h4><p>Rollos 58/80 mm, media carta, carta y PDF/TXT.</p></div></div>
+        <div class="bond"><div class="idx">05</div><div><h4>Trazabilidad metrológica</h4><p>El peso capturado es inalterable; registro de auditoría.</p></div></div>
+        <div class="bond"><div class="idx">06</div><div><h4>Kardex automático</h4><p>Movimiento 10 (Ingreso) y Movimiento 60 (Despacho).</p></div></div>
+      </div>
+    </div>
+
+    <div class="foot"><span>baLnsoft-ws · pesaje industrial</span><span class="pg">01 / 02</span></div>
+  </div>
+</section>
+
+<!-- ============================ PÁGINA 2 ============================ -->
+<section class="page p2">
+  <div class="pad">
+
+    <div class="top">
+      <div class="wordmark sm"><span class="wm-main">baLnsoft</span><span class="wm-ws">ws</span></div>
+      <div class="tag">
+        <div class="k">Continuidad</div>
+        <div class="v">Bondades 07—10<br>Sectores y datos clave</div>
+      </div>
+    </div>
+    <div class="rule" style="margin-top:4mm"></div>
+
+    <div class="sec" style="margin-top:5mm">
+      <div class="sec-head"><span class="num">02</span><h2>Bondades 07 — 10</h2></div>
+      <div class="grid2">
+        <div class="bond"><div class="idx">07</div><div><h4>Reportes para decidir</h4><p>Diario, mensual, por vehículo, transportista y Kardex en Excel/PDF.</p></div></div>
+        <div class="bond"><div class="idx">08</div><div><h4>Seguridad por roles</h4><p>Matriz de permisos (ADMIN / OPERADOR / AUDITOR).</p></div></div>
+        <div class="bond"><div class="idx">09</div><div><h4>Escalable</h4><p>De versión DEMO a CENTRAL multi-estación sin reinstalar.</p></div></div>
+        <div class="bond"><div class="idx">10</div><div><h4>Implementación rápida</h4><p>Puesta en marcha en 1 a 3 días.</p></div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="num">03</span><h2>Casos de uso por sector</h2></div>
+      <div class="grid2">
+        <div class="sector"><h4>Agroindustria</h4><p>Recepción de materia prima con planillas y demoras.</p></div>
+        <div class="sector"><h4>Molinos</h4><p>Inventario que no cuadra con las salidas.</p></div>
+        <div class="sector"><h4>Puertos y terminales</h4><p>Alto volumen y necesidad de evidencia.</p></div>
+        <div class="sector"><h4>Cemento y áridos</h4><p>Control de sobrecarga y despacho.</p></div>
+        <div class="sector"><h4>Reciclaje</h4><p>Compras a terceros y trazabilidad.</p></div>
+        <div class="sector"><h4>Alimentos y carga</h4><p>Control de recepción, despacho y flota.</p></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="num">04</span><h2>Datos clave</h2></div>
+      <div class="data">
+        <div class="row"><span class="k">Idiomas</span><span class="v">Español · Inglés · Portugués</span></div>
+        <div class="row"><span class="k">Hardware</span><span class="v">Toledo, Yaohua, Rice Lake, Torrey, Keli, Excel y más</span></div>
+        <div class="row"><span class="k">Formatos de ticket</span><span class="v">Rollos 58/80 mm, media carta, carta, PDF y TXT</span></div>
+      </div>
+    </div>
+
+    <div class="dist">
+      <div class="k">Distribuidor autorizado</div>
+      <div class="logo"><img src="assets/logo_ozahl.jpeg" alt="OZAHL"></div>
+      <div><span class="rif">RIF J-412426907</span></div>
+    </div>
+
+    <div class="foot"><span>baLnsoft-ws · pesaje industrial</span><span class="pg">02 / 02</span></div>
+  </div>
+</section>
+
+</body>
+</html>
