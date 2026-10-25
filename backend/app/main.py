@@ -9,17 +9,22 @@ from datetime import UTC, datetime
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from app.api.v1.endpoints import API_ROUTERS, SERVER_ROUTERS
 from app.api.v1.endpoints.auth import _MAX_INTENTOS_CENTRAL
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.db_engine import registrar_manejadores_bd
 from app.core.logging_config import configurar_logging
 from app.core.monitoring import MetricsMiddleware, metrics_text
 from app.core.notification_scheduler import get_notification_scheduler
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.scale_session import get_scale_session_manager
+from app.models import VinculoBalanzaIndicador
+from app.services.semaforo_service import get_semaforo_controller
+from app.services.vinculo_service import VINCULO_MGR
 
 log = configurar_logging(
     nivel=settings.log_level,
@@ -53,8 +58,30 @@ async def lifespan(app: FastAPI):
     # la app Flutter, así que él dibuja los avisos del SO cuando corresponde.
     programador = get_notification_scheduler()
     programador.iniciar()
+    # Semáforos con control automático: el vigilante decide el LED según el peso
+    # en vivo de la báscula vinculada (docs/SEMAFORO.md).
+    await get_semaforo_controller().asegurar_activos()
+    # Restauración de vínculos Báscula -> Indicador (sobreviven a reinicios)
+    try:
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(
+                select(VinculoBalanzaIndicador).where(VinculoBalanzaIndicador.activo == True)
+            )
+            for vinc in res.scalars().all():
+                try:
+                    await VINCULO_MGR.iniciar(db, vinc.id_empresa, vinc)
+                except Exception as exc:
+                    log.debug("No se pudo restaurar vínculo %s: %s", vinc.id_vinculo, exc)
+            log.info("Vínculos activos restaurados")
+    except Exception as exc:
+        log.debug("Error restaurando vínculos: %s", exc)
     yield
     await programador.detener()
+    await get_semaforo_controller().detener_todas()
+    try:
+        await VINCULO_MGR.detener_todos()
+    except Exception:
+        pass
     # Emparejamiento: cerrar las conexiones persistentes con las balanzas.
     await get_scale_session_manager().cerrar_todas()
     log.info("Balansoft-WS API detenida")

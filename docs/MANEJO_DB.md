@@ -1,7 +1,7 @@
 # BALANSOFT-WS: Manejo de Base de Datos (Arquitectura Server/Local)
 
-**Versión:** 2.7
-**Fecha:** 2026-10-14
+**Versión:** 2.8
+**Fecha:** 2026-10-19
 **Estado:** Vigente
 **Alcance:** Arquitectura de dos bases de datos (server/local), setup de desarrollo, flujo de login, modelo de cuenta y dispositivos (§13), estado actual y roadmap. **Los instaladores de la app (Linux/Windows/Android) quedan fuera de alcance por ahora.**
 **Fuente:** `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` (schemas canónicos de BD)
@@ -218,7 +218,7 @@ El programador residente del backend local (`app/core/notification_scheduler.py`
 - **Windows**: toast vía PowerShell; con icono usa la plantilla `ToastGeneric` + `<image placement="appLogoOverride">` (la antigua `ToastText02` no admite logo). El texto va por nodos DOM (`CreateTextNode`), nunca interpolado en el XML.
 - **Bundles**: el icono viaja dentro del binario one-file (`WServer.spec` → `assets/balansoft-ws.png`), por lo que **una estación con un WServer anterior al subsistema de notificaciones no avisa ni aplica la migración `023`**: hay que recompilar (`./scripts/build_wserver.sh`) y redistribuir.
 
-> **Tablas del esquema local (30, verificadas contra el DDL: `balansoft-ws-local.sql` + `migrations/*.sql`):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `categorias`, `almacenes`, `balanzas`, `boletos_pesaje`, `boletos_ediciones`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `permisos_acceso`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`, `llaves_activacion`, `password_reset_tokens`.
+> **Tablas del esquema local (34, verificadas contra el DDL: `balansoft-ws-local.sql` + `migrations/*.sql`):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `categorias`, `almacenes`, `conceptos_inventario`, `balanzas`, `indicadores`, `semaforos`, `camaras`, `boletos_pesaje`, `boletos_ediciones`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `permisos_acceso`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`, `llaves_activacion`, `password_reset_tokens`.
 
 ### 6.3 Columnas reservadas (sin semántica definida — no usar)
 
@@ -277,7 +277,7 @@ PGPASSWORD=7767 psql -U sqlman -h localhost -d balansoft_ws_local -c "\dt"
 ./scripts/setup_db.sh aplicar-migraciones
 ```
 
-> El esquema canónico `balansoft-ws-local.sql` **ya incluye** las 26 tablas, así
+> El esquema canónico `balansoft-ws-local.sql` **ya incluye** las 29 tablas, así
 > que una BD recién creada (paso 2) queda al día. `aplicar-migraciones` es un
 > no-op idempotente sobre ella y solo actúa sobre bases antiguas.
 
@@ -685,7 +685,7 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 **Qué hace la estación con `motor=sqlserver` (modo degradado):**
 
-- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (29 tablas = 26 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 29 PK, 41 FK, 37 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 23 migraciones plegadas (`001.sql`…`023.sql`) → marca el caché en `aplicado`. Las migraciones **024+ aún no son dual-dialecto** (futuro).
+- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (35 tablas = 32 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 35 PK, 53 FK, 47 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 30 migraciones plegadas (`001.sql`…`030.sql`) → marca el caché en `aplicado`.
 - **`GET /api/v1/entorno`** añade la clave `"motor"`; la clave `"postgres"` **no se renombra** (contrato con la app Flutter) y su SQL por motor sale de `sql_conteo_tablas()`.
 - **Esquema ausente o servidor caído → HTTP 503, no 500**: `manejador_error_bd` clasifica el error (`42S02`/«invalid object name» → `codigo=esquema_mssql_pendiente`; SQLSTATE `08*` → `codigo=sqlserver_sin_conexion`) y cualquier otro error sube tal cual (500, idéntico al de hoy en PG). Antes de cada consulta `asegurar_esquema_listo` consulta `sys.tables`/`pg_tables` con caché (60 s mientras esté `pendiente`); **si esa consulta falla, la caché vuelve a su valor inicial antes de propagar**, para que un corte no deje un `pendiente` caduco (LOW-001).
 - **Sin drivers ODBC el WServer arranca igual (Opción B)**: `database._registrar_drivers_faltantes` **no lanza** — siembra el flag global `drivers_faltantes()` en `db_engine` y deja los engines en `None` (bind nominal, nunca usado porque el gate lanza antes). Cualquier endpoint de BD responde 503 con **`codigo=sqlserver_sin_drivers`** y el mensaje accionable (`MENSAJE_SIN_DRIVERS`: «uv sync --extra sqlserver» + «Microsoft ODBC Driver 18 for SQL Server»); `/api/v1/health` sigue en 200 para que la app Flutter pueda mostrar el aviso (el instalador no da rojo en el paso 8 por un extra cancelado). El flag se limpia con `reiniciar_estado_esquema()` (reinicio de la guardia).
@@ -696,10 +696,10 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 **Limitación de Fase 2 (residual):** la ruta del sync bidireccional y las migraciones post-022 sobre SQL Server aún no están validadas en E2E (el flujo transaccional de negocio sí: pesaje, series, reportes). **PostgreSQL sigue siendo el motor soportado en producción**; SQL Server es soporte de estación para entornos que lo exigen.
 
 **Tests:** suite T8 en `backend/tests/` con tres niveles (marcador `mssql`):
-- `test_sqlserver_tsql_n0.py` (11, **siempre corre**): anti-GO, conteos 27/27/37, guards idempotentes, `NVARCHAR≤255` en columnas indexadas y paridad de nombres de tablas contra `balansoft-ws-local.sql` (PG).
-- `test_sqlserver_mssql_n1.py` (2, requiere `MSSQL_TEST_URL_SYNC`): aplica el T-SQL a una BD dedicada, verifica 29/29/41 en `sys.*`, idempotencia (re-aplicación), siembra 23 migraciones sin duplicar y `asegurar_db` Fase 2 sobre BD nueva.
+- `test_sqlserver_tsql_n0.py` (13, **siempre corre**): anti-GO, conteos 35/35/53, guards idempotentes, `NVARCHAR≤255` en columnas indexadas y paridad de nombres de tablas contra `balansoft-ws-local.sql` (PG).
+- `test_sqlserver_mssql_n1.py` (2, requiere `MSSQL_TEST_URL_SYNC`): aplica el T-SQL a una BD dedicada, verifica 35/35/53 en `sys.*`, idempotencia (re-aplicación), siembra 29 migraciones sin duplicar y `asegurar_db` Fase 2 sobre BD nueva.
 - `test_sqlserver_mssql_n2.py` (1, requiere `MSSQL_TEST_URL_SYNC`): flujo funcional — serie activa `TA-` emite `TA-00000001…3` con `siguiente=4` (FOR UPDATE/UPDLOCK), `monthly` cuenta solo los `CERRADO` del mes y `peso_rango` distribuye buckets (regresión del error 8120) ignorando `ANULADO`.
-- Sin `MSSQL_TEST_URL_SYNC` (o sin SQL Server alcanzable) N1/N2 se **saltan**, no fallan → CI sin SQL Server queda verde (528 rápidos + 34 E2E). Ejecutar con: `MSSQL_TEST_URL_SYNC='mssql+pyodbc://…' uv run pytest -m mssql` (**3 tests**: N1 2 + N2 1); para los **14** completos (11 N0 + 2 N1 + 1 N2) correr los tres archivos `tests/test_sqlserver_tsql_n0.py tests/test_sqlserver_mssql_n1.py tests/test_sqlserver_mssql_n2.py`.
+- Sin `MSSQL_TEST_URL_SYNC` (o sin SQL Server alcanzable) N1/N2 se **saltan**, no fallan → CI sin SQL Server queda verde (1083 rápidos + 34 E2E). Ejecutar con: `MSSQL_TEST_URL_SYNC='mssql+pyodbc://…' uv run pytest -m mssql` (**3 tests**: N1 2 + N2 1); para los **16** completos (13 N0 + 2 N1 + 1 N2) correr los tres archivos `tests/test_sqlserver_tsql_n0.py tests/test_sqlserver_mssql_n1.py tests/test_sqlserver_mssql_n2.py`.
 
 ## 12. Documentos Relacionados
 
@@ -709,7 +709,8 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 | `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/operador) y preferencias persistidas |
 | `BALANZAS_SOPORTADAS.md` | Vigente | Matriz de compatibilidad de indicadores reales (Yaohua, Torrey, Keli, Rice Lake, Syneria/Ichiban, Excel) y configuración recomendada por marca |
 | `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
-| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (26 tablas) |
+| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (29 tablas) |
+| `SEMAFORO.md` | Vigente | Ciclo del semáforo de pesaje y su integración (canales, comandos, fases/luces y vigilante del backend) |
 | `ARCH.md` | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE` |
 | `PRD.md` | Requiere actualización | 1 empresa/máquina; licencia fuera de BD local |
 | `IMPLEMENTADO.md` | Requiere actualización | Tablas por rol; endpoints condicionales |

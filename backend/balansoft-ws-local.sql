@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS empresas (
     impresora_nombre     VARCHAR(255),
     impresora_host       VARCHAR(100),
     impresora_puerto     INTEGER,
+    -- Fotos de placa (migración 027): activa el bloque y lo hace obligatorio.
+    fotos_placa_activas      BOOLEAN NOT NULL DEFAULT FALSE,
+    fotos_placa_obligatorias BOOLEAN NOT NULL DEFAULT FALSE,
     -- Snapshot de la licencia (validada contra el servidor central en login)
     licencia_key     VARCHAR(255),
     licencia_tier    VARCHAR(20),
@@ -387,6 +390,232 @@ BEGIN
 END
 $$;
 
+CREATE TABLE IF NOT EXISTS indicadores (
+    id_indicador  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa    UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo        VARCHAR(20),
+    descripcion   VARCHAR(150) NOT NULL,
+    marca         VARCHAR(100),
+    modelo        VARCHAR(100),
+    activo        BOOLEAN NOT NULL DEFAULT TRUE,
+    is_simulado   BOOLEAN NOT NULL DEFAULT FALSE,
+    protocolo     VARCHAR(20) DEFAULT 'tcp',
+    puerto_com    VARCHAR(50),
+    ip_address    VARCHAR(45),
+    puerto_tcp    INTEGER,
+    formato_trama VARCHAR(10) NOT NULL DEFAULT 'auto',
+    baudrate      INTEGER NOT NULL DEFAULT 9600,
+    delimitador   VARCHAR(10),
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS indicadores_empresa_codigo_uk
+    ON indicadores (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
+
+-- Enlace opcional báscula → indicador (migración 028).
+ALTER TABLE balanzas
+    ADD COLUMN IF NOT EXISTS id_indicador UUID REFERENCES indicadores(id_indicador);
+CREATE INDEX IF NOT EXISTS balanzas_id_indicador_idx
+    ON balanzas (id_indicador);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_indicadores_formato_trama'
+    ) THEN
+        ALTER TABLE indicadores
+            ADD CONSTRAINT ck_indicadores_formato_trama
+            CHECK (formato_trama IN ('auto', 'json', 'ascii'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_indicadores_baudrate'
+    ) THEN
+        ALTER TABLE indicadores
+            ADD CONSTRAINT ck_indicadores_baudrate
+            CHECK (baudrate IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_indicadores_delimitador'
+    ) THEN
+        ALTER TABLE indicadores
+            ADD CONSTRAINT ck_indicadores_delimitador
+            CHECK (delimitador IS NULL OR delimitador IN ('lf', 'cr', 'crlf', 'stx_etx'));
+    END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS conceptos_inventario (
+    id_concepto     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa      UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo          VARCHAR(20),
+    nombre          VARCHAR(150) NOT NULL,
+    descripcion     VARCHAR(255),
+    tipo_movimiento VARCHAR(10),
+    activo          BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS conceptos_inventario_empresa_codigo_uk
+    ON conceptos_inventario (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
+
+-- Enlace opcional kardex → concepto (migración 029).
+ALTER TABLE kardex
+    ADD COLUMN IF NOT EXISTS id_concepto UUID REFERENCES conceptos_inventario(id_concepto);
+CREATE INDEX IF NOT EXISTS kardex_id_concepto_idx
+    ON kardex (id_concepto);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_conceptos_inventario_tipo'
+    ) THEN
+        ALTER TABLE conceptos_inventario
+            ADD CONSTRAINT ck_conceptos_inventario_tipo
+            CHECK (tipo_movimiento IS NULL OR tipo_movimiento IN ('ingreso', 'despacho', 'ajuste', 'ambos'));
+    END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS semaforos (
+    id_semaforo       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa        UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo            VARCHAR(20),
+    descripcion       VARCHAR(150) NOT NULL,
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    is_simulado       BOOLEAN NOT NULL DEFAULT FALSE,
+    protocolo         VARCHAR(20) NOT NULL DEFAULT 'http',
+    ip_address        VARCHAR(45),
+    puerto_tcp        INTEGER,
+    puerto_com        VARCHAR(50),
+    baudrate          INTEGER NOT NULL DEFAULT 9600,
+    id_balanza        UUID REFERENCES balanzas(id_balanza),
+    control_automatico BOOLEAN NOT NULL DEFAULT FALSE,
+    umbral_cero_kg    NUMERIC(10,2) NOT NULL DEFAULT 5.0,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS semaforos_empresa_codigo_uk
+    ON semaforos (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_semaforos_protocolo'
+    ) THEN
+        ALTER TABLE semaforos
+            ADD CONSTRAINT ck_semaforos_protocolo
+            CHECK (protocolo IN ('http', 'serial'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_semaforos_baudrate'
+    ) THEN
+        ALTER TABLE semaforos
+            ADD CONSTRAINT ck_semaforos_baudrate
+            CHECK (baudrate IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
+    END IF;
+END
+$$;
+
+-- Cámaras de captura de placa (migración 027 + 030). origen 'ip' descarga el
+-- snapshot HTTP/JPEG de url_snapshot; origen 'local' captura el frame de
+-- `dispositivo` (USB/integrada). ubicacion declara si la cámara sirve en la
+-- entrada, la salida o ambas.
+CREATE TABLE IF NOT EXISTS camaras (
+    id_camara     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa    UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo        VARCHAR(20),
+    descripcion   VARCHAR(150) NOT NULL,
+    marca         VARCHAR(100),
+    modelo        VARCHAR(100),
+    fabricante    VARCHAR(100),
+    activo        BOOLEAN NOT NULL DEFAULT TRUE,
+    is_simulada   BOOLEAN NOT NULL DEFAULT FALSE,
+    origen        VARCHAR(10) NOT NULL DEFAULT 'ip',
+    url_snapshot  VARCHAR(500) NOT NULL DEFAULT '',
+    dispositivo   VARCHAR(255),
+    usuario       VARCHAR(100),
+    password      VARCHAR(255),
+    ubicacion     VARCHAR(10) NOT NULL DEFAULT 'ambos',
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS camaras_empresa_codigo_uk
+    ON camaras (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_camaras_ubicacion'
+    ) THEN
+        ALTER TABLE camaras
+            ADD CONSTRAINT ck_camaras_ubicacion
+            CHECK (ubicacion IN ('entrada', 'salida', 'ambos'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_camaras_origen'
+    ) THEN
+        ALTER TABLE camaras
+            ADD CONSTRAINT ck_camaras_origen
+            CHECK (origen IN ('ip', 'local'));
+    END IF;
+END
+$$;
+
+-- Barreras de tránsito (migración 032): actuador de control de acceso (abrir/cerrar).
+CREATE TABLE IF NOT EXISTS barreras (
+    id_barrera             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_empresa             UUID NOT NULL REFERENCES empresas(id_empresa),
+    codigo                 VARCHAR(20),
+    descripcion            VARCHAR(150) NOT NULL,
+    activo                 BOOLEAN NOT NULL DEFAULT TRUE,
+    is_simulado            BOOLEAN NOT NULL DEFAULT FALSE,
+    protocolo              VARCHAR(20) NOT NULL DEFAULT 'http',
+    ip_address             VARCHAR(45),
+    puerto_tcp             INTEGER,
+    puerto_com             VARCHAR(50),
+    baudrate               INTEGER NOT NULL DEFAULT 9600,
+    ubicacion              VARCHAR(10) NOT NULL DEFAULT 'ambos',
+    control_automatico     BOOLEAN NOT NULL DEFAULT FALSE,
+    tiempo_espera_segundos INTEGER NOT NULL DEFAULT 5,
+    comando_abrir          VARCHAR(255),
+    comando_cerrar         VARCHAR(255),
+    created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS barreras_empresa_codigo_uk
+    ON barreras (id_empresa, codigo)
+    WHERE codigo IS NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_barreras_protocolo'
+    ) THEN
+        ALTER TABLE barreras
+            ADD CONSTRAINT ck_barreras_protocolo
+            CHECK (protocolo IN ('http', 'serial'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_barreras_ubicacion'
+    ) THEN
+        ALTER TABLE barreras
+            ADD CONSTRAINT ck_barreras_ubicacion
+            CHECK (ubicacion IN ('entrada', 'salida', 'ambos'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_barreras_baudrate'
+    ) THEN
+        ALTER TABLE barreras
+            ADD CONSTRAINT ck_barreras_baudrate
+            CHECK (baudrate IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
+    END IF;
+END
+$$;
+
 -- ============================================================
 -- 7. TRANSACCIONAL - BOLETOS DE PESAJE
 -- ============================================================
@@ -415,6 +644,9 @@ CREATE TABLE IF NOT EXISTS boletos_pesaje (
     peso_salida_vehiculo     NUMERIC(12,2),
     peso_salida_remolque     NUMERIC(12,2),
     foto_salida_url          TEXT,
+
+    -- Fotos de placa (migración 027): TRUE cuando ya se pidieron una vez.
+    fotos_placa_tomadas      BOOLEAN NOT NULL DEFAULT FALSE,
 
     documento                VARCHAR(100),
     guia_sunagro             VARCHAR(100),
@@ -480,6 +712,7 @@ CREATE TABLE IF NOT EXISTS kardex (
     id_almacen      UUID REFERENCES almacenes(id_almacen),
     fecha_documento TIMESTAMP,
     documento       VARCHAR(100),
+    id_concepto     UUID REFERENCES conceptos_inventario(id_concepto),
     valor           NUMERIC(12,2) NOT NULL,
     boleto          UUID REFERENCES boletos_pesaje(boleto),
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

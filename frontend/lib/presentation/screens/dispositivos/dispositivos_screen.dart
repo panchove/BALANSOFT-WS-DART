@@ -16,6 +16,10 @@ import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
 import '../../../data/datasources/local/local_storage.dart';
 import '../../../domain/entities/printer_preset.dart';
+import 'indicadores_tab.dart';
+import 'semaforos_tab.dart';
+import 'camaras_tab.dart';
+import 'barreras_tab.dart';
 
 /// Estado de conexión de una báscula, derivado de `/balanzas/{id}/probar`.
 enum EstadoBalanza { sinVerificar, disponible, inestable, noDisponible }
@@ -358,41 +362,63 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
     return AtajoNuevo(
       onNuevo: () => unawaited(_escanear()),
       child: DefaultTabController(
-        length: 2,
+        length: 6,
         child: Scaffold(
           appBar: AppBar(
             title: Text(context.tr('Dispositivos de Campo')),
             bottom: TabBar(
+              isScrollable: true,
               tabs: [
-                Tab(icon: const Icon(Icons.scale_outlined), text: context.tr('Básculas de Campo')),
-                Tab(icon: const Icon(Icons.print_outlined), text: context.tr('Impresoras y Tickets')),
+                Tab(icon: const Icon(Icons.scale_outlined), text: context.tr('Básculas')),
+                Tab(icon: const Icon(Icons.speed_outlined), text: context.tr('Indicadores')),
+                Tab(icon: const Icon(Icons.traffic_outlined), text: context.tr('Semáforos')),
+                Tab(icon: const Icon(Icons.videocam_outlined), text: context.tr('Cámaras')),
+                Tab(icon: const Icon(Icons.print_outlined), text: context.tr('Impresoras')),
+                Tab(icon: const Icon(Icons.door_sliding_outlined), text: context.tr('Barreras de Tránsito')),
               ],
             ),
             actions: [
-              if (_verificando)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                ),
-              TextButton.icon(
-                key: const Key('dispositivos_escanear'),
-                onPressed: _escanear,
-                icon: const Icon(Icons.radar_outlined),
-                label: Text(context.tr('detectar_balanzas')),
+              Builder(
+                builder: (context) {
+                  final tabController = DefaultTabController.of(context);
+                  if (tabController.index != 0) return const SizedBox.shrink();
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_verificando)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                      TextButton.icon(
+                        key: const Key('dispositivos_escanear'),
+                        onPressed: _escanear,
+                        icon: const Icon(Icons.radar_outlined),
+                        label: Text(context.tr('detectar_balanzas')),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            key: const Key('dispositivos_agregar'),
-            onPressed: _escanear,
-            icon: const Icon(Icons.radar_outlined),
-            label: Text(context.tr('detectar_balanzas')),
+          floatingActionButton: Builder(
+            builder: (context) {
+              final tabController = DefaultTabController.of(context);
+              if (tabController.index != 0) return const SizedBox.shrink();
+              return FloatingActionButton.extended(
+                key: const Key('dispositivos_agregar'),
+                onPressed: _escanear,
+                icon: const Icon(Icons.radar_outlined),
+                label: Text(context.tr('detectar_balanzas')),
+              );
+            },
           ),
           body: TabBarView(
             children: [
@@ -411,7 +437,11 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
                                   itemBuilder: (context, i) => _tarjeta(_balanzas[i]),
                                 ),
                         ),
+              const IndicadoresConfigTab(),
+              const SemaforosConfigTab(),
+              const CamarasConfigTab(),
               const _ImpresorasConfigTab(),
+              const BarrerasConfigTab(),
             ],
           ),
         ),

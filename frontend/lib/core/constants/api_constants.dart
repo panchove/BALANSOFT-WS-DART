@@ -43,6 +43,7 @@ class ApiConstants {
 
   // Seguridad y Accesos
   static const String seguridadMatriz = '$apiPrefix/seguridad/matriz';
+  static const String seguridadRoles = '$apiPrefix/seguridad/roles';
 
   // Auditoría
   static const String auditoria = '$apiPrefix/auditoria';
@@ -83,6 +84,43 @@ class ApiConstants {
   static String balanza(String id) => '$apiPrefix/balanzas/$id';
   static String balanzaProbar(String id) => '$apiPrefix/balanzas/$id/probar';
   static const String balanzasDescubrir = '$apiPrefix/balanzas/descubrir';
+
+  // Semáforos (actuador de salida del ciclo de pesaje)
+  static const String semaforos = '$apiPrefix/semaforos';
+  static String semaforo(String id) => '$apiPrefix/semaforos/$id';
+  static const String semaforosDescubrir = '$apiPrefix/semaforos/descubrir';
+  static String semaforoProbar(String id) => '$apiPrefix/semaforos/$id/probar';
+  static String semaforoEstado(String id) => '$apiPrefix/semaforos/$id/estado';
+  static String semaforoComando(String id) => '$apiPrefix/semaforos/$id/comando';
+  static String semaforoAutomatico(String id) => '$apiPrefix/semaforos/$id/automatico';
+
+  // Cámaras (captura de placa: snapshot IP o cámara local/USB)
+  static const String camaras = '$apiPrefix/camaras';
+  static const String camarasDescubrir = '$apiPrefix/camaras/descubrir';
+  static String camara(String id) => '$apiPrefix/camaras/$id';
+  static String camaraProbar(String id) => '$apiPrefix/camaras/$id/probar';
+  static String camaraSnapshot(String id) => '$apiPrefix/camaras/$id/snapshot';
+  static String camaraStream(String id) => '$apiPrefix/camaras/$id/stream';
+  static String camaraCapturar(String id) => '$apiPrefix/camaras/$id/capturar';
+
+  // Barreras de tránsito (actuador de salida: abrir/cerrar paso vehicular)
+  static const String barreras = '$apiPrefix/barreras';
+  static String barrera(String id) => '$apiPrefix/barreras/$id';
+  static const String barrerasDescubrir = '$apiPrefix/barreras/descubrir';
+  static String barreraProbar(String id) => '$apiPrefix/barreras/$id/probar';
+  static String barreraEstado(String id) => '$apiPrefix/barreras/$id/estado';
+  static String barreraComando(String id) => '$apiPrefix/barreras/$id/comando';
+
+  // Indicadores (terminal de peso, separado de la báscula física)
+  static const String indicadores = '$apiPrefix/indicadores';
+  static String indicador(String id) => '$apiPrefix/indicadores/$id';
+  static String indicadorEnlazar(String id, String balanzaId) =>
+      '$apiPrefix/indicadores/$id/balanzas/$balanzaId/enlazar';
+
+  // Conceptos de inventario (catálogo de motivos de kardex)
+  static const String conceptosInventario = '$apiPrefix/conceptos_inventario';
+  static String conceptoInventario(String id) =>
+      '$apiPrefix/conceptos_inventario/$id';
 
   // Directorio
   static const String transportes = '$apiPrefix/transportes';
@@ -142,4 +180,8 @@ class ApiConstants {
       '$apiPrefix/backups/$archivo/download';
   static String backupRestore(String archivo) =>
       '$apiPrefix/backups/$archivo/restore';
+
+  // Dispositivos / Vinculación
+  static const String dispositivosDescubrir = '$apiPrefix/dispositivos/descubrir';
+  static const String vinculos = '$apiPrefix/vinculos';
 }

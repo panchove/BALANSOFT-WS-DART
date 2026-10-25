@@ -74,6 +74,17 @@ void main() {
       final w = Weighing.fromJson(_json(overrides: {'sincronizado': false}));
       expect(w.isPendingSync, isTrue);
     });
+
+    test('fotosPlacaTomadas por defecto es false', () {
+      final w = Weighing.fromJson(_json());
+      expect(w.fotosPlacaTomadas, isFalse);
+    });
+
+    test('fotosPlacaTomadas lee el flag del boleto', () {
+      final conFotos =
+          Weighing.fromJson(_json(overrides: {'fotos_placa_tomadas': true}));
+      expect(conFotos.fotosPlacaTomadas, isTrue);
+    });
   });
 
   group('Weighing.toJson', () {
@@ -83,6 +94,11 @@ void main() {
       expect(json['boleto'], w.boleto);
       expect(json['peso_entrada_vehiculo'], 53000.0);
       expect(json['estado_boleto'], 'CERRADO');
+    });
+
+    test('round-trip conserva fotos_placa_tomadas', () {
+      final w = Weighing.fromJson(_json(overrides: {'fotos_placa_tomadas': true}));
+      expect(w.toJson()['fotos_placa_tomadas'], isTrue);
     });
   });
 }

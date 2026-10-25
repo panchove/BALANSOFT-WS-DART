@@ -6,12 +6,17 @@ credenciales globales, panel del proveedor y recepción de sync.
 """
 
 from app.api.v1.endpoints import (
+    dispositivos,
+    vinculos,
     activacion,
     archivos,
     auditoria,
     auth,
     backups,
+    barreras,
+    camaras,
     catalogo,
+    conceptos_inventario,
     config,
     directorio,
     empresa,
@@ -19,11 +24,13 @@ from app.api.v1.endpoints import (
     exports,
     flota,
     identity,
+    indicadores,
     inventario,
     notificaciones,
     pesajes,
     reports,
     seguridad,
+    semaforos,
     series,
     servidor,
     sync,
@@ -53,6 +60,13 @@ API_ROUTERS = [
     series.router,
     notificaciones.router,
     notificaciones.router_recordatorios,
+    semaforos.router,
+    dispositivos.router,
+    vinculos.router,
+    camaras.router,
+    indicadores.router,
+    conceptos_inventario.router,
+    barreras.router,
 ]
 
 SERVER_ROUTERS = [

@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/config/app_config.dart';
 import 'core/config/env_config.dart';
+import 'core/config/menu_config.dart';
 import 'core/config/station_config.dart';
 import 'core/controllers/typography_controller.dart';
 import 'core/i18n/locale_controller.dart';
@@ -99,6 +100,11 @@ void main() async {
   localeController = di.sl<LocaleController>();
   await localeController.load();
   AppTranslations.setController(localeController); // conectar singleton
+
+  // Menú lateral configurable: lee `~/.config/balansoftws/menu.json` (si no
+  // existe, lo siembra con el árbol por defecto para dejarlo editable).
+  // Un JSON inválido degrada al menú de fábrica: nunca bloquea el arranque.
+  await MenuConfig.cargar();
 
   runApp(const BalansoftApp());
 }

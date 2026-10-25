@@ -108,7 +108,7 @@ def _resolve_to_weighing_out(p: BoletoPesaje) -> WeighingOut:
 async def _enriquecer_pesajes_lista(
     db: AsyncSession, pesajes: list[BoletoPesaje]
 ) -> list[BoletoPesaje]:
-    """Resuelve los nombres legibles de una página de boletos con 7 consultas.
+    """Resuelve los nombres legibles de una página de boletos con 8 consultas.
 
     `_enriquecer_pesaje_ticket` está pensado para **un** boleto (impresión,
     PDF, cierre) y lanza hasta 10 consultas por registro. Reutilizarlo en
@@ -117,10 +117,10 @@ async def _enriquecer_pesajes_lista(
     ~450 ms p50 solo por eso, y con fila por fila el costo escala con el
     `limit` en vez de con la página.
 
-    Aquí se resuelven **una vez por página** y solo los 7 campos que
-    `WeighingOut` serializa (el resto —kardex, color, categoría, tara— es
-    exclusivo del ticket AVANZADO y no se pierde: `_enriquecer_pesaje_ticket`
-    sigue siendo el camino de los endpoints de un solo boleto).
+    Aquí se resuelven **una vez por página** y solo los campos que
+    `WeighingOut` serializa (el resto —color, categoría, tara— es exclusivo
+    del ticket AVANZADO y no se pierde: `_enriquecer_pesaje_ticket` sigue
+    siendo el camino de los endpoints de un solo boleto).
 
     Todos los catálogos se filtran por `id_empresa`: el tenant lo decide el
     contexto autenticado, nunca el cliente.
@@ -170,6 +170,28 @@ async def _enriquecer_pesajes_lista(
         Remolque, Remolque.id_remolque, {p.id_remolque for p in pesajes if p.id_remolque}
     )
 
+    # Movimiento de kardex (10 INGRESO / 60 DESPACHO) por boleto: una sola
+    # consulta para toda la página, filtrada por `id_empresa`. Alimenta el
+    # filtro INGRESOS / DESPACHOS de la lista y el chip de movimiento; sin
+    # esto el listado obligaría a consultar kardex fila por fila (N+1).
+    kardex_por_boleto: dict[uuid.UUID, int] = {}
+    boletos_pagina = {p.boleto for p in pesajes}
+    if boletos_pagina:
+        filas_kardex = (
+            await db.execute(
+                select(Kardex.boleto, Kardex.id_movimiento)
+                .where(
+                    Kardex.boleto.in_(boletos_pagina),
+                    Kardex.id_empresa == id_empresa,
+                )
+                .order_by(Kardex.created_at.asc())
+            )
+        ).all()
+        # El movimiento vigente es el ÚLTIMO asiento del boleto (al anular un
+        # CERRADO se registra el contra-asiento inverso, que pasa a mandar).
+        for boleto, id_movimiento in filas_kardex:
+            kardex_por_boleto[boleto] = id_movimiento
+
     for p in pesajes:
         prod = productos.get(p.id_producto)
         if prod is not None:
@@ -193,6 +215,8 @@ async def _enriquecer_pesajes_lista(
         rem = remolques.get(p.id_remolque)
         if rem is not None:
             p.remolque_placa = rem.placa  # type: ignore[attr-defined]
+    for p in pesajes:
+        p.kardex_mov = kardex_por_boleto.get(p.boleto)  # type: ignore[attr-defined]
     return pesajes
 
 
@@ -272,6 +296,39 @@ def _es_uuid(val: str) -> uuid.UUID | None:
         return uuid.UUID(str(val).strip())
     except (ValueError, AttributeError):
         return None
+
+
+def guardar_media_boleto(
+    boleto: uuid.UUID, datos: bytes, *, tipo: str, ext: str = ".jpg"
+) -> str:
+    """Escribe ``datos`` en ``media/<boleto>/<tipo>_<hex><ext>`` y devuelve la URL.
+
+    Reutilizado por la subida de imágenes del formulario de pesaje y por la
+    captura de placa desde una cámara IP (mismo destino, mismo contrato).
+    """
+    dest_dir = os.path.join(settings.media_dir, str(boleto))
+    os.makedirs(dest_dir, exist_ok=True)
+    if not ext.startswith("."):
+        ext = f".{ext}"
+    filename = f"{tipo}_{uuid.uuid4().hex[:12]}{ext}"
+    with open(os.path.join(dest_dir, filename), "wb") as f:
+        f.write(datos)
+    return f"/media/{boleto}/{filename}"
+
+
+async def marcar_fotos_placa_si_aplica(
+    db: AsyncSession, pesaje: BoletoPesaje, tipo: str
+) -> bool:
+    """Marca ``fotos_placa_tomadas`` cuando llega una imagen de placa.
+
+    Invariante "una sola vez por boleto": la primera imagen de placa (en la
+    entrada o en la salida) fija el flag; una vez fijado no se vuelve a pedir
+    en la otra pesada. Devuelve ``True`` si el flag cambió en esta llamada.
+    """
+    if tipo != "placa" or pesaje.fotos_placa_tomadas:
+        return False
+    pesaje.fotos_placa_tomadas = True
+    return True
 
 
 async def _buscar_pesaje(
@@ -698,17 +755,11 @@ async def upload_imagen(
     if len(raw) > settings.max_image_bytes:
         raise HTTPException(status_code=400, detail="El archivo supera el tamaño máximo de 10 MB")
 
-    dest_dir = os.path.join(settings.media_dir, str(pesaje.boleto))
-    os.makedirs(dest_dir, exist_ok=True)
     ext = os.path.splitext(file.filename or "image.jpg")[1] or ".jpg"
-    filename = f"{tipo}_{uuid.uuid4().hex[:12]}{ext}"
-    filepath = os.path.join(dest_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(raw)
-
-    url = f"/media/{pesaje.boleto}/{filename}"
+    url = guardar_media_boleto(pesaje.boleto, raw, tipo=tipo, ext=ext)
     img = ImagenPesaje(boleto=pesaje.boleto, tipo=tipo, url=url)
     db.add(img)
+    await marcar_fotos_placa_si_aplica(db, pesaje, tipo)
 
     # Update truck's photo if not set
     if tipo == "vehiculo" and pesaje.id_vehiculo:

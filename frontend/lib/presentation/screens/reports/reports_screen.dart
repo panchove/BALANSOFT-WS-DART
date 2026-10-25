@@ -4,12 +4,18 @@ import 'package:flutter/material.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/number_utils.dart';
+import '../../../core/utils/report_presets.dart';
 import '../../../core/utils/save_file_utils.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../injection.dart' as di;
 
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({super.key});
+  const ReportsScreen({super.key, this.preset});
+
+  /// Ajusta el estado inicial de la pantalla según el ítem de REPORTES del
+  /// menú: `diarios` (fecha de hoy), `mensuales` (mes actual) o
+  /// `personalizado` (rango libre). `null` conserva el comportamiento previo.
+  final ReportPreset? preset;
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
@@ -42,8 +48,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    _aplicarPreset();
     _future = _cargar();
     _cargarFormatoReporte();
+  }
+
+  /// Ajusta la vista según el preset con el que se abrió el módulo.
+  void _aplicarPreset() {
+    final estado = estadoInicialReporte(widget.preset, DateTime.now());
+    _avanzado = estado.modo == ReportMode.avanzado;
+    _mensual = estado.modo == ReportMode.mensual;
+    _fecha = estado.fecha;
+    _year = estado.year;
+    _month = estado.month;
+    _desde = estado.desde;
+    _hasta = estado.hasta;
   }
 
   Future<void> _cargarFormatoReporte() async {

@@ -18,7 +18,16 @@ from app.api.dependencies import (
 from app.core.database import get_db
 from app.core.scale_hal import TcpScaleHAL
 from app.core.scale_session import get_scale_session_manager
-from app.models import Almacen, Balanza, Categoria, Empresa, Kardex, Producto, Usuario
+from app.models import (
+    Almacen,
+    Balanza,
+    Categoria,
+    ConceptoInventario,
+    Empresa,
+    Kardex,
+    Producto,
+    Usuario,
+)
 from app.schemas import (
     AjusteInventarioCreate,
     AjusteInventarioOut,
@@ -301,8 +310,20 @@ async def delete_almacen(
 async def list_balanzas(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
+    q: str | None = Query(None, description="Búsqueda de texto (código, descripción, marca, modelo, IP/puerto)."),
+    activo: bool | None = Query(None, description="Filtra por básculas activas/inactivas."),
+    is_simulada: bool | None = Query(None, description="Filtra por básculas simuladas/reales."),
+    protocolo: str | None = Query(None, description="Filtra por protocolo de comunicación (tcp/serial)."),
 ) -> list[BalanzaOut]:
-    rows = await _SERVICE.list_by_name(db, empresa.id_empresa, "balanzas")
+    """Lista las básculas de la empresa con **filtros de vista** opcionales."""
+    rows = await _SERVICE.list_filtrado(
+        db,
+        empresa.id_empresa,
+        "balanzas",
+        q=q,
+        columnas_texto=("codigo", "descripcion", "marca", "modelo", "ip_address", "puerto_com"),
+        iguales={"activo": activo, "is_simulada": is_simulada, "protocolo": protocolo},
+    )
     return [BalanzaOut(**r) for r in rows]
 
 
@@ -587,7 +608,9 @@ async def crear_ajuste_inventario(
     Reglas de negocio:
     - El producto debe pertenecer a la empresa y tener ``es_kardex=true``.
     - El almacén debe pertenecer a la empresa.
-    - La justificación (``documento``) es obligatoria y queda registrada.
+    - El motivo se elige del catálogo ``conceptos_inventario`` (``id_concepto``);
+      su nombre se copia a ``documento`` para el histórico. También se acepta
+      ``documento`` libre (clientes antiguos). Debe venir uno de los dos.
     - El valor se almacena como positivo (el id_movimiento determina el signo).
     - El movimiento queda auditado con la IP y el usuario que lo crea.
     """
@@ -617,6 +640,28 @@ async def crear_ajuste_inventario(
     if res_alm.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Almacén no encontrado en esta empresa")
 
+    # Validar concepto (aislamiento multi-tenant) y derivar el texto del documento.
+    documento = (payload.documento or "").strip() or None
+    if payload.id_concepto is not None:
+        res_con = await db.execute(
+            select(ConceptoInventario).where(
+                ConceptoInventario.id_concepto == payload.id_concepto,
+                ConceptoInventario.id_empresa == empresa.id_empresa,
+            )
+        )
+        concepto = res_con.scalar_one_or_none()
+        if concepto is None:
+            raise HTTPException(
+                status_code=404, detail="Concepto de inventario no encontrado en esta empresa"
+            )
+        if documento is None:
+            documento = concepto.nombre
+    if documento is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Debe indicar un concepto de inventario (id_concepto) o un documento.",
+        )
+
     ahora = datetime.now(UTC).replace(tzinfo=None)
     entrada = Kardex(
         id_empresa=empresa.id_empresa,
@@ -625,7 +670,8 @@ async def crear_ajuste_inventario(
         id_producto=payload.id_producto,
         id_almacen=payload.id_almacen,
         valor=payload.valor_kg,
-        documento=payload.documento,
+        id_concepto=payload.id_concepto,
+        documento=documento,
         fecha_documento=payload.fecha_documento or ahora,
     )
     db.add(entrada)

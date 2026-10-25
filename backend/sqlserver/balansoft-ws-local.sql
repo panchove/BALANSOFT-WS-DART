@@ -64,6 +64,7 @@ IF OBJECT_ID(N'dbo.balanzas', N'U') IS NULL BEGIN
         [formato_trama] NVARCHAR(10) DEFAULT N'auto' NOT NULL,
         [baudrate] INT DEFAULT 9600 NOT NULL,
         [delimitador] NVARCHAR(10),
+        [id_indicador] UNIQUEIDENTIFIER,
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         CONSTRAINT [ck_balanzas_formato_trama] CHECK ((formato_trama) IN (N'auto', N'json', N'ascii')),
@@ -122,6 +123,7 @@ IF OBJECT_ID(N'dbo.boletos_pesaje', N'U') IS NULL BEGIN
         [peso_salida_vehiculo] DECIMAL(12,2),
         [peso_salida_remolque] DECIMAL(12,2),
         [foto_salida_url] NVARCHAR(MAX),
+        [fotos_placa_tomadas] BIT DEFAULT 0 NOT NULL,
         [documento] NVARCHAR(100),
         [guia_sunagro] NVARCHAR(100),
         [medida] NVARCHAR(50),
@@ -242,6 +244,8 @@ IF OBJECT_ID(N'dbo.empresas', N'U') IS NULL BEGIN
         [impresora_nombre]     NVARCHAR(255) NULL,
         [impresora_host]       NVARCHAR(100) NULL,
         [impresora_puerto]     INTEGER NULL,
+        [fotos_placa_activas]      BIT DEFAULT 0 NOT NULL,
+        [fotos_placa_obligatorias] BIT DEFAULT 0 NOT NULL,
         [licencia_key] NVARCHAR(255),
         [licencia_tier] NVARCHAR(20),
         [licencia_status] NVARCHAR(20),
@@ -304,6 +308,7 @@ IF OBJECT_ID(N'dbo.kardex', N'U') IS NULL BEGIN
         [id_almacen] UNIQUEIDENTIFIER,
         [fecha_documento] DATETIME2(6),
         [documento] NVARCHAR(100),
+        [id_concepto] UNIQUEIDENTIFIER,
         [valor] DECIMAL(12,2) NOT NULL,
         [boleto] UNIQUEIDENTIFIER,
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
@@ -488,6 +493,124 @@ IF OBJECT_ID(N'dbo.schema_migrations', N'U') IS NULL BEGIN
         [version] NVARCHAR(255) NOT NULL,
         [aplicada_en] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         CONSTRAINT [schema_migrations_pkey] PRIMARY KEY (version)
+    );
+END
+
+IF OBJECT_ID(N'dbo.semaforos', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[semaforos] (
+        [id_semaforo] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [codigo] NVARCHAR(20),
+        [descripcion] NVARCHAR(150) NOT NULL,
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [is_simulado] BIT DEFAULT 0 NOT NULL,
+        [protocolo] NVARCHAR(20) DEFAULT N'http' NOT NULL,
+        [ip_address] NVARCHAR(45),
+        [puerto_tcp] INT,
+        [puerto_com] NVARCHAR(50),
+        [baudrate] INT DEFAULT 9600 NOT NULL,
+        [id_balanza] UNIQUEIDENTIFIER,
+        [control_automatico] BIT DEFAULT 0 NOT NULL,
+        [umbral_cero_kg] DECIMAL(10,2) DEFAULT 5.0 NOT NULL,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_semaforos_protocolo] CHECK ((protocolo) IN (N'http', N'serial')),
+        CONSTRAINT [ck_semaforos_baudrate] CHECK ((baudrate) IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200)),
+        CONSTRAINT [semaforos_pkey] PRIMARY KEY (id_semaforo)
+    );
+END
+
+IF OBJECT_ID(N'dbo.camaras', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[camaras] (
+        [id_camara] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [codigo] NVARCHAR(20),
+        [descripcion] NVARCHAR(150) NOT NULL,
+        [marca] NVARCHAR(100),
+        [modelo] NVARCHAR(100),
+        [fabricante] NVARCHAR(100),
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [is_simulada] BIT DEFAULT 0 NOT NULL,
+        [origen] NVARCHAR(10) DEFAULT N'ip' NOT NULL,
+        [url_snapshot] NVARCHAR(500) DEFAULT N'' NOT NULL,
+        [dispositivo] NVARCHAR(255),
+        [usuario] NVARCHAR(100),
+        [password] NVARCHAR(255),
+        [ubicacion] NVARCHAR(10) DEFAULT N'ambos' NOT NULL,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_camaras_ubicacion] CHECK ((ubicacion) IN (N'entrada', N'salida', N'ambos')),
+        CONSTRAINT [ck_camaras_origen] CHECK ((origen) IN (N'ip', N'local')),
+        CONSTRAINT [camaras_pkey] PRIMARY KEY (id_camara)
+    );
+END
+
+IF OBJECT_ID(N'dbo.indicadores', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[indicadores] (
+        [id_indicador] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [codigo] NVARCHAR(20),
+        [descripcion] NVARCHAR(150) NOT NULL,
+        [marca] NVARCHAR(100),
+        [modelo] NVARCHAR(100),
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [is_simulado] BIT DEFAULT 0 NOT NULL,
+        [protocolo] NVARCHAR(20) DEFAULT N'tcp',
+        [puerto_com] NVARCHAR(50),
+        [ip_address] NVARCHAR(45),
+        [puerto_tcp] INT,
+        [formato_trama] NVARCHAR(10) DEFAULT N'auto' NOT NULL,
+        [baudrate] INT DEFAULT 9600 NOT NULL,
+        [delimitador] NVARCHAR(10),
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_indicadores_formato_trama] CHECK ((formato_trama) IN (N'auto', N'json', N'ascii')),
+        CONSTRAINT [ck_indicadores_baudrate] CHECK ((baudrate) IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200)),
+        CONSTRAINT [ck_indicadores_delimitador] CHECK ((delimitador IS NULL OR delimitador IN (N'lf', N'cr', N'crlf', N'stx_etx'))),
+        CONSTRAINT [indicadores_pkey] PRIMARY KEY (id_indicador)
+    );
+END
+
+IF OBJECT_ID(N'dbo.conceptos_inventario', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[conceptos_inventario] (
+        [id_concepto] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [codigo] NVARCHAR(20),
+        [nombre] NVARCHAR(150) NOT NULL,
+        [descripcion] NVARCHAR(255),
+        [tipo_movimiento] NVARCHAR(10),
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_conceptos_inventario_tipo] CHECK ((tipo_movimiento IS NULL OR tipo_movimiento IN (N'ingreso', N'despacho', N'ajuste', N'ambos'))),
+        CONSTRAINT [conceptos_inventario_pkey] PRIMARY KEY (id_concepto)
+    );
+END
+
+IF OBJECT_ID(N'dbo.barreras', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[barreras] (
+        [id_barrera] UNIQUEIDENTIFIER DEFAULT NEWID() NOT NULL,
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [codigo] NVARCHAR(20),
+        [descripcion] NVARCHAR(150) NOT NULL,
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [is_simulado] BIT DEFAULT 0 NOT NULL,
+        [protocolo] NVARCHAR(20) DEFAULT N'http' NOT NULL,
+        [ip_address] NVARCHAR(45),
+        [puerto_tcp] INT,
+        [puerto_com] NVARCHAR(50),
+        [baudrate] INT DEFAULT 9600 NOT NULL,
+        [ubicacion] NVARCHAR(10) DEFAULT N'ambos' NOT NULL,
+        [control_automatico] BIT DEFAULT 0 NOT NULL,
+        [tiempo_espera_segundos] INT DEFAULT 5 NOT NULL,
+        [comando_abrir] NVARCHAR(255),
+        [comando_cerrar] NVARCHAR(255),
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [ck_barreras_protocolo] CHECK ((protocolo) IN (N'http', N'serial')),
+        CONSTRAINT [ck_barreras_ubicacion] CHECK ((ubicacion) IN (N'entrada', N'salida', N'ambos')),
+        CONSTRAINT [ck_barreras_baudrate] CHECK ((baudrate) IN (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200)),
+        CONSTRAINT [barreras_pkey] PRIMARY KEY (id_barrera)
     );
 END
 
@@ -713,8 +836,32 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'recordatorios_id_usuario_fkey' ) BEGIN
     ALTER TABLE [dbo].[recordatorios] ADD CONSTRAINT [recordatorios_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'camaras_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[camaras] ADD CONSTRAINT [camaras_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'indicadores_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[indicadores] ADD CONSTRAINT [indicadores_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'balanzas_id_indicador_fkey' ) BEGIN
+    ALTER TABLE [dbo].[balanzas] ADD CONSTRAINT [balanzas_id_indicador_fkey] FOREIGN KEY (id_indicador) REFERENCES [dbo].[indicadores] (id_indicador);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'conceptos_inventario_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[conceptos_inventario] ADD CONSTRAINT [conceptos_inventario_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'kardex_id_concepto_fkey' ) BEGIN
+    ALTER TABLE [dbo].[kardex] ADD CONSTRAINT [kardex_id_concepto_fkey] FOREIGN KEY (id_concepto) REFERENCES [dbo].[conceptos_inventario] (id_concepto);
+END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'remolques_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[remolques] ADD CONSTRAINT [remolques_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'semaforos_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[semaforos] ADD CONSTRAINT [semaforos_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'semaforos_id_balanza_fkey' ) BEGIN
+    ALTER TABLE [dbo].[semaforos] ADD CONSTRAINT [semaforos_id_balanza_fkey] FOREIGN KEY (id_balanza) REFERENCES [dbo].[balanzas] (id_balanza);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'barreras_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[barreras] ADD CONSTRAINT [barreras_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'series_numeracion_id_empresa_fkey' ) BEGIN
     ALTER TABLE [dbo].[series_numeracion] ADD CONSTRAINT [series_numeracion_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa) ON DELETE CASCADE;
@@ -738,8 +885,29 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'balanzas_empresa_codigo_uk' ) BEGIN
     CREATE UNIQUE INDEX [balanzas_empresa_codigo_uk] ON [dbo].[balanzas] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
 END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'camaras_empresa_codigo_uk' ) BEGIN
+    CREATE UNIQUE INDEX [camaras_empresa_codigo_uk] ON [dbo].[camaras] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'indicadores_empresa_codigo_uk' ) BEGIN
+    CREATE UNIQUE INDEX [indicadores_empresa_codigo_uk] ON [dbo].[indicadores] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'balanzas_id_indicador_idx' ) BEGIN
+    CREATE INDEX [balanzas_id_indicador_idx] ON [dbo].[balanzas] (id_indicador);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'conceptos_inventario_empresa_codigo_uk' ) BEGIN
+    CREATE UNIQUE INDEX [conceptos_inventario_empresa_codigo_uk] ON [dbo].[conceptos_inventario] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'kardex_id_concepto_idx' ) BEGIN
+    CREATE INDEX [kardex_id_concepto_idx] ON [dbo].[kardex] (id_concepto);
+END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'categorias_empresa_codigo_uk' ) BEGIN
     CREATE UNIQUE INDEX [categorias_empresa_codigo_uk] ON [dbo].[categorias] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'semaforos_empresa_codigo_uk' ) BEGIN
+    CREATE UNIQUE INDEX [semaforos_empresa_codigo_uk] ON [dbo].[semaforos] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'barreras_empresa_codigo_uk' ) BEGIN
+    CREATE UNIQUE INDEX [barreras_empresa_codigo_uk] ON [dbo].[barreras] (id_empresa, codigo) WHERE (codigo IS NOT NULL);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_almacenes_empresa' ) BEGIN
     CREATE INDEX [idx_almacenes_empresa] ON [dbo].[almacenes] (id_empresa);

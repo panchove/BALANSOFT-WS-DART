@@ -52,7 +52,19 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
       );
       if (xfile != null) await _agregarXFile(xfile);
     } catch (e) {
-      _errorSnack('No se pudo tomar la foto: $e');
+      // En plataformas de escritorio (Linux/Windows) donde ImageSource.camera no está soportado,
+      // cae elegantemente al selector de archivo para no bloquear al usuario.
+      try {
+        final xfile = await _picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1600,
+          maxHeight: 1600,
+          imageQuality: 80,
+        );
+        if (xfile != null) await _agregarXFile(xfile);
+      } catch (_) {
+        _errorSnack('No se pudo tomar la foto: $e');
+      }
     }
   }
 

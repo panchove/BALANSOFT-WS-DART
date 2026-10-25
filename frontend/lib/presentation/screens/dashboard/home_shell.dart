@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../application/backup/auto_backup_service.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/config/menu_config.dart';
 import '../../../core/constants/catalog_resources.dart';
 import '../../../core/i18n/locale_controller.dart';
 import '../../../core/i18n/translations.dart';

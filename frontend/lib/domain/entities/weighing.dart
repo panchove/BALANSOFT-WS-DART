@@ -1,5 +1,11 @@
 import '../../core/utils/num_parser.dart';
 
+/// Filtro de movimiento de inventario para los listados de pesajes.
+///
+/// `ingreso` (10) y `despacho` (60) son la MISMA pantalla `WeighingListScreen`
+/// segmentada por el asiento de kardex del boleto; `todos` no filtra.
+enum TipoMovimientoListado { todos, ingreso, despacho }
+
 class Weighing {
   final String boleto;
   final String? idVehiculo;
@@ -52,6 +58,18 @@ class Weighing {
   final String? terceroNombre;
   final String? remolquePlaca;
 
+  /// Movimiento de kardex del boleto: `10` INGRESO, `60` DESPACHO, `null` si
+  /// aún no tiene asiento (boleto PENDIENTE). Deriva el filtro
+  /// INGRESOS / DESPACHOS de la lista de pesajes.
+  final int? kardexMov;
+
+  /// `true` cuando el boleto ya tiene al menos una foto de placa capturada.
+  ///
+  /// Regla del negocio: la placa se pide **una sola vez por boleto**, en la
+  /// pesada que elija el operador (entrada o salida); una vez capturada no se
+  /// vuelve a pedir en la otra pesada (`boletos_pesaje.fotos_placa_tomadas`).
+  final bool fotosPlacaTomadas;
+
   const Weighing({
     required this.boleto,
     this.idVehiculo,
@@ -102,6 +120,8 @@ class Weighing {
     this.balanzaNombre,
     this.terceroNombre,
     this.remolquePlaca,
+    this.kardexMov,
+    this.fotosPlacaTomadas = false,
   });
 
   bool get isOpen =>
@@ -109,6 +129,12 @@ class Weighing {
   bool get isClosed => estadoBoleto == 'CERRADO';
   bool get isAnulado => estadoBoleto == 'ANULADO';
   bool get isPendingSync => !sincronizado;
+
+  /// `true` si el boleto registró un INGRESO de inventario (movimiento 10).
+  bool get esIngreso => kardexMov == 10;
+
+  /// `true` si el boleto registró un DESPACHO de inventario (movimiento 60).
+  bool get esDespacho => kardexMov == 60;
 
   double get pesoTotalEntrada =>
       pesoEntradaVehiculo + (pesoEntradaRemolque ?? 0);
@@ -170,6 +196,8 @@ class Weighing {
         balanzaNombre: json['balanza_nombre'],
         terceroNombre: json['tercero_nombre'],
         remolquePlaca: json['remolque_placa'],
+        kardexMov: NumParser.toIntOrNull(json['kardex_mov']),
+        fotosPlacaTomadas: json['fotos_placa_tomadas'] ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -215,6 +243,7 @@ class Weighing {
         'sincronizado': sincronizado,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
+        'fotos_placa_tomadas': fotosPlacaTomadas,
       };
 
   Weighing copyWith({
@@ -263,6 +292,7 @@ class Weighing {
     String? balanzaNombre,
     String? terceroNombre,
     String? remolquePlaca,
+    bool? fotosPlacaTomadas,
   }) =>
       Weighing(
         boleto: boleto ?? this.boleto,
@@ -315,5 +345,6 @@ class Weighing {
         balanzaNombre: balanzaNombre ?? this.balanzaNombre,
         terceroNombre: terceroNombre ?? this.terceroNombre,
         remolquePlaca: remolquePlaca ?? this.remolquePlaca,
+        fotosPlacaTomadas: fotosPlacaTomadas ?? this.fotosPlacaTomadas,
       );
 }

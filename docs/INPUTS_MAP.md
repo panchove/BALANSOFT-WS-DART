@@ -485,7 +485,7 @@ Sin PND o tolerancia se muestra `-` en vez de `#¡DIV/0!` / `#¡VALOR!`.
 | `Alt + K` | Kardex | **K**ardex |
 | `Alt + R` | Reportes | **R**eportes |
 | `Alt + U` | Usuarios | **U**suarios |
-| `Alt + D` | Dispositivos de Campo | **D**ispositivos |
+| `Alt + D` | Básculas | **D**ispositivos (básculas) |
 | `Alt + S` | Seguridad y Permisos | **S**eguridad |
 
 ---

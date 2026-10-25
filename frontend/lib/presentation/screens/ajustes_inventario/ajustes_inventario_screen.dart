@@ -224,17 +224,47 @@ class _FormularioAjuste extends StatefulWidget {
 class _FormularioAjusteState extends State<_FormularioAjuste> {
   final _formKey = GlobalKey<FormState>();
   final _pesoCtrl = TextEditingController();
-  final _justCtrl = TextEditingController();
 
   Product? _producto;
   Warehouse? _almacen;
   int _tipoMovimiento = 10; // 10 = INGRESO, 60 = DESPACHO
   bool _guardando = false;
 
+  // Conceptos de inventario (motivo del movimiento, migración 029).
+  List<Map<String, dynamic>> _conceptos = [];
+  String? _conceptoId;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarConceptos();
+  }
+
+  Future<void> _cargarConceptos() async {
+    try {
+      final conceptos = await di.sl<ApiClient>().listarConceptosInventario();
+      if (!mounted) return;
+      setState(() {
+        _conceptos = conceptos.where((c) => c['activo'] != false).toList();
+      });
+    } catch (_) {
+      // Sin conceptos el formulario sigue exigiendo elegir uno; el backend
+      // rechaza el ajuste sin concepto ni documento.
+    }
+  }
+
+  /// Conceptos aplicables al tipo de movimiento seleccionado.
+  List<Map<String, dynamic>> get _conceptosDelTipo {
+    final tipo = _tipoMovimiento == 10 ? 'ingreso' : 'despacho';
+    return _conceptos.where((c) {
+      final t = c['tipo_movimiento'];
+      return t == null || t == tipo || t == 'ambos' || t == 'ajuste';
+    }).toList();
+  }
+
   @override
   void dispose() {
     _pesoCtrl.dispose();
-    _justCtrl.dispose();
     super.dispose();
   }
 
@@ -249,6 +279,15 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
       );
       return;
     }
+    if (_conceptoId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un concepto de inventario'),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+      return;
+    }
 
     setState(() => _guardando = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -258,7 +297,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
             idProducto: _producto!.id,
             idAlmacen: _almacen!.id,
             valorKg: double.parse(_pesoCtrl.text.replaceAll(',', '.')),
-            documento: _justCtrl.text.trim(),
+            idConcepto: _conceptoId,
           );
 
       final tipo = _tipoMovimiento == 10 ? 'INGRESO' : 'DESPACHO';
@@ -273,11 +312,11 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
       // Limpiar formulario y refrescar stocks
       _formKey.currentState!.reset();
       _pesoCtrl.clear();
-      _justCtrl.clear();
       setState(() {
         _producto = null;
         _almacen = null;
         _tipoMovimiento = 10;
+        _conceptoId = null;
       });
       widget.onAjusteRegistrado();
     } catch (e) {
@@ -394,23 +433,26 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
               ),
               const SizedBox(height: 12),
 
-              // Justificación
-              TextFormField(
-                controller: _justCtrl,
+              // Concepto del movimiento (catálogo conceptos_inventario)
+              DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
+                value: _conceptoId,
                 decoration: const InputDecoration(
-                  labelText: 'Justificación / Documento *',
-                  hintText:
-                      'Ej.: Merma por evaporación mes 09, Conteo físico 2026-09',
-                  prefixIcon: Icon(Icons.description_outlined),
+                  labelText: 'Concepto de inventario *',
+                  prefixIcon: Icon(Icons.rule_folder_outlined),
                 ),
-                maxLength: 100,
-                maxLines: 2,
-                validator: (v) {
-                  if (v == null || v.trim().length < 3) {
-                    return 'Mínimo 3 caracteres';
-                  }
-                  return null;
-                },
+                hint: const Text('Selecciona el motivo del movimiento'),
+                items: _conceptosDelTipo
+                    .map(
+                      (c) => DropdownMenuItem<String>(
+                        value: '${c['id_concepto']}',
+                        child: Text('${c['nombre'] ?? ''}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _conceptoId = v),
+                validator: (v) =>
+                    v == null ? 'Selecciona un concepto' : null,
               ),
               const SizedBox(height: 16),
 

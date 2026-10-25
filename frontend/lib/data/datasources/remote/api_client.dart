@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/api_constants.dart';
@@ -573,6 +575,12 @@ class ApiClient {
     );
   }
 
+  /// Roles locales de la estación con su descripción y usuarios asignados.
+  Future<List<Map<String, dynamic>>> listarRoles() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.seguridadRoles}');
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
   /// Lee el peso en vivo de una balanza vía el HAL del backend (B7).
   /// Devuelve el payload crudo `{peso_kg, estable, balanza, hardware, timestamp}`.
   Future<Map<String, dynamic>> readLiveWeight(String balanzaId) async {
@@ -757,6 +765,64 @@ Future<Response> getMonthlyReport(int year, int month) async {
     return (response.data as List? ?? []).whereType<Map<String, dynamic>>().toList();
   }
 
+  /// Escanea los semáforos conectados/disponibles (HTTP + serie).
+  ///
+  /// [incluirSimulados] - Incluye el simulador BSDD local (HTTP
+  /// `127.0.0.1:8080` y el puerto serie `/dev/bsdd_semaforo_acm`) y los ptys
+  /// virtuales. Por defecto true: el simulador debe aparecer solo, sin alta
+  /// manual, igual que el backend.
+  Future<List<Map<String, dynamic>>> descubrirSemaforos({
+    bool incluirSimulados = true,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.semaforosDescubrir}',
+      queryParameters: {'incluir_simulados': incluirSimulados},
+    );
+    return (response.data as List? ?? []).whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// Prueba la conexión de un semáforo leyendo su estado publicado.
+  /// Devuelve `{semaforo, conectado, protocolo, estado, detalle}`.
+  Future<Map<String, dynamic>> probarSemaforo(String semaforoId) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.semaforoProbar(semaforoId)}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Estado del semáforo: lo publicado por el equipo + fase/luces de la app.
+  Future<Map<String, dynamic>> estadoSemaforo(String semaforoId) async {
+    final response =
+        await _dio.get('$_baseUrl${ApiConstants.semaforoEstado(semaforoId)}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Envía un comando manual de LED al semáforo (banco de pruebas del SPEC).
+  ///
+  /// El mismo JSON en todos los canales: `{color, action}`,
+  /// `{zumbador: on|off}`, `{all: off}` o `{reset: true}`.
+  Future<Map<String, dynamic>> comandoSemaforo(
+    String semaforoId,
+    Map<String, dynamic> comando,
+  ) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.semaforoComando(semaforoId)}',
+      data: comando,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Activa/desactiva el control automático (vigilante peso → LED).
+  Future<Map<String, dynamic>> setSemaforoAutomatico(
+    String semaforoId,
+    bool activo,
+  ) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.semaforoAutomatico(semaforoId)}',
+      data: {'activo': activo},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Response> getItem(String path) async {
     final response = await _dio.get('$_baseUrl$path');
     return response;
@@ -765,6 +831,240 @@ Future<Response> getMonthlyReport(int year, int month) async {
   Future<Response> createItem(String path, Map<String, dynamic> body) async {
     final response = await _dio.post('$_baseUrl$path', data: body);
     return response;
+  }
+
+  /// Prueba la conexión de una cámara (descarga el snapshot sin persistir).
+  Future<Map<String, dynamic>> probarCamara(String camaraId) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.camaraProbar(camaraId)}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// URL del proxy del snapshot para previsualizar la cámara en la UI.
+  String urlSnapshotCamara(String camaraId) =>
+      '$_baseUrl${ApiConstants.camaraSnapshot(camaraId)}';
+
+  /// URL del flujo MJPEG en vivo de la cámara.
+  String urlStreamCamara(String camaraId) =>
+      '$_baseUrl${ApiConstants.camaraStream(camaraId)}';
+
+  /// Acceso al Dio interno (para leer el token de auth).
+  Dio get dio => _dio;
+
+  /// Consume el flujo MJPEG de la cámara (multipart/x-mixed-replace).
+  ///
+  /// Devuelve una `Response` cuyo `data` es un `Stream<List<int>>` con los
+  /// bytes crudos del flujo. El llamador parsea los cuadros JPEG.
+  Future<Response<dynamic>> streamCamara(String camaraId) async {
+    final response = await _dio.get<dynamic>(
+      '$_baseUrl${ApiConstants.camaraStream(camaraId)}',
+      options: Options(
+        responseType: ResponseType.stream,
+        receiveTimeout: const Duration(seconds: 60),
+      ),
+    );
+    return response;
+  }
+
+  /// Descarga un recurso binario (p. ej. el *frame* del snapshot de la cámara).
+  Future<Uint8List> getBytes(String path) async {
+    final response = await _dio.get<List<int>>(
+      '$_baseUrl$path',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const <int>[]);
+  }
+
+  /// Captura una foto de placa del boleto desde la cámara (la persiste).
+  Future<Map<String, dynamic>> capturarFotoCamara(
+    String camaraId, {
+    required String boleto,
+    required String foto,
+  }) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.camaraCapturar(camaraId)}',
+      data: {'boleto': boleto, 'foto': foto},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Lista los indicadores (terminales de peso) de la empresa.
+  ///
+  /// [filtros] acepta los filtros de vista del backend (`q`, `activo`,
+  /// `is_simulado`, `protocolo`); los valores nulos se omiten.
+  Future<List<Map<String, dynamic>>> listarIndicadores({
+    Map<String, dynamic>? filtros,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.indicadores}',
+      queryParameters: _limpiarFiltros(filtros),
+    );
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Lista las básculas físicas de la empresa.
+  ///
+  /// [filtros] acepta los filtros de vista del backend (`q`, `activo`,
+  /// `is_simulada`, `protocolo`); los valores nulos se omiten.
+  Future<List<Map<String, dynamic>>> listarBalanzas({
+    Map<String, dynamic>? filtros,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.balanzas}',
+      queryParameters: _limpiarFiltros(filtros),
+    );
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Lista los semáforos de la empresa con los filtros de vista opcionales.
+  Future<List<Map<String, dynamic>>> listarSemaforos({
+    Map<String, dynamic>? filtros,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.semaforos}',
+      queryParameters: _limpiarFiltros(filtros),
+    );
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Lista las cámaras de la empresa con los filtros de vista opcionales.
+  Future<List<Map<String, dynamic>>> listarCamaras({
+    Map<String, dynamic>? filtros,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.camaras}',
+      queryParameters: _limpiarFiltros(filtros),
+    );
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Escanea las cámaras disponibles (locales/USB del equipo + IP registradas).
+  ///
+  /// [incluirLocales] enumera las cámaras conectadas a la computadora
+  /// (`/dev/video*` en Linux); [incluirRegistradas] reprueba las cámaras IP ya
+  /// configuradas. No persiste: la UI deduplica y auto-registra.
+  Future<List<Map<String, dynamic>>> descubrirCamaras({
+    bool incluirLocales = true,
+    bool incluirRegistradas = true,
+  }) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.camarasDescubrir}',
+      queryParameters: {
+        'incluir_locales': incluirLocales,
+        'incluir_registradas': incluirRegistradas,
+      },
+    );
+    return (response.data as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  /// Escanea las barreras conectadas/disponibles.
+  Future<List<Map<String, dynamic>>> descubrirBarras() async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.barrerasDescubrir}',
+    );
+    return (response.data as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  /// Prueba la conexión de una barrera (`/barreras/{id}/probar`).
+  Future<Map<String, dynamic>> probarBarrera(String id) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.barreraProbar(id)}',
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Estado de conexión + modo automático de una barrera.
+  Future<Map<String, dynamic>> estadoBarrera(String id) async {
+    final response = await _dio.get(
+      '$_baseUrl${ApiConstants.barreraEstado(id)}',
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Envía un comando manual (`open` o `close`) a una barrera.
+  Future<Map<String, dynamic>> comandoBarrera(
+    String id,
+    String action,
+  ) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.barreraComando(id)}',
+      data: {'action': action},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Elimina de un mapa de filtros los valores nulos o vacíos para no enviarlos.
+  Map<String, dynamic>? _limpiarFiltros(Map<String, dynamic>? filtros) {
+    if (filtros == null) return null;
+    final limpio = <String, dynamic>{};
+    filtros.forEach((clave, valor) {
+      if (valor == null) return;
+      if (valor is String && valor.trim().isEmpty) return;
+      limpio[clave] = valor;
+    });
+    return limpio.isEmpty ? null : limpio;
+  }
+
+  /// Crea un indicador con su configuración de comunicación.
+  Future<Map<String, dynamic>> crearIndicador(
+      Map<String, dynamic> body) async {
+    final response =
+        await _dio.post('$_baseUrl${ApiConstants.indicadores}', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Actualiza un indicador existente.
+  Future<Map<String, dynamic>> actualizarIndicador(
+      String id, Map<String, dynamic> body) async {
+    final response = await _dio.put(
+      '$_baseUrl${ApiConstants.indicador(id)}',
+      data: body,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Elimina un indicador (409 si tiene básculas enlazadas).
+  Future<void> eliminarIndicador(String id) async {
+    await _dio.delete('$_baseUrl${ApiConstants.indicador(id)}');
+  }
+
+  Future<Map<String, dynamic>> descubrirDispositivos() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.dispositivosDescubrir}');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> listarVinculos() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.vinculos}');
+    return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> crearVinculo({required String idBascula, required String idIndicador}) async {
+    final response = await _dio.post('$_baseUrl${ApiConstants.vinculos}', data: {
+      'id_bascula': idBascula,
+      'id_indicador': idIndicador,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> eliminarVinculo(String idVinculo) async {
+    await _dio.delete('$_baseUrl${ApiConstants.vinculos}/$idVinculo');
+  }
+
+  /// Enlaza (`enlazar=true`) o desenlaza una báscula del indicador.
+  Future<Map<String, dynamic>> enlazarIndicador(
+    String indicadorId,
+    String balanzaId, {
+    bool enlazar = true,
+  }) async {
+    final path = ApiConstants.indicadorEnlazar(indicadorId, balanzaId);
+    final response = enlazar
+        ? await _dio.post('$_baseUrl$path')
+        : await _dio.delete('$_baseUrl$path');
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Response> updateItem(String path, Map<String, dynamic> body) async {
@@ -818,13 +1118,16 @@ Future<Response> getMonthlyReport(int year, int month) async {
   ///
   /// [idMovimiento]: 10 = INGRESO, 60 = DESPACHO.
   /// [valorKg]: peso ajustado en kilogramos (positivo).
-  /// [documento]: justificación obligatoria.
+  /// [idConcepto]: concepto del catálogo (motivo del movimiento, migración 029).
+  /// [documento]: texto libre (legado). El backend copia el nombre del concepto
+  /// cuando solo se envía `idConcepto`.
   Future<Response> crearAjusteInventario({
     required int idMovimiento,
     required String idProducto,
     required String idAlmacen,
     required double valorKg,
-    required String documento,
+    String? idConcepto,
+    String? documento,
   }) async {
     final response = await _dio.post(
       '$_baseUrl/api/v1/inventario/ajustes',
@@ -833,10 +1136,17 @@ Future<Response> getMonthlyReport(int year, int month) async {
         'id_producto': idProducto,
         'id_almacen': idAlmacen,
         'valor_kg': valorKg,
-        'documento': documento,
+        if (idConcepto != null) 'id_concepto': idConcepto,
+        if (documento != null && documento.isNotEmpty) 'documento': documento,
       },
     );
     return response;
+  }
+
+  /// Conceptos de inventario de la empresa (catálogo de motivos de kardex).
+  Future<List<Map<String, dynamic>>> listarConceptosInventario() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.conceptosInventario}');
+    return (response.data as List).cast<Map<String, dynamic>>();
   }
 
   /// Bandeja de notificaciones de la estación (más recientes primero).

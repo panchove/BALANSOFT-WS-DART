@@ -8,20 +8,25 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Almacen,
     Balanza,
+    Barrera,
+    Camara,
     Camion,
     Categoria,
+    ConceptoInventario,
     Conductor,
+    Indicador,
     Marca,
     ModeloCamion,
     Producto,
     Remolque,
+    Semaforo,
     Tercero,
     Transporte,
 )
@@ -45,7 +50,20 @@ CATALOGS: dict[str, dict[str, Any]] = {
     "almacenes": {"model": Almacen, "empresa_col": "id_empresa", "id_col": "id_almacen"},
     "categorias": {"model": Categoria, "empresa_col": "id_empresa", "id_col": "id_categoria"},
     "balanzas": {"model": Balanza, "empresa_col": "id_empresa", "id_col": "id_balanza"},
+    "indicadores": {
+        "model": Indicador,
+        "empresa_col": "id_empresa",
+        "id_col": "id_indicador",
+    },
+    "semaforos": {"model": Semaforo, "empresa_col": "id_empresa", "id_col": "id_semaforo"},
+    "camaras": {"model": Camara, "empresa_col": "id_empresa", "id_col": "id_camara"},
     "terceros": {"model": Tercero, "empresa_col": "id_empresa", "id_col": "id_tercero"},
+    "conceptos_inventario": {
+        "model": ConceptoInventario,
+        "empresa_col": "id_empresa",
+        "id_col": "id_concepto",
+    },
+    "barreras": {"model": Barrera, "empresa_col": "id_empresa", "id_col": "id_barrera"},
 }
 
 
@@ -61,7 +79,12 @@ _ETIQUETAS_ENTIDAD: dict[str, str] = {
     "almacenes": "almacén",
     "categorias": "categoría",
     "balanzas": "báscula",
+    "indicadores": "indicador",
+    "semaforos": "semáforo",
+    "camaras": "cámara",
     "terceros": "tercero",
+    "conceptos_inventario": "concepto de inventario",
+    "barreras": "barrera",
 }
 
 
@@ -146,6 +169,57 @@ class CatalogService:
             raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")
         model = cfg["model"]
         stmt = select(model).where(getattr(model, cfg["empresa_col"]) == empresa_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        return [self._dump(r) for r in rows]
+
+    async def list_filtrado(
+        self,
+        db: AsyncSession,
+        empresa_id: uuid.UUID,
+        name: str,
+        *,
+        q: str | None = None,
+        columnas_texto: tuple[str, ...] = (),
+        iguales: dict[str, object] | None = None,
+    ) -> list:
+        """Lista un catálogo aplicando **filtros de vista** (siempre por empresa).
+
+        Es la base de los listados de dispositivos (básculas, impresoras,
+        semáforos, indicadores, cámaras): cada vista guarda/busca por su propio
+        tipo, y aquí se resuelven el texto libre (`q`) y los filtros de igualdad
+        (`activo`, `is_simulada`, `protocolo`, …).
+
+        - ``q``: búsqueda de texto insensible a mayúsculas sobre
+          ``columnas_texto`` (patrón ``ILIKE %q%``). Las columnas inexistentes
+          en el modelo se ignoran.
+        - ``iguales``: filtros de igualdad exacta por nombre de columna. Los
+          valores ``None`` se ignoran (sin filtro); una columna inexistente
+          también se ignora para no romper la vista.
+
+        El aislamiento multi-tenant se garantiza con el ``WHERE id_empresa``.
+        """
+        cfg = CATALOGS.get(name)
+        if cfg is None:
+            raise HTTPException(status_code=404, detail=f"Catálogo desconocido: {name}")
+        model = cfg["model"]
+        stmt = select(model).where(getattr(model, cfg["empresa_col"]) == empresa_id)
+
+        texto = (q or "").strip()
+        if texto and columnas_texto:
+            patron = f"%{texto}%"
+            condiciones = [
+                getattr(model, col).ilike(patron)
+                for col in columnas_texto
+                if hasattr(model, col)
+            ]
+            if condiciones:
+                stmt = stmt.where(or_(*condiciones))
+
+        for col, valor in (iguales or {}).items():
+            if valor is None or not hasattr(model, col):
+                continue
+            stmt = stmt.where(getattr(model, col) == valor)
+
         rows = (await db.execute(stmt)).scalars().all()
         return [self._dump(r) for r in rows]
 

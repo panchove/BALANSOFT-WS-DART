@@ -6,9 +6,9 @@ se saltan; nunca fallan en CI que no tiene SQL Server.
 
 Cubre:
 - ``wserver.crear_bd_si_falta`` + ``_asegurar_db_sqlserver`` (Fase 2):
-  aplica el T-SQL, siembra ``schema_migrations`` (25).
+  aplica el T-SQL, siembra ``schema_migrations`` (30).
 - Idempotencia: una segunda pasada no vuelve a aplicar nada ni revienta.
-- Paridad: 31 tablas / 31 PK / 46 FK contra el T-SQL canónico (N0).
+- Paridad: 35 tablas / 35 PK / 53 FK contra el T-SQL canónico (N0).
 """
 
 from __future__ import annotations
@@ -22,6 +22,12 @@ import pytest
 import wserver
 from app.core import db_engine
 from app.core.db_engine import desactivar_pooling_pyodbc, dsn_pyodbc
+from tests.test_sqlserver_tsql_n0 import (
+    ESPERADAS_FK,
+    ESPERADAS_MIGRACIONES_PLEGADAS,
+    ESPERADAS_PK,
+    TABLAS_ESPERADAS_MSSQL,
+)
 
 desactivar_pooling_pyodbc()  # pyodbc 5: pooling interno → HY000 con lotes DDL
 pytestmark = pytest.mark.mssql
@@ -120,20 +126,23 @@ def test_esquema_aplicado_idempotente_y_siembra(disponibilidad):
         conn.commit()
         _verificar_paridad(cur)
 
-        # schema_migrations vacía → siembra las 001-025 reales (sin las
+        # schema_migrations vacía → siembra las 001-026 reales (sin las
         # variantes *.mssql.sql), sin duplicar al repetir.
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
         assert cur.fetchone()[0] == 0, "schema_migrations debe partir vacía"
         mig_dir = Path(__file__).resolve().parents[1] / "migrations"
         versiones = [p.name for p in wserver._archivos_migracion(mig_dir)]
-        assert len(versiones) == 25, f"se esperaban 25 migraciones plegadas, hay {len(versiones)}"
+        assert len(versiones) == ESPERADAS_MIGRACIONES_PLEGADAS, (
+            f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
+            f"hay {len(versiones)}"
+        )
         assert all(not v.endswith(".mssql.sql") for v in versiones)
         wserver._sembrar_migraciones_sqlserver(conn, versiones)
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 25
+        assert cur.fetchone()[0] == ESPERADAS_MIGRACIONES_PLEGADAS
         wserver._sembrar_migraciones_sqlserver(conn, versiones)
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 25
+        assert cur.fetchone()[0] == ESPERADAS_MIGRACIONES_PLEGADAS
     finally:
         if conn is not None:
             conn.close()
@@ -160,9 +169,9 @@ def test_asegurar_db_fase2(disponibilidad):
         conn = _conexion_sqlserver(url_sync, bd_tmp)
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = N'dbo'")
-        assert cur.fetchone()[0] == 31
+        assert cur.fetchone()[0] == len(TABLAS_ESPERADAS_MSSQL)
         cur.execute("SELECT COUNT(*) FROM dbo.schema_migrations")
-        assert cur.fetchone()[0] == 25
+        assert cur.fetchone()[0] == ESPERADAS_MIGRACIONES_PLEGADAS
     finally:
         if conn is not None:
             conn.close()
@@ -173,16 +182,17 @@ def test_asegurar_db_fase2(disponibilidad):
 
 
 def _verificar_paridad(cur) -> None:
-    """Paridad canónica del esquema: 31 tablas / 31 PK / 46 FK."""
+    """Paridad canónica del esquema: 35 tablas / 35 PK / 53 FK."""
+    esperadas_tablas = len(TABLAS_ESPERADAS_MSSQL)
     cur.execute("SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = N'dbo'")
-    assert cur.fetchone()[0] == 31, "se esperaban 31 tablas"
+    assert cur.fetchone()[0] == esperadas_tablas, f"se esperaban {esperadas_tablas} tablas"
     cur.execute(
         "SELECT COUNT(*) FROM sys.key_constraints "
         "WHERE type = 'PK' AND SCHEMA_NAME(schema_id) = N'dbo'"
     )
-    assert cur.fetchone()[0] == 31, "se esperaban 31 PK"
+    assert cur.fetchone()[0] == ESPERADAS_PK, f"se esperaban {ESPERADAS_PK} PK"
     cur.execute(
         "SELECT COUNT(*) FROM sys.foreign_keys "
         "WHERE SCHEMA_NAME(schema_id) = N'dbo'"
     )
-    assert cur.fetchone()[0] == 46, "se esperaban 46 FK"
+    assert cur.fetchone()[0] == ESPERADAS_FK, f"se esperaban {ESPERADAS_FK} FK"

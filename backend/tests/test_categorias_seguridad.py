@@ -325,3 +325,53 @@ class TestSeguridadEndpoints:
             json={"rol": "OPERADOR", "modulo": "modulo_fantasma", "acceso": "ver"},
         )
         assert r.status_code == 400
+
+    async def test_roles_lista_los_tres_roles_locales(self, client):
+        r = await client.get("/api/v1/seguridad/roles")
+        assert r.status_code == 200
+        roles = {x["clave"]: x for x in r.json()}
+        assert set(roles) == {"ADMIN", "OPERADOR", "AUDITOR"}
+        # El ADMIN siempre tiene "editar" en todos los módulos.
+        assert roles["ADMIN"]["modulos_editar"] > 0
+        assert roles["ADMIN"]["modulos_ninguno"] == 0
+        # Cada rol trae su descripción y el conteo de usuarios (>= 1 el ADMIN
+        # sembrado por el fixture).
+        assert roles["ADMIN"]["descripcion"]
+        assert roles["ADMIN"]["usuarios"] >= 1
+
+    async def test_roles_cuenta_usuarios_de_la_empresa(self, client, db, empresa):
+        from app.models import Empresa, Usuario
+
+        for i in range(2):
+            db.add(
+                Usuario(
+                    id_empresa=empresa.id_empresa,
+                    nombre=f"Operador {i}",
+                    email=f"op{i}@seguridad.demo",
+                    password_hash="x",
+                    rol="OPERADOR",
+                    activo=True,
+                )
+            )
+        # Usuario de OTRA empresa: no debe contarse (aislamiento multi-tenant).
+        otra = Empresa(
+            nombre_fiscal="Otra Seguridad",
+            rif_nit="J-99999999-9",
+        )
+        db.add(otra)
+        await db.flush()
+        db.add(
+            Usuario(
+                id_empresa=otra.id_empresa,
+                nombre="Operador ajeno",
+                email="ajeno@seguridad.demo",
+                password_hash="x",
+                rol="OPERADOR",
+                activo=True,
+            )
+        )
+        await db.commit()
+
+        r = await client.get("/api/v1/seguridad/roles")
+        roles = {x["clave"]: x for x in r.json()}
+        assert roles["OPERADOR"]["usuarios"] == 2

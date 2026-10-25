@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_utils.dart' as app_dates;
 import '../../../core/utils/medida_conversion.dart';
 import '../../../core/utils/number_utils.dart';
+import '../../../core/utils/placa_fotos.dart';
 import '../../../core/utils/unsaved_work_guard.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/utils/uppercase_formatter.dart';
@@ -24,6 +27,7 @@ import '../../../core/utils/save_file_utils.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../domain/entities/weighing.dart';
 import '../../widgets/ticket_preview_dialog.dart';
+import '../../widgets/camara_preview.dart';
 import 'editar_boleto_dialog.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/catalog/catalog_bloc.dart';
@@ -362,6 +366,36 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   List<PhotoCaptured> _fotosCamion = [];
   List<PhotoCaptured> _fotosRemolque = [];
 
+  // ─── Fotos de placa (cámaras; migración 027) ───────────────────────────
+  /// Config por empresa: `true` cuando el bloque de captura de placa aparece.
+  bool _fotosPlacaActivas = false;
+
+  /// Config por empresa: `true` cuando no se puede guardar sin las fotos.
+  bool _fotosPlacaObligatorias = false;
+
+  /// Cámaras activas ofrecidas para la captura por IP.
+  List<Camara> _camaras = const [];
+
+  /// Cámara IP elegida por el operador para la captura.
+  Camara? _camaraSeleccionada;
+
+  /// Fotos de placa ya capturadas **por cámara IP** en esta pesada (sufijo →
+  /// bytes), para previsualizarlas sin volver a pedir el *frame*.
+  final Map<String, PhotoCaptured> _placaCamara = {};
+
+  /// `true` cuando el boleto en edición (salida) ya tiene fotos de placa: en
+  /// ese caso el bloque no se vuelve a pedir («una sola vez por boleto»).
+  bool _fotosPlacaYaTomadas = false;
+
+  /// Fotos de placa capturadas con la **cámara del dispositivo** (respaldo).
+  /// Se suben con `tipo='placa'` y el sufijo del nombre, igual que las de la
+  /// cámara IP, para que el backend fije `fotos_placa_tomadas`.
+  List<PhotoCaptured> _placaLocal = [];
+
+  /// `true` mientras se descarga una foto de placa de la cámara IP.
+  bool _capturandoPlaca = false;
+  Uint8List? _ultimoFramePlaca;
+
   Camion? _camionSeleccionado;
   Trailer? _remolqueSeleccionado;
   Transport? _transporteSeleccionado;
@@ -512,7 +546,45 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _balanzasDisponibles = balanzas;
       _aplicarBalanzaPorDefecto(modoSalida: _boletoSalida != null);
     });
+    // La config de fotos de placa es de la empresa: se carga aparte para no
+    // bloquear el formulario si la API no responde.
+    unawaited(_cargarConfigFotosPlaca());
   }
+
+  /// Carga los interruptores de placa de la empresa y las cámaras activas.
+  Future<void> _cargarConfigFotosPlaca() async {
+    final api = di.sl<ApiClient>();
+    bool activas = false;
+    bool obligatorias = false;
+    List<Camara> camaras = const [];
+    try {
+      final perfil = await api.getEmpresaPerfil();
+      activas = perfil['fotos_placa_activas'] == true;
+      obligatorias = perfil['fotos_placa_obligatorias'] == true;
+    } catch (_) {
+      // Si falla el perfil seguimos cargando cámaras
+    }
+    try {
+      final res = await api.getList(ApiConstants.camaras);
+      camaras = (res.data as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(Camara.fromJson)
+          .where((c) => c.activo)
+          .toList();
+    } catch (_) {
+      camaras = const [];
+    }
+    if (!mounted) return;
+    setState(() {
+      _fotosPlacaActivas = activas;
+      _fotosPlacaObligatorias = obligatorias;
+      _camaras = camaras;
+      if (_camaraSeleccionada == null && camaras.isNotEmpty) {
+        _camaraSeleccionada = camaras.first;
+      }
+    });
+  }
+
 
   /// Keys de preferencias para la báscula por defecto según el tipo de pesaje.
   static const String _prefsBalanzaGlobal = 'scale_default_id';
@@ -814,7 +886,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         return;
       }
       setState(() => _objetivoPeso = _ObjetivoPeso.fijado);
-      _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+      if (_camaraSeleccionada != null) {
+        await _capturarPlaca();
+        _avisoSimple('weighing_weight_and_photo_captured'.tr(), SwsColors.success);
+      } else {
+        _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+      }
       return;
     }
 
@@ -824,10 +901,20 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         _avisoSimple('weighing_capture_cabina_first'.tr(), SwsColors.warning);
         return;
       }
-      setState(() => _objetivoPeso = _objetivoPeso == _ObjetivoPeso.fijado
+      final nuevoObjetivo = _objetivoPeso == _ObjetivoPeso.fijado
           ? _ObjetivoPeso.cabina
-          : _ObjetivoPeso.fijado);
-      _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+          : _ObjetivoPeso.fijado;
+      setState(() => _objetivoPeso = nuevoObjetivo);
+      if (nuevoObjetivo == _ObjetivoPeso.fijado) {
+        if (_camaraSeleccionada != null) {
+          await _capturarPlaca();
+          _avisoSimple('weighing_weight_and_photo_captured'.tr(), SwsColors.success);
+        } else {
+          _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+        }
+      } else {
+        _avisoSimple('weighing_weight_fixed'.tr(), SwsColors.success);
+      }
       return;
     }
 
@@ -856,7 +943,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           return;
         }
         setState(() => _objetivoPeso = _ObjetivoPeso.fijado);
-        _avisoSimple('weighing_trailer_ready'.tr(), SwsColors.success);
+        if (_camaraSeleccionada != null) {
+          await _capturarPlaca('placa_remolque');
+          _avisoSimple('weighing_weight_and_photo_captured'.tr(), SwsColors.success);
+        } else {
+          _avisoSimple('weighing_trailer_ready'.tr(), SwsColors.success);
+        }
       case _ObjetivoPeso.fijado:
         // Volver a capturar el remolque si el camión se movió.
         setState(() => _objetivoPeso = _ObjetivoPeso.remolque);
@@ -1426,6 +1518,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _balanzaTexto = '';
       _aplicarBalanzaPorDefecto(modoSalida: true);
       _balanzaTexto = _balanzaSeleccionada?.etiqueta ?? '';
+      // Regla «una sola vez por boleto»: si el boleto ya tiene fotos de placa
+      // (tomadas en la ENTRADA), no se vuelven a pedir al cerrar la salida.
+      _fotosPlacaYaTomadas = b.fotosPlacaTomadas;
+      _placaCamara.clear();
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1481,6 +1577,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _balanzaTexto = _balanzaSeleccionada?.etiqueta ?? '';
       _fotosCamion = [];
       _fotosRemolque = [];
+      _placaLocal = [];
+      _placaCamara.clear();
+      _fotosPlacaYaTomadas = false;
       _numeroBoleto = null;
       _fechaActual = DateTime.now();
       for (var i = 0; i < _confirmados.length; i++) {
@@ -1572,6 +1671,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       }
       if (!_validarPesoRemolqueObligatorio()) return;
       if (!_validarCapturaRealizada()) return;
+      if (!_validarFotosPlaca()) return;
       if (!await _confirmarGuardado()) return;
       if (!mounted) return;
       _guardar();
@@ -1581,13 +1681,37 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     // ── MODO ENTRADA (Creación de pesaje nuevo) ─────────────────────────────
     if (!_validarPesoRemolqueObligatorio()) return;
     if (!_validarCapturaRealizada()) return;
+    if (!_validarFotosPlaca()) return;
     if (!await _confirmarGuardado()) return;
     if (!mounted) return;
     _guardar();
   }
 
+  /// Bloquea el guardado si la empresa marcó las fotos de placa como
+  /// obligatorias y el boleto aún no tiene ninguna.
+  ///
+  /// Cuando el boleto ya las trae (`fotos_placa_tomadas`) o la empresa no las
+  /// exige, no bloquea nada.
+  bool _validarFotosPlaca() {
+    if (!exigeFotosPlacaAlGuardar(
+      activas: _fotosPlacaActivas,
+      obligatorias: _fotosPlacaObligatorias,
+      yaTomadas: _fotosPlacaYaTomadas,
+      hayFotos: _hayFotosPlaca,
+    )) {
+      return true;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('placa_exige_fotos'.tr()),
+        backgroundColor: SwsColors.warning,
+      ),
+    );
+    return false;
+  }
+
   /// Envía el pesaje a la API (ya validado y confirmado por el operador).
-  void _guardar() {
+  Future<void> _guardar() async {
     // ── MODO SALIDA (Cierre directo de boleto) ──────────────────────────────
     if (_boletoSalida != null) {
       final pesoSalidaVeh = double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0;
@@ -1624,6 +1748,58 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     }
 
     // ── MODO ENTRADA (Creación de pesaje nuevo) ─────────────────────────────
+    // Auto-captura: si las fotos de placa son obligatorias/activas y aún no
+    // se han tomado, se toma el cuadro actual de la previsualización en vivo
+    // y se adjunta al pesaje al guardarlo. Si no hay frame, pide un snapshot.
+    if (_camaras.isNotEmpty && _camaraSeleccionada != null) {
+      if (exigeFotosPlacaAlGuardar(
+            activas: _fotosPlacaActivas,
+            obligatorias: _fotosPlacaObligatorias,
+            yaTomadas: _fotosPlacaYaTomadas,
+            hayFotos: _hayFotosPlaca,
+          ) ||
+          (_fotosPlacaActivas && !_hayFotosPlaca && _placaLocal.isEmpty)) {
+        Uint8List? bytes = _ultimoFramePlaca;
+        if (bytes == null || bytes.isEmpty) {
+          try {
+            final fetched = await di.sl<ApiClient>().getBytes(ApiConstants.camaraSnapshot(_camaraSeleccionada!.id));
+            if (fetched.isNotEmpty) {
+              bytes = fetched;
+              _ultimoFramePlaca = bytes;
+            }
+          } catch (_) {}
+        }
+        if (bytes != null && bytes.isNotEmpty) {
+          final sufijos = _sufijosPlacaRequeridos.isNotEmpty
+              ? _sufijosPlacaRequeridos
+              : nombresPlacaLocal(1, remolque: _remolque);
+          final bytesToUse = bytes;
+          bool agregado = false;
+          for (final sufijo in sufijos) {
+            if (!_placaCamara.containsKey(sufijo) &&
+                !_placaLocal.any((f) => f.nombre.startsWith(sufijo))) {
+              _placaLocal.add(PhotoCaptured(
+                bytes: Uint8List.fromList(bytesToUse),
+                nombre: '$sufijo.jpg',
+              ));
+              agregado = true;
+            }
+          }
+          if (agregado || _placaLocal.isNotEmpty) {
+            setState(() {
+              _placaLocal = _renombrarPlacaLocal(_placaLocal);
+              _fotosPlacaYaTomadas = true;
+            });
+          } else if (_placaLocal.isNotEmpty) {
+            setState(() {
+              _placaLocal = _renombrarPlacaLocal(_placaLocal);
+              _fotosPlacaYaTomadas = true;
+            });
+          }
+        }
+      }
+    }
+
     final now = DateTime.now();
     final placa = _camionSeleccionado?.placa ?? _camionTexto.toUpperCase();
 
@@ -1716,6 +1892,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           _ultimoBoletoId = state.weighing.boleto;
           _ultimoNumeroBoleto = numeroVisible;
           setState(() => _guardandoPesaje = false);
+          // Las fotos de placa del respaldo local capturadas en la SALIDA se
+          // suben tras cerrar el boleto (el boleto ya existe y el flag
+          // `fotos_placa_tomadas` se fija con `tipo='placa'`).
+          unawaited(_subirFotos(state.weighing.boleto));
           _limpiarFormulario();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1760,7 +1940,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     final api = di.sl<ApiClient>();
     final camion = _fotosCamion.map((f) => (foto: f, tipo: 'vehiculo'));
     final remolque = _fotosRemolque.map((f) => (foto: f, tipo: 'otros'));
-    final todas = [...camion, ...remolque];
+    final placasLocal = _placaLocal.map((f) => (foto: f, tipo: 'placa'));
+    final placasCamara = _placaCamara.values.map((f) => (foto: f, tipo: 'placa'));
+    final todas = [...camion, ...remolque, ...placasLocal, ...placasCamara];
     if (todas.isEmpty) return;
     var ok = 0;
     for (final entrada in todas) {
@@ -1780,6 +1962,97 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         ),
       );
     }
+  }
+
+  // ─── Fotos de placa (cámara IP + respaldo local) ────────────────────────
+
+  /// Sufijos obligatorios de las fotos de placa para el vehículo actual.
+  ///
+  /// Sin remolque: **placa trasera del camión + frente del camión**.
+  /// Con remolque: **placa trasera del remolque + frente del camión** (la
+  /// placa del remolque usa el sufijo `placa_remolque` que acepta la API).
+  List<String> get _sufijosPlacaRequeridos =>
+      sufijosPlacaRequeridos(remolque: _remolque);
+
+  /// ¿Ya hay al menos una foto de placa capturada (cámara o local)?
+  bool get _hayFotosPlaca =>
+      _placaCamara.isNotEmpty || _placaLocal.isNotEmpty;
+
+  /// Captura una foto desde la cámara seleccionada.
+  /// Funciona tanto para entrada como para salida.
+  Future<void> _capturarPlaca([String? sufijoParam]) async {
+    final camara = _camaraSeleccionada;
+    if (camara == null) {
+      _avisoPlaca('placa_sin_camaras'.tr());
+      return;
+    }
+    final sufijo = sufijoParam ??
+        (_remolque && _objetivoPeso == _ObjetivoPeso.remolque
+            ? 'placa_remolque'
+            : (!_placaCamara.containsKey('frente') ? 'frente' : 'placa_trasera'));
+
+    setState(() => _capturandoPlaca = true);
+    try {
+      Uint8List? bytes = _ultimoFramePlaca;
+      if (bytes == null || bytes.isEmpty) {
+        try {
+          bytes = await di.sl<ApiClient>().getBytes(ApiConstants.camaraSnapshot(camara.id));
+          if (bytes.isNotEmpty) {
+            _ultimoFramePlaca = bytes;
+          }
+        } catch (_) {}
+      }
+      if (bytes == null || bytes.isEmpty) {
+        _avisoPlaca('placa_error_captura'.tr());
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _placaCamara[sufijo] = PhotoCaptured(
+          bytes: bytes!,
+          nombre: '$sufijo.jpg',
+        );
+        if (_fotosCamion.isEmpty) {
+          _fotosCamion = [
+            PhotoCaptured(bytes: bytes, nombre: 'camara_$sufijo.jpg'),
+          ];
+        }
+        _fotosPlacaYaTomadas = true;
+      });
+
+      final boleto = _boletoSalida?.boleto;
+      if (boleto != null && boleto.isNotEmpty) {
+        try {
+          await di.sl<ApiClient>().uploadImage(
+            boleto,
+            bytes,
+            '$sufijo.jpg',
+            tipo: 'placa',
+          );
+        } catch (_) {}
+      }
+
+      _avisoPlaca('placa_capturada'.tr(), exito: true);
+    } catch (_) {
+      if (mounted) {
+        _avisoPlaca('placa_error_captura'.tr());
+      }
+    } finally {
+      if (mounted) setState(() => _capturandoPlaca = false);
+    }
+  }
+
+  void _avisoPlaca(String mensaje, {bool exito = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(mensaje),
+          backgroundColor: exito ? SwsColors.success : SwsColors.warning,
+        ),
+      );
   }
 
   Widget _buildForm(BuildContext context, CatalogData data) {
@@ -1911,22 +2184,22 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         ),
         const SizedBox(width: 16),
 
-        // ── COLUMNA DERECHA: RESUMEN + FOTOS ──────────────────────────────
+        // ── COLUMNA DERECHA: FOTOS / CÁMARA + RESUMEN ─────────────────────
         SizedBox(
-          width: 300,
+          width: 320,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _SectionCard(
-                title: 'RESUMEN',
-                icon: Icons.summarize,
-                children: _buildResumenSection(data),
+                title: 'FOTOS Y CÁMARA',
+                icon: Icons.photo_camera,
+                children: _buildFotosSection(),
               ),
               const SizedBox(height: 16),
               _SectionCard(
-                title: 'FOTOS',
-                icon: Icons.photo_camera,
-                children: _buildFotosSection(),
+                title: 'RESUMEN',
+                icon: Icons.summarize,
+                children: _buildResumenSection(data),
               ),
             ],
           ),
@@ -2513,6 +2786,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
               ? (double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0)
               : (double.tryParse(_pesoEntradaCtrl.text) ?? 0),
           onPesoLeido: (peso) {
+            if (_esPesoManual) return;
             setState(() {
               _ctrlActivoPeso?.text = peso.toStringAsFixed(2);
               _recalcularUnidades();
@@ -2546,6 +2820,10 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           ),
         ),
       const SizedBox(height: 12),
+      if (_camaras.isNotEmpty) ...[
+        _buildCamaraLiveWidget(),
+        const SizedBox(height: 12),
+      ],
       TextFormField(
         key: const Key('peso_entrada_field'),
         controller: _pesoEntradaCtrl,
@@ -2686,7 +2964,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         etiqueta: _etiquetaCapturarPeso,
         pendiente: _objetivoPeso != _ObjetivoPeso.fijado,
       ),
-      if (_puedePesoManual && _hayBascula && !enModoSalida) ...[
+      if (_puedePesoManual && _hayBascula) ...[
         const SizedBox(height: 6),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -2714,6 +2992,244 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       ),
       _buildTablaTolerancia(),
     ];
+  }
+
+  /// Widget de cámara en vivo para la sección LECTURA DE PESO (a simple vista).
+  Widget _buildCamaraLiveWidget() {
+    final camara = _camaraSeleccionada;
+    if (camara == null) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black26
+                : SwsColors.light,
+            child: Row(
+              children: [
+                const Icon(Icons.videocam, size: 16, color: SwsColors.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _camaras.length > 1
+                      ? DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: camara.id,
+                            isDense: true,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: SwsColors.primary,
+                            ),
+                            items: [
+                              for (final c in _camaras)
+                                DropdownMenuItem(
+                                  value: c.id,
+                                  child: Text(
+                                    c.etiqueta,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (id) {
+                              if (id == null) return;
+                              final elegida =
+                                  _camaras.firstWhere((c) => c.id == id);
+                              setState(() {
+                                _camaraSeleccionada = elegida;
+                                _ultimoFramePlaca = null;
+                              });
+                            },
+                          ),
+                        )
+                      : Text(
+                          camara.etiqueta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: SwsColors.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: SwsColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: SwsColors.success.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: SwsColors.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'camara_en_vivo'.tr(),
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: SwsColors.success,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          CamaraPreview(
+            key: ValueKey('preview_${camara.id}'),
+            camaraId: camara.id,
+            height: 180,
+            onFrame: (bytes) {
+              if (mounted) _ultimoFramePlaca = bytes;
+            },
+            activo: true,
+            fps: 5,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  key: const Key('tomar_foto_camara_btn'),
+                  onPressed: _capturandoPlaca ? null : () => _capturarPlaca(),
+                  icon: _capturandoPlaca
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.camera_alt, size: 16),
+                  label: Text('take_photo'.tr(),
+                      style: const TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                for (final sufijo in _sufijosPlacaRequeridos)
+                  _botonPlaca(sufijo),
+              ],
+            ),
+          ),
+          if (_placaCamara.isNotEmpty) ...[
+            const Divider(height: 1),
+            Container(
+              height: 56,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black12
+                  : SwsColors.light.withValues(alpha: 0.5),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final entrada in _placaCamara.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              entrada.value.bytes,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              color: Colors.black54,
+                              padding: const EdgeInsets.symmetric(vertical: 1),
+                              child: Text(
+                                _etiquetaPlaca(entrada.key),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 7.5,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _placaCamara.remove(entrada.key);
+                                  if (_placaCamara.isEmpty &&
+                                      _placaLocal.isEmpty) {
+                                    _fotosPlacaYaTomadas = false;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                padding: const EdgeInsets.all(2),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   /// Tabla *CONTROL DE TOLERANCIA Y DECLARADO* (MODEL.md), debajo de los pesos.
@@ -3162,6 +3678,33 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   List<Widget> _buildFotosSection() {
     return [
+      // ── Previsualización en vivo + captura de placa ────────────────────────
+      if (_camaras.isNotEmpty) ...[
+        ..._buildPlacaSection(),
+        const Divider(height: 24),
+      ] else ...[
+        Text(
+          'placa_captura_titulo'.tr(),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'placa_sin_camaras'.tr(),
+          style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
+        ),
+        const SizedBox(height: 12),
+        PhotoPickerField(
+          label: 'placa_respaldo'.tr(),
+          icon: Icons.smartphone_outlined,
+          fotos: _placaLocal,
+          maxFotos: _sufijosPlacaRequeridos.length,
+          onChanged: (f) => setState(() {
+            _placaLocal = _renombrarPlacaLocal(f);
+            if (_placaLocal.isNotEmpty) _fotosPlacaYaTomadas = false;
+          }),
+        ),
+        const Divider(height: 24),
+      ],
       PhotoPickerField(
         label: 'Fotos del camión',
         icon: Icons.directions_car_outlined,
@@ -3179,6 +3722,202 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       ],
     ];
   }
+
+  /// Sección unificada: dropdown de cámara (primera por defecto), vista previa
+  /// en vivo SIEMPRE visible si hay cámaras, y botones de capturar si aplica.
+  List<Widget> _buildPlacaSection() {
+    final camara = _camaraSeleccionada;
+    final yaTomadas = _fotosPlacaYaTomadas || _hayFotosPlaca;
+    return [
+      Row(
+        children: [
+          const Icon(Icons.videocam_outlined,
+              size: 18, color: SwsColors.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'placa_captura_titulo'.tr(),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+          if (_fotosPlacaObligatorias)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: SwsColors.blue100,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'placa_obligatoria'.tr(),
+                style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: SwsColors.primary),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      // VISTA PREVIA EN VIVO - SIEMPRE VISIBLE SI HAY CÁMARAS
+      if (_camaraSeleccionada != null) ...[
+        Text(
+          'placa_previsualizacion'.tr(),
+          style: const TextStyle(fontSize: 11, color: SwsColors.gray600),
+        ),
+        const SizedBox(height: 6),
+        CamaraPreview(
+          camaraId: _camaraSeleccionada!.id,
+          height: 200,
+          onFrame: (bytes) {
+            if (mounted) _ultimoFramePlaca = bytes;
+          },
+          activo: true,
+          fps: 5,
+        ),
+        const SizedBox(height: 10),
+      ],
+      DropdownButtonFormField<String>(
+        key: const Key('placa_camara_dropdown'),
+        initialValue: camara?.id,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: 'placa_camara_ip'.tr(),
+          prefixIcon: const Icon(Icons.videocam_outlined),
+        ),
+        items: [
+          for (final c in _camaras)
+            DropdownMenuItem(value: c.id, child: Text(c.etiqueta)),
+        ],
+        onChanged: (id) {
+          if (id == null) return;
+          final elegida = _camaras.firstWhere((c) => c.id == id);
+          setState(() {
+            _camaraSeleccionada = elegida;
+            _ultimoFramePlaca = null;
+          });
+        },
+      ),
+      // Botones de capturar si es obligatoria o si hay cámaras activas (modo entrada)
+      if ((_fotosPlacaObligatorias || _fotosPlacaActivas) && !yaTomadas) ...[
+        const SizedBox(height: 10),
+        Text(
+          _fotosPlacaObligatorias ? 'placa_una_vez'.tr() : 'placa_tomar_foto'.tr(),
+          style: const TextStyle(fontSize: 11, color: SwsColors.gray500),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final sufijo in _sufijosPlacaRequeridos)
+              _botonPlaca(sufijo),
+          ],
+        ),
+      ],
+      if (_placaCamara.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 70,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final entrada in _placaCamara.entries)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      children: [
+                        Image.memory(
+                          entrada.value.bytes,
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            color: Colors.black54,
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              _etiquetaPlaca(entrada.key),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 9, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+      const SizedBox(height: 8),
+      PhotoPickerField(
+        label: 'placa_respaldo'.tr(),
+        icon: Icons.smartphone_outlined,
+        fotos: _placaLocal,
+        maxFotos: _sufijosPlacaRequeridos.length,
+        onChanged: (f) => setState(() {
+          _placaLocal = _renombrarPlacaLocal(f);
+          if (_placaLocal.isNotEmpty) _fotosPlacaYaTomadas = false;
+        }),
+      ),
+    ];
+  }
+
+  /// Elimina las secciones antiguas de captura/preview (ya unificadas arriba).
+
+  /// Renombra las fotos del respaldo local con los sufijos de placa, para que
+  /// el backend las guarde como `tipo='placa'` y fije `fotos_placa_tomadas`.
+  List<PhotoCaptured> _renombrarPlacaLocal(List<PhotoCaptured> fotos) {
+    final nombres = nombresPlacaLocal(fotos.length, remolque: _remolque);
+    return [
+      for (var i = 0; i < fotos.length; i++)
+        PhotoCaptured(bytes: fotos[i].bytes, nombre: nombres[i]),
+    ];
+  }
+
+  Widget _botonPlaca(String sufijo) {
+    final hecha = _placaCamara.containsKey(sufijo);
+    return OutlinedButton.icon(
+      key: Key('placa_capturar_$sufijo'),
+      onPressed: (_capturandoPlaca || _camaraSeleccionada == null)
+          ? null
+          : () => unawaited(_capturarPlaca(sufijo)),
+      icon: _capturandoPlaca
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(hecha ? Icons.check_circle : Icons.camera_alt_outlined,
+              size: 18),
+      label: Text(_etiquetaPlaca(sufijo)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: hecha ? SwsColors.success : SwsColors.primary,
+        side: BorderSide(
+          color: (hecha ? SwsColors.success : SwsColors.primary)
+              .withValues(alpha: 0.4),
+        ),
+      ),
+    );
+  }
+
+  String _etiquetaPlaca(String sufijo) => switch (sufijo) {
+        'placa_trasera' => _remolque
+            ? 'placa_placa_remolque'.tr()
+            : 'placa_placa_trasera'.tr(),
+        'frente' => 'placa_frente'.tr(),
+        'placa_remolque' => 'placa_placa_remolque'.tr(),
+        _ => sufijo,
+      };
 
   String _formatFecha(DateTime? fecha) {
     if (fecha == null) return '';

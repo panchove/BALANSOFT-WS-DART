@@ -23,10 +23,15 @@ class WeighingListScreen extends StatefulWidget {
   final String? estadoInicial;
   final String? titulo;
 
+  /// Segmenta la MISMA lista por el movimiento de kardex del boleto
+  /// (`ingreso` = 10, `despacho` = 60). `todos` no filtra.
+  final TipoMovimientoListado tipoMovimiento;
+
   const WeighingListScreen({
     super.key,
     this.estadoInicial,
     this.titulo,
+    this.tipoMovimiento = TipoMovimientoListado.todos,
   });
 
   @override
@@ -356,6 +361,14 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
     if (_estado != null && w.estadoBoleto != _estado) return false;
     if (_producto != null && w.idProducto != _producto!.id) return false;
     if (_cliente != null && w.idTercero != _cliente!.id) return false;
+    switch (widget.tipoMovimiento) {
+      case TipoMovimientoListado.ingreso:
+        if (w.kardexMov != 10) return false;
+      case TipoMovimientoListado.despacho:
+        if (w.kardexMov != 60) return false;
+      case TipoMovimientoListado.todos:
+        break;
+    }
     if (_rango != null) {
       final fecha = w.fechaHoraEntrada;
       final desde = _rango!.start.subtract(const Duration(days: 1));
@@ -482,13 +495,19 @@ class _TipoMovimientoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final esEntrada = w.isOpen;
     final esAnulado = w.isAnulado;
+    // Cuando el boleto ya tiene asiento de kardex, el chip muestra el
+    // movimiento de inventario (INGRESO/DESPACHO); si no, la fase de pesada
+    // (ENTRADA/SALIDA) deducida del estado del boleto.
     final (label, color) = esAnulado
-        ? ('ANULADO', SwsColors.danger)
-        : esEntrada
-            ? ('ENTRADA', SwsColors.warning)
-            : ('SALIDA', SwsColors.success);
+        ? ('mov_anulado'.tr(), SwsColors.danger)
+        : w.esIngreso
+            ? ('mov_ingreso'.tr(), SwsColors.success)
+            : w.esDespacho
+                ? ('mov_despacho'.tr(), SwsColors.danger)
+                : w.isOpen
+                    ? ('mov_entrada'.tr(), SwsColors.warning)
+                    : ('mov_salida'.tr(), SwsColors.success);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(

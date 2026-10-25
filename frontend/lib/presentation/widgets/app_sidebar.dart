@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/config/menu_config.dart';
 import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/accesos_repository.dart';
@@ -53,7 +54,8 @@ class AppSidebar extends StatefulWidget {
   });
 
   /// Árbol de menú compartido con el bottom bar / menú móvil de Android.
-  static const menuTree = _AppSidebarState.menuTree;
+  /// Usa el árbol dinámico cargado desde `menu.json` (MenuConfig.arbol).
+  static List<MenuNode> get menuTree => MenuConfig.arbol;
 
   static List<MenuNode> filtrarMenu(List<MenuNode> nodes, String rol) =>
       _AppSidebarState.filtrarMenu(nodes, rol);
@@ -69,262 +71,10 @@ class _AppSidebarState extends State<AppSidebar> {
   final Set<String> _collapsedGroups = {};
   final ScrollController _scrollController = ScrollController();
 
-  /// Árbol de menú. Cada hoja tiene `index` que apunta a `_pages` en
-  /// `home_shell.dart`. NO usar el orden visual para inferir el índice.
-  /// `rolesPermitidos` = roles que pueden VER el módulo según la matriz por
-  /// defecto (`AccesosDefault`); los grupos/encabezados no filtran solos.
-  /// Árbol de menú compartido (desktop sidebar y menú móvil). Cada hoja
-  /// apunta a `_pages` en `home_shell.dart`.
-  static const menuTree = <MenuNode>[
-    MenuNode(
-      label: 'INFORMACIÓN',
-      isSectionHeader: true,
-      children: [
-        MenuNode(
-          label: 'Inicio',
-          icon: Icons.dashboard_outlined,
-          activeIcon: Icons.dashboard,
-          clave: 'inicio',
-          index: 0,
-          shortcut: 'Ctrl+1',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Pesaje Automático',
-          icon: Icons.smart_toy_outlined,
-          activeIcon: Icons.smart_toy,
-          accion: 'go:pesaje_automatico',
-          shortcut: 'F1',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Pesaje Manual',
-          icon: Icons.edit_note,
-          activeIcon: Icons.edit_note,
-          accion: 'go:pesaje_manual',
-          shortcut: 'F2',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Terceros',
-          icon: Icons.people_outline,
-          activeIcon: Icons.people,
-          clave: 'terceros',
-          index: 1,
-          shortcut: 'Alt+C',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Flota y Transporte',
-          icon: Icons.local_shipping_outlined,
-          children: [
-            MenuNode(
-              label: 'Camiones / Vehículos',
-              icon: Icons.directions_car_outlined,
-              activeIcon: Icons.directions_car,
-              clave: 'camiones',
-              index: 3,
-              shortcut: 'Alt+F',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-            MenuNode(
-              label: 'Conductores',
-              icon: Icons.badge_outlined,
-              activeIcon: Icons.badge,
-              clave: 'conductores',
-              index: 4,
-              shortcut: 'F8',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-            MenuNode(
-              label: 'Empresas de Transporte',
-              icon: Icons.fire_truck_outlined,
-              activeIcon: Icons.fire_truck,
-              clave: 'transportes',
-              index: 5,
-              shortcut: 'Ctrl+⇧+T',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-          ],
-        ),
-        MenuNode(
-          label: 'Inventario Base',
-          icon: Icons.warehouse_outlined,
-          children: [
-            MenuNode(
-              label: 'Categorías',
-              icon: Icons.category_outlined,
-              activeIcon: Icons.category,
-              clave: 'categorias',
-              index: 6,
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-            MenuNode(
-              label: 'Productos',
-              icon: Icons.inventory_2_outlined,
-              activeIcon: Icons.inventory_2,
-              clave: 'productos',
-              index: 7,
-              shortcut: 'Alt+P',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-            MenuNode(
-              label: 'Almacenes',
-              icon: Icons.warehouse_outlined,
-              activeIcon: Icons.warehouse,
-              clave: 'almacenes',
-              index: 8,
-              shortcut: 'Alt+A',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-            MenuNode(
-              label: 'Ajustes de Inventario',
-              icon: Icons.tune,
-              activeIcon: Icons.tune,
-              accion: 'go:ajustes',
-              shortcut: 'Ctrl+A',
-              rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-            ),
-          ],
-        ),
-        MenuNode(
-          label: 'Kardex',
-          icon: Icons.table_rows_outlined,
-          activeIcon: Icons.table_rows,
-          clave: 'kardex',
-          index: 9,
-          shortcut: 'Alt+K',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-      ],
-    ),
-    MenuNode(
-      label: 'REPORTES',
-      icon: Icons.bar_chart_outlined,
-      children: [
-        MenuNode(
-          label: 'Ingresos (Entradas)',
-          icon: Icons.arrow_downward_outlined,
-          activeIcon: Icons.arrow_downward,
-          clave: 'entradas',
-          index: 10,
-          shortcut: 'Ctrl+2',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Despachos (Salidas)',
-          icon: Icons.arrow_upward_outlined,
-          activeIcon: Icons.arrow_upward,
-          clave: 'salidas',
-          index: 11,
-          shortcut: 'Ctrl+3',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Reportes Generales',
-          icon: Icons.analytics_outlined,
-          activeIcon: Icons.analytics,
-          clave: 'reportes',
-          index: 12,
-          shortcut: 'Ctrl+4',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Auditoría del Sistema',
-          icon: Icons.fact_check_outlined,
-          activeIcon: Icons.fact_check,
-          accion: 'go:auditoria',
-          rolesPermitidos: {'ADMIN', 'AUDITOR'},
-        ),
-      ],
-    ),
-    MenuNode(
-      label: 'MANTENIMIENTO',
-      icon: Icons.settings_outlined,
-      children: [
-        MenuNode(
-          label: 'Usuarios del Sistema',
-          icon: Icons.admin_panel_settings_outlined,
-          activeIcon: Icons.admin_panel_settings,
-          clave: 'usuarios',
-          index: 2,
-          shortcut: 'Alt+U',
-          rolesPermitidos: {'ADMIN', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Seguridad y Accesos',
-          icon: Icons.lock_outline,
-          activeIcon: Icons.lock,
-          clave: 'seguridad',
-          index: 14,
-          shortcut: 'Alt+S',
-          rolesPermitidos: {'ADMIN'},
-        ),
-        MenuNode(
-          label: 'Dispositivos de Campo',
-          icon: Icons.sensors_outlined,
-          activeIcon: Icons.sensors,
-          clave: 'dispositivos',
-          index: 13,
-          shortcut: 'Alt+D',
-          rolesPermitidos: {'ADMIN'},
-        ),
-        // RB-12: aprobación de los equipos de la cuenta. Es una hoja-acción
-        // (como Auditoría): su autoridad es el servidor central, así que no
-        // entra en la matriz de módulos locales.
-        MenuNode(
-          label: 'Sesiones y Equipos',
-          icon: Icons.verified_user_outlined,
-          activeIcon: Icons.verified_user,
-          accion: 'go:sesiones',
-          rolesPermitidos: {'ADMIN'},
-        ),
-        MenuNode(
-          label: 'Empresa y Documentos',
-          icon: Icons.business_outlined,
-          activeIcon: Icons.business,
-          clave: 'documentos_empresa',
-          index: 15,
-          rolesPermitidos: {'ADMIN', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Diseño de Ticket',
-          icon: Icons.receipt_long_outlined,
-          activeIcon: Icons.receipt_long,
-          clave: 'diseno_ticket',
-          index: 17,
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
-          label: 'Configuración',
-          icon: Icons.settings_outlined,
-          activeIcon: Icons.settings,
-          clave: 'configuracion',
-          index: 16,
-          shortcut: 'Ctrl+,',
-          rolesPermitidos: {'ADMIN'},
-        ),
-      ],
-    ),
-    MenuNode(
-      label: 'AYUDA Y SOPORTE',
-      isSectionHeader: true,
-      children: [
-        MenuNode(
-          label: 'Ayuda',
-          icon: Icons.help_outline,
-          activeIcon: Icons.help,
-          accion: 'go:ayuda',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-      ],
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
-    _inicializarGruposColapsados(menuTree); // <-- Agregar esta línea
+    _inicializarGruposColapsados(MenuConfig.arbol);
     _cargarAccesos();
   }
 
@@ -374,7 +124,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       vertical: 12,
                     ),
                     children: _buildNodes(
-                      filtrarMenu(menuTree, _rolActual()),
+                      filtrarMenu(MenuConfig.arbol, _rolActual()),
                       rol: _rolActual(),
                     ),
                   ),
@@ -402,6 +152,12 @@ class _AppSidebarState extends State<AppSidebar> {
     final result = <MenuNode>[];
 
     for (final node in nodes) {
+      // Mantener separadores aunque estén entre grupos/secciones
+      if (node.esSeparador) {
+        result.add(node);
+        continue;
+      }
+
       // Hoja: visible si su clave la permite el rol (repositorio con fallback
       // a la matriz por defecto). Las hojas-acción no tienen clave de matriz:
       // se filtran directamente por `rolesPermitidos`.
@@ -419,7 +175,7 @@ class _AppSidebarState extends State<AppSidebar> {
       }
 
       // Nodo con hijos: filtra recursivamente y conserva solo si hay visibles.
-      final hijos = node.isSectionHeader ? node.children : node.children;
+      final hijos = node.children;
       final filtrados = filtrarMenu(hijos ?? const [], rol);
       if (filtrados.isEmpty) continue;
       result.add(node.copyWith(children: filtrados));
@@ -481,11 +237,22 @@ class _AppSidebarState extends State<AppSidebar> {
     final widgets = <Widget>[];
 
     for (final node in nodes) {
+      if (node.esSeparador) {
+        widgets.add(
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            height: 1,
+            width: double.infinity,
+            color: Colors.white.withValues(alpha: 0.25),
+          ),
+        );
+        continue;
+      }
       final labelTraducido = _traducir(context, node.label);
       if (node.isSectionHeader) {
         widgets.add(
           Padding(
-            padding: const EdgeInsets.only(top: 22, bottom: 8, left: 8),
+            padding: const EdgeInsets.only(top: 18, bottom: 6, left: 8),
             child: Text(
               labelTraducido,
               style: TextStyle(
@@ -510,8 +277,8 @@ class _AppSidebarState extends State<AppSidebar> {
         widgets.add(
           _SidebarLeafTile(
             key: Key('menu_${node.clave ?? labelTraducido}'),
-            icon: node.icon!,
-            activeIcon: node.activeIcon ?? node.icon!,
+            icon: node.icon ?? Icons.circle_outlined,
+            activeIcon: node.activeIcon ?? node.icon ?? Icons.circle_outlined,
             label: labelTraducido,
             shortcut: node.shortcut,
             isSelected: isSelected,
@@ -580,66 +347,6 @@ class _AppSidebarState extends State<AppSidebar> {
       }
     }
     return widgets;
-  }
-}
-
-// ─── Modelo de Datos ──────────────────────────────────────────────────
-
-class MenuNode {
-  final String label;
-  final IconData? icon;
-  final IconData? activeIcon;
-  final String? clave;
-  final int? index;
-  final List<MenuNode>? children;
-
-  /// Comando de acción para hojas que **no** son páginas del shell (p. ej.
-  /// `go:diagnostico`). Si está presente, el shell ejecuta el comando en vez
-  /// de cambiar de índice.
-  final String? accion;
-
-  /// Etiqueta del atajo mostrado a la derecha (p. ej. `Ctrl + ,`).
-  final String? shortcut;
-
-  /// Roles con acceso al módulo (matriz por defecto). Si es `null`, el nodo
-  /// (grupo/encabezado) no filtra por rol y depende de sus hijos.
-  final Set<String>? rolesPermitidos;
-  final bool isSectionHeader;
-  final bool isSubItem;
-
-  const MenuNode({
-    required this.label,
-    this.icon,
-    this.activeIcon,
-    this.clave,
-    this.index,
-    this.children,
-    this.accion,
-    this.shortcut,
-    this.rolesPermitidos,
-    this.isSectionHeader = false,
-    this.isSubItem = false,
-  });
-
-  bool get isLeaf => children == null && !isSectionHeader;
-
-  /// Hoja que abre una pantalla del shell (tiene índice) vs. hoja-acción.
-  bool get isPage => isLeaf && accion == null;
-
-  MenuNode copyWith({bool? isSubItem, List<MenuNode>? children}) {
-    return MenuNode(
-      label: label,
-      icon: icon,
-      activeIcon: activeIcon,
-      clave: clave,
-      index: index,
-      children: children ?? this.children,
-      accion: accion,
-      shortcut: shortcut,
-      rolesPermitidos: rolesPermitidos,
-      isSectionHeader: isSectionHeader,
-      isSubItem: isSubItem ?? this.isSubItem,
-    );
   }
 }
 

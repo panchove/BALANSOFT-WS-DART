@@ -60,9 +60,8 @@
 
 #### 5. Mantenimiento y Configuración
 
-* **Dispositivos de Campo:**
-* Básculas (Configuración de puertos serie/red e indicadores).
-* *Periféricos (Próxima Fase / A Futuro):* Semáforos, Barreras de acceso, Cámaras LPR/CCTV.
+* **Dispositivos de Campo (vistas independientes):**
+* Básculas, Indicadores, Semáforos, Cámaras e Impresoras, cada uno en su propia pantalla del menú (con búsqueda y filtros propios sobre su tabla).
 
 
 * **Seguridad y Accesos:**

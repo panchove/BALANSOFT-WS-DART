@@ -584,6 +584,53 @@ class AppCatalogos {
     ],
   );
 
+  static final _conceptosInventario = CatalogResource(
+    clave: 'conceptos_inventario',
+    plural: 'Conceptos de Inventario',
+    singular: 'Concepto de Inventario',
+    icono: Icons.rule_folder_outlined,
+    listaPath: ApiConstants.conceptosInventario,
+    itemPath: ApiConstants.conceptoInventario,
+    idKey: 'id_concepto',
+    tituloFila: (f) => '${f['nombre'] ?? ''}',
+    subtituloFila: (f) {
+      final partes = <String>[
+        if (f['codigo'] != null) f['codigo'] as String,
+        if (f['tipo_movimiento'] != null)
+          _tipoConceptoLabel(f['tipo_movimiento'] as String),
+        if (f['activo'] == false) 'Inactivo',
+      ];
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: [
+      const CatalogField(
+        key: 'codigo',
+        label: 'Código',
+        icono: Icons.numbers_outlined,
+      ),
+      const CatalogField(
+        key: 'nombre',
+        label: 'Nombre',
+        icono: Icons.label_outline,
+        requerido: true,
+      ),
+      const CatalogField(
+        key: 'tipo_movimiento',
+        label: 'Aplica a',
+        icono: Icons.swap_horiz_outlined,
+        tipo: CatalogFieldType.dropdown,
+        opciones: ['ingreso', 'despacho', 'ajuste', 'ambos'],
+        opcionLabels: ['Ingreso', 'Despacho', 'Ajuste', 'Ambos'],
+      ),
+      const CatalogField(
+        key: 'descripcion',
+        label: 'Descripción',
+        icono: Icons.notes_outlined,
+        tipo: CatalogFieldType.multilinea,
+      ),
+    ],
+  );
+
   static final _clientes = CatalogResource(
     clave: 'clientes',
     plural: 'Clientes',
@@ -658,6 +705,17 @@ class AppCatalogos {
     };
   }
 
+  /// Etiqueta legible del tipo de movimiento de un concepto de inventario.
+  static String _tipoConceptoLabel(String tipo) {
+    return switch (tipo) {
+      'ingreso' => 'Ingreso',
+      'despacho' => 'Despacho',
+      'ajuste' => 'Ajuste',
+      'ambos' => 'Ambos',
+      _ => tipo,
+    };
+  }
+
   /// Grupos de navegación según `docs/MODELO_ESTANDAR.md`.
 
   static final CatalogSection clientes = CatalogSection(
@@ -725,4 +783,9 @@ class AppCatalogos {
   static CatalogResource get categoriaResource => _categorias;
   static CatalogResource get almacenResource => _almacenes;
   static CatalogResource get tercerosResource => _clientesYProveedores;
+  static CatalogResource get conceptoInventarioResource => _conceptosInventario;
+
+  /// `terceros` segmentado: la MISMA tabla, vista como CRUD individual.
+  static CatalogResource get clienteResource => _clientes;
+  static CatalogResource get proveedorResource => _proveedores;
 }

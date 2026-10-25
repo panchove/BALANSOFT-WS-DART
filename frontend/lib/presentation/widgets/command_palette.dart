@@ -145,10 +145,10 @@ class _CommandPaletteState extends State<CommandPalette> {
       action: 'go:ayuda',
     ),
     const _Command(
-      label: 'Dispositivos de Campo',
-      icon: Icons.sensors_outlined,
+      label: 'Básculas',
+      icon: Icons.scale_outlined,
       shortcut: 'Alt+D',
-      action: 'go:dispositivos',
+      action: 'go:dispositivos_basculas',
     ),
     const _Command(
       label: 'Seguridad y Accesos',

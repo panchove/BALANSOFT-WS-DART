@@ -10,14 +10,14 @@ Solo ADMIN puede escribir. La matriz por defecto vive en
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_empresa, get_current_user, require_admin
 from app.core.database import get_db
 from app.core.seguridad_matrix import MODULOS, ROLES_LOCALES
 from app.models import Empresa, PermisoAcceso, Usuario
-from app.schemas import AccesoModuloOut, AccesoUpdate, MatrizAccesosOut
+from app.schemas import AccesoModuloOut, AccesoUpdate, MatrizAccesosOut, RolOut
 
 router = APIRouter(prefix="/api/v1/seguridad", tags=["Seguridad"])
 
@@ -120,3 +120,68 @@ async def actualizar_acceso(
         titulo=MODULOS[payload.modulo],
         accesos=accesos,
     )
+
+
+# Descripción de cada rol local para el catálogo ROLES. La descripción es
+# informativa (el rol efectivo lo determina la matriz de accesos); la BD tiene
+# un CHECK sobre `usuarios.rol`, así que no se pueden crear roles nuevos.
+DESCRIPCION_ROLES: dict[str, str] = {
+    "ADMIN": (
+        "Control total de la estación: configuración, usuarios, dispositivos "
+        "y todos los módulos en modo edición."
+    ),
+    "OPERADOR": (
+        "Operación diaria de pesaje y catálogos. Sin acceso a configuración, "
+        "dispositivos ni seguridad."
+    ),
+    "AUDITOR": (
+        "Consulta y fiscalización: ve los módulos operativos en solo lectura "
+        "y la auditoría del sistema."
+    ),
+}
+
+
+@router.get("/roles", response_model=list[RolOut])
+async def list_roles(
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> list[RolOut]:
+    """Roles locales con su conteo de usuarios y su alcance en la matriz."""
+    from app.core.seguridad_matrix import MATRIZ_DEFECTO
+
+    persistidos = await _accesos_persistidos(db, empresa)
+
+    conteos: dict[str, int] = {}
+    for rol, total in (
+        await db.execute(
+            select(Usuario.rol, func.count())
+            .where(Usuario.id_empresa == empresa.id_empresa)
+            .group_by(Usuario.rol)
+        )
+    ).all():
+        conteos[str(rol)] = int(total)
+
+    salida: list[RolOut] = []
+    for rol in ROLES_LOCALES:
+        fila = MATRIZ_DEFECTO.get(rol, {})
+        editar = ver = ninguno = 0
+        for modulo in MODULOS:
+            acceso = persistidos.get((rol, modulo), fila.get(modulo, "ninguno"))
+            if acceso == "editar":
+                editar += 1
+            elif acceso == "ver":
+                ver += 1
+            else:
+                ninguno += 1
+        salida.append(
+            RolOut(
+                clave=rol,
+                nombre=rol.capitalize(),
+                descripcion=DESCRIPCION_ROLES.get(rol, ""),
+                usuarios=int(conteos.get(rol, 0)),
+                modulos_editar=editar,
+                modulos_ver=ver,
+                modulos_ninguno=ninguno,
+            )
+        )
+    return salida

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/config/menu_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/accesos_repository.dart';
 import '../../injection.dart' as di;
@@ -94,7 +95,7 @@ class _MobileNavSheetState extends State<_MobileNavSheet> {
   Widget build(BuildContext context) {
     final rol = _rolActual(context);
     final lang = _lang(context);
-    final arbol = AppSidebar.filtrarMenu(AppSidebar.menuTree, rol);
+    final arbol = AppSidebar.filtrarMenu(MenuConfig.arbol, rol);
 
     return FractionallySizedBox(
       heightFactor: 0.92,

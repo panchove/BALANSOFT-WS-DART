@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:balansoft_ws/core/config/menu_config.dart';
 import 'package:balansoft_ws/core/constants/accesos_default.dart';
 import 'package:balansoft_ws/core/theme/app_theme.dart';
 import 'package:balansoft_ws/core/utils/focus_search_bus.dart';
@@ -122,11 +123,17 @@ void main() {
     di.sl.registerLazySingleton<AccesosRepository>(
       _FakeAccesosRepository.new,
     );
+    // Menú efectivo siempre el de fábrica: ningún caso hereda el árbol inyectado
+    // por otro (estado global de MenuConfig).
+    MenuConfig.inyectarParaPruebas(MenuConfig.arbolPorDefecto);
+    MenuConfig.errores = <String>[];
   });
 
   tearDown(() {
     final node = FocusSearchBus.instance.node;
     if (node != null) FocusSearchBus.instance.liberar(node);
+    MenuConfig.inyectarParaPruebas(MenuConfig.arbolPorDefecto);
+    MenuConfig.errores = <String>[];
   });
 
   Widget sidebarApp(
@@ -172,23 +179,6 @@ void main() {
     );
   }
 
-  /// Los grupos del sidebar arrancan colapsados (ver `_inicializarGruposColapsados`),
-  /// así que hay que abrirlos antes de poder tocar un módulo que vive dentro.
-  Future<void> expandirGrupos(WidgetTester tester) async {
-    for (final grupo in [
-      'Flota y Transporte',
-      'Inventario Base',
-      'REPORTES',
-      'MANTENIMIENTO',
-    ]) {
-      final finder = find.text(grupo);
-      if (finder.evaluate().isNotEmpty) {
-        await tester.tap(finder);
-        await tester.pumpAndSettle();
-      }
-    }
-  }
-
   Future<void> renderSidebar(WidgetTester tester, Widget child) async {
     tester.view.physicalSize = const Size(900, 2600);
     tester.view.devicePixelRatio = 1.0;
@@ -215,7 +205,7 @@ void main() {
       return out;
     }
 
-    test('cada hoja-página tiene índice único y dentro de 0..17', () {
+    test('cada hoja-página tiene índice único y dentro de 0..30', () {
       final paginas =
           hojas(AppSidebar.menuTree).where((n) => n.accion == null).toList();
       final indices = paginas.map((n) => n.index).toList();
@@ -225,11 +215,11 @@ void main() {
       expect(indices.toSet().length, indices.length,
           reason: 'no puede haber índices repetidos');
       for (final i in indices) {
-        expect(i, inInclusiveRange(0, 17));
+        expect(i, inInclusiveRange(0, 30));
       }
     });
 
-    test('las hojas de docs/NAV.md existen con su acción o clave', () {
+    test('las hojas del menú estructurado existen con su acción o clave', () {
       final hojasMenu = hojas(AppSidebar.menuTree);
       MenuNode? buscar(String label) {
         for (final n in hojasMenu) {
@@ -238,21 +228,57 @@ void main() {
         return null;
       }
 
-      expect(buscar('Pesaje Automático')?.accion, 'go:pesaje_automatico');
-      expect(buscar('Pesaje Manual')?.accion, 'go:pesaje_manual');
-      expect(buscar('Ajustes de Inventario')?.accion, 'go:ajustes');
+      expect(buscar('Peso Automático')?.accion, 'go:pesaje_automatico');
+      expect(buscar('Peso Manual')?.accion, 'go:pesaje_manual');
+      expect(buscar('Inventario')?.accion, 'go:ajustes');
       expect(buscar('Auditoría del Sistema')?.accion, 'go:auditoria');
-      expect(buscar('Ayuda')?.accion, 'go:ayuda');
+      expect(buscar('Ayuda y Soporte')?.accion, 'go:ayuda');
       expect(buscar('Reportes Generales')?.clave, 'reportes');
       expect(buscar('Camiones / Vehículos')?.shortcut, 'Alt+F');
       expect(buscar('Conductores')?.shortcut, 'F8');
       expect(buscar('Configuración')?.clave, 'configuracion');
       expect(buscar('Configuración')?.shortcut, 'Ctrl+,');
+      // Nuevos módulos de la estructura pedida.
+      expect(buscar('Clientes')?.clave, 'clientes');
+      expect(buscar('Proveedores')?.clave, 'proveedores');
+      expect(buscar('Ingresos')?.clave, 'ingresos');
+      expect(buscar('Despachos')?.clave, 'despachos');
+      // Dispositivos separado en vistas independientes: ahora cada una navega
+      // por su clave e índice propio (ya no son hojas-acción del shell).
+      expect(buscar('Semáforos')?.clave, 'dispositivos_semaforos');
+      expect(buscar('Semáforos')?.index, 28);
+      expect(buscar('Impresoras')?.clave, 'dispositivos_impresoras');
+      expect(buscar('Impresoras')?.index, 30);
+      expect(buscar('Básculas')?.clave, 'dispositivos_basculas');
+      expect(buscar('Básculas')?.index, 13);
+      expect(buscar('Cámaras')?.clave, 'dispositivos_camaras');
+      expect(buscar('Cámaras')?.index, 29);
+      expect(buscar('Indicadores')?.clave, 'dispositivos_indicadores');
+      expect(buscar('Indicadores')?.index, 27);
+      // El catálogo de conceptos de inventario (migración 029) es una
+      // hoja-página bajo CATÁLOGOS: navega por clave, no por acción.
+      expect(buscar('Conceptos de Inventario')?.clave, 'conceptos_inventario');
+      expect(buscar('Conceptos de Inventario')?.index, 22);
+      // Catálogo de roles (informativo, enlaza a la matriz de accesos).
+      expect(buscar('Roles')?.clave, 'roles');
+      expect(buscar('Roles')?.index, 23);
+      // REPORTES → presets de rango sobre la misma pantalla.
+      expect(buscar('Diarios')?.clave, 'reportes_diarios');
+      expect(buscar('Diarios')?.index, 24);
+      expect(buscar('Mensuales')?.clave, 'reportes_mensuales');
+      expect(buscar('Mensuales')?.index, 25);
+      expect(buscar('Personalizado')?.clave, 'reportes_personalizado');
+      expect(buscar('Personalizado')?.index, 26);
+      // AYUDA → opciones que ejecuta el shell (no ocupan índice).
+      expect(buscar('Manuales')?.accion, 'go:ayuda_manuales');
+      expect(buscar('Página Web')?.accion, 'go:ayuda_pagina');
+      expect(buscar('Versión')?.accion, 'go:ayuda_version');
+      expect(buscar('Tutorial')?.accion, 'go:ayuda_tutorial');
       // Fuera del menú a propósito: solo desde la paleta (Ctrl+K).
       expect(buscar('Diagnóstico del Sistema'), isNull);
       expect(buscar('Administración de Licencia'), isNull);
       expect(buscar('Conexiones'), isNull);
-      expect(buscar('Pesaje Automático')?.shortcut, 'F1');
+      expect(buscar('Peso Automático')?.shortcut, 'F1');
     });
 
     test('las hojas-acción no ocupan índice ni clave de matriz', () {
@@ -299,68 +325,99 @@ void main() {
         expect(accionVisible(rol, 'go:ayuda'), isNotNull, reason: rol);
       }
     });
+
+    test('clavesDisponibles coincide con los índices reales de AccesosDefault',
+        () {
+      // El mensaje de error de `menu.json` publica esta lista. Si se
+      // desincroniza, el usuario escribe una clave que no navega (o repite
+      // `terceros` en Clientes y Proveedores, como ocurrió) y el diagnóstico
+      // le miente. Toda clave publicada debe resolver a un índice real.
+      for (final clave in MenuConfig.clavesDisponibles) {
+        expect(
+          AccesosDefault.indiceDe(clave),
+          greaterThanOrEqualTo(0),
+          reason: '"$clave" está en clavesDisponibles pero no en indiceDe',
+        );
+      }
+      // Y al revés: los índices con pantalla deben anunciarse.
+      for (final clave in ['clientes', 'proveedores', 'ingresos', 'despachos']) {
+        expect(MenuConfig.clavesDisponibles, contains(clave));
+      }
+    });
   });
 
-  testWidgets('sidebar arranca con los grupos colapsados', (tester) async {
+  testWidgets('sidebar muestra la estructura pedida con sus secciones',
+      (tester) async {
     await renderSidebar(tester, sidebarApp('ADMIN'));
 
-    // Solo se ven las hojas sueltas y los encabezados de grupo.
-    expect(find.text('Inicio'), findsOneWidget);
-    expect(find.text('Pesaje Manual'), findsOneWidget);
-    expect(find.text('Kardex'), findsOneWidget);
-    for (final grupo in [
-      'Flota y Transporte',
-      'Inventario Base',
+    // Encabezados de sección (siempre visibles, no colapsables).
+    for (final seccion in [
+      'CATÁLOGOS',
+      'GESTIÓN',
+      'CONSULTAR',
       'REPORTES',
       'MANTENIMIENTO',
+      'AYUDA Y SOPORTE',
     ]) {
-      expect(find.text(grupo), findsOneWidget, reason: 'falta $grupo');
+      expect(find.text(seccion), findsOneWidget, reason: 'falta $seccion');
     }
-    // Hijos de grupo aún ocultos.
-    expect(find.text('Ingresos (Entradas)'), findsNothing);
-    expect(find.text('Productos'), findsNothing);
-    expect(find.text('Usuarios del Sistema'), findsNothing);
 
-    await expandirGrupos(tester);
-
+    // Hojas de la estructura pedida, todas visibles.
     for (final label in [
-      'Ajustes de Inventario',
-      'Ingresos (Entradas)',
-      'Despachos (Salidas)',
-      'Reportes Generales',
+      'Clientes',
+      'Proveedores',
+      'Transportes',
+      'Conductores',
+      'Camiones / Vehículos',
+      'Categorías',
+      'Productos',
+      'Almacenes',
+      'Peso Manual',
+      'Peso Automático',
+      'Inventario',
+      'Entradas',
+      'Salidas',
+      'Ingresos',
+      'Despachos',
       'Auditoría del Sistema',
+      'Reportes Generales',
+      'Kardex',
+      'Empresa y Documentos',
       'Usuarios del Sistema',
       'Seguridad y Accesos',
-      'Dispositivos de Campo',
-      'Empresa y Documentos',
+      'Semáforos',
+      'Impresoras',
+      'Básculas',
       'Diseño de Ticket',
       'Configuración',
+      'Ayuda y Soporte',
     ]) {
       expect(find.text(label), findsOneWidget, reason: 'falta $label');
     }
-    expect(find.text('Ayuda'), findsOneWidget);
     expect(find.text('F1'), findsOneWidget);
   });
 
   testWidgets('sidebar OPERADOR oculta módulos restringidos', (tester) async {
     await renderSidebar(tester, sidebarApp('OPERADOR'));
-    await expandirGrupos(tester);
 
     expect(find.text('Usuarios del Sistema'), findsNothing);
     expect(find.text('Seguridad y Accesos'), findsNothing);
     expect(find.text('Configuración'), findsNothing);
-    expect(find.text('Ayuda'), findsOneWidget);
-    expect(find.text('Ingresos (Entradas)'), findsOneWidget);
+    expect(find.text('Semáforos'), findsNothing);
+    expect(find.text('Básculas'), findsNothing);
+    expect(find.text('Ayuda y Soporte'), findsOneWidget);
+    expect(find.text('Entradas'), findsOneWidget);
   });
 
-  testWidgets('sidebar OPERADOR oculta módulos restringidos', (tester) async {
+  testWidgets('sidebar OPERADOR oculta las hojas solo de paleta',
+      (tester) async {
     await renderSidebar(tester, sidebarApp('OPERADOR'));
 
     expect(find.text('Diagnóstico del Sistema'), findsNothing);
     expect(find.text('Administración de Licencia'), findsNothing);
     expect(find.text('Conexiones'), findsNothing);
     expect(find.text('Usuarios del Sistema'), findsNothing);
-    expect(find.text('Ayuda'), findsOneWidget);
+    expect(find.text('Ayuda y Soporte'), findsOneWidget);
   });
 
   testWidgets('sidebar dispara onAction en hojas-acción', (tester) async {
@@ -370,12 +427,11 @@ void main() {
       sidebarApp('ADMIN', onAction: acciones.add),
     );
 
-    await tester.tap(find.text('Pesaje Manual'));
+    await tester.tap(find.text('Peso Manual'));
     await tester.pumpAndSettle();
     expect(acciones, ['go:pesaje_manual']);
 
-    await expandirGrupos(tester);
-    await tester.tap(find.text('Ajustes de Inventario'));
+    await tester.tap(find.text('Inventario'));
     await tester.pumpAndSettle();
     expect(acciones, ['go:pesaje_manual', 'go:ajustes']);
   });
@@ -392,7 +448,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(indices, [9]);
 
-    await expandirGrupos(tester);
     await tester.tap(find.text('Reportes Generales'));
     await tester.pumpAndSettle();
     expect(indices, [9, 12]);
@@ -411,11 +466,167 @@ void main() {
     expect(AccesosDefault.acceso('TRABAJADOR', 'reportes'), 'ninguno');
   });
 
+  group('Separadores del menú (menu.json)', () {
+    test('filtrarMenu conserva los separadores y descarta los colgantes',
+        () async {
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'PRINCIPAL',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Inicio', 'clave': 'inicio'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Kardex', 'clave': 'kardex'},
+            // Solo visible para ADMIN: al filtrar por OPERADOR cae y deja un
+            // separador colgante que `filtrarMenu` debe recortar.
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Seguridad', 'clave': 'seguridad'},
+          ],
+        },
+      ]));
+
+      final admin = AppSidebar.filtrarMenu(AppSidebar.menuTree, 'ADMIN');
+      final hijosAdmin = admin.single.children!;
+      expect(hijosAdmin.map((n) => n.esSeparador), [false, true, false, true, false]);
+
+      final operador = AppSidebar.filtrarMenu(AppSidebar.menuTree, 'OPERADOR');
+      final hijosOperador = operador.single.children!;
+      // Inicio y Kardex sobreviven; el separador final se recorta.
+      expect(hijosOperador.last.esSeparador, isFalse,
+          reason: 'no puede quedar una línea separadora al final');
+      expect(hijosOperador.first.esSeparador, isFalse);
+      expect(hijosOperador.where((n) => n.esSeparador), hasLength(1));
+      expect(hijosOperador.map((n) => n.label),
+          containsAll(['Inicio', 'Kardex']));
+    });
+
+    testWidgets('el sidebar dibuja la línea separadora', (tester) async {
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'INFORMACIÓN',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Inicio', 'clave': 'inicio'},
+            {'tipo': 'separador'},
+            {
+              'tipo': 'opcion',
+              'label': 'Kardex',
+              'clave': 'kardex',
+              'atajo': 'Alt+K',
+            },
+          ],
+        },
+        {
+          'tipo': 'seccion',
+          'label': 'AYUDA Y SOPORTE',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Ayuda', 'accion': 'go:ayuda'},
+          ],
+        },
+      ]));
+
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      expect(find.byKey(const Key('menu_separador')), findsOneWidget);
+      expect(find.text('Inicio'), findsOneWidget);
+      expect(find.text('Kardex'), findsOneWidget);
+      expect(find.text('Alt+K'), findsOneWidget);
+      expect(find.text('Ayuda y Soporte'), findsOneWidget);
+    });
+
+    testWidgets('dos opciones con la MISMA clave no rompen el sidebar',
+        (tester) async {
+      // Un `menu.json` editado a mano puede repetir `clave` (p. ej. Clientes y
+      // Proveedores apuntando a `terceros`). Antes colisionaban las keys de
+      // widget y el árbol lanzaba «Duplicate keys found». La segunda opción
+      // conserva la key estable `menu_terceros`; la repetida se desambigua.
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'CATÁLOGOS',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Clientes', 'clave': 'terceros'},
+            {'tipo': 'opcion', 'label': 'Proveedores', 'clave': 'terceros'},
+          ],
+        },
+      ]));
+
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      expect(find.text('Clientes'), findsOneWidget);
+      expect(find.text('Proveedores'), findsOneWidget);
+      expect(find.byKey(const Key('menu_terceros')), findsOneWidget);
+    });
+
+    testWidgets('la clave duplicada queda avisada en MenuConfig.errores',
+        (tester) async {
+      MenuConfig.errores = const [];
+      MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'CATÁLOGOS',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Clientes', 'clave': 'terceros'},
+            {'tipo': 'opcion', 'label': 'Proveedores', 'clave': 'terceros'},
+          ],
+        },
+      ]);
+
+      expect(
+        MenuConfig.errores.any((e) => e.contains('"terceros" se repite')),
+        isTrue,
+        reason: 'el menú sigue mostrándose, pero el usuario debe enterarse',
+      );
+    });
+
+    testWidgets('reordenar y quitar opciones en el JSON cambia el sidebar',
+        (tester) async {
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'INFORMACIÓN',
+          'hijos': [
+            {
+              'tipo': 'opcion',
+              'label': 'Kardex',
+              'clave': 'kardex',
+              'icono': 'table_rows_outlined',
+            },
+            {
+              'tipo': 'opcion',
+              'label': 'Inicio',
+              'clave': 'inicio',
+              'icono': 'dashboard_outlined',
+            },
+          ],
+        },
+        {
+          'tipo': 'seccion',
+          'label': 'AYUDA Y SOPORTE',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Ayuda', 'accion': 'go:ayuda'},
+          ],
+        },
+      ]));
+
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      // «Terceros» ya no está en el menú (se eliminó del JSON).
+      expect(find.text('Terceros'), findsNothing);
+      // El orden visual es el del JSON: Kardex va por encima de Inicio.
+      final yKardex = tester.getTopLeft(find.text('Kardex')).dy;
+      final yInicio = tester.getTopLeft(find.text('Inicio')).dy;
+      expect(yKardex, lessThan(yInicio));
+    });
+  });
+
   group('Atajos y alias de docs/INPUTS_MAP.md', () {
     test('los alias de la paleta apuntan a destinos reales', () {
       const paginas = {
         'inicio',
         'terceros',
+        'clientes',
+        'proveedores',
         'usuarios',
         'camiones',
         'conductores',
@@ -426,6 +637,8 @@ void main() {
         'kardex',
         'entradas',
         'salidas',
+        'ingresos',
+        'despachos',
         'reportes',
         'dispositivos',
         'seguridad',

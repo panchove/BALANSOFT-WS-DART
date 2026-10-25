@@ -126,6 +126,13 @@ class Empresa(Base):
     impresora_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
     impresora_host: Mapped[str | None] = mapped_column(String(100), nullable=True)
     impresora_puerto: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Fotos de placa (migración 027): activa el bloque y lo hace obligatorio.
+    fotos_placa_activas: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    fotos_placa_obligatorias: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     licencia_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -418,6 +425,284 @@ class Balanza(Base):
     )
     # lf|cr|crlf|stx_etx; NULL = lf.
     delimitador: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Indicador (terminal) asignado a esta báscula física (migración 028).
+    # NULL = la báscula usa la configuración de comunicación embebida (legado).
+    id_indicador: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("indicadores.id_indicador"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class Semaforo(Base):
+    """Semáforo de pesaje (torre de 3 luces + zumbador).
+
+    Actuador de salida del ciclo de ``docs/SEMAFORO.md``: **esta app decide el
+    LED** a partir del peso en vivo de la báscula vinculada (``id_balanza``) y
+    del estado del boleto; el dispositivo (simulador BSDD o hardware real) solo
+    obedece los comandos JSON del SPEC. Se controla por HTTP/REST
+    (``127.0.0.1:8080/api/semaforo``, Fase 2) o por USB serie CDC-ACM
+    (``/dev/bsdd_semaforo_acm``, Fase 3).
+    """
+
+    __tablename__ = "semaforos"
+    __table_args__ = _idx_codigo_empresa("semaforos_empresa_codigo_uk")
+
+    id_semaforo: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    descripcion: Mapped[str] = mapped_column(String(150))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Detectado como simulador BSDD (127.0.0.1:8080 o /dev/bsdd_semaforo_acm).
+    is_simulado: Mapped[bool] = mapped_column(Boolean, default=False)
+    # http|serial (los canales Modbus/MQTT quedan para fases posteriores).
+    protocolo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="http", server_default="http"
+    )
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    puerto_tcp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    puerto_com: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    baudrate: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=9600, server_default=text("9600")
+    )
+    # Báscula que alimenta el control automático. NULL = solo comandos manuales.
+    id_balanza: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("balanzas.id_balanza"), nullable=True
+    )
+    # Vigilante backend activo: enciende el LED según peso/estabilidad/boleto.
+    control_automatico: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Peso (kg) por debajo del cual la plataforma se considera libre.
+    umbral_cero_kg: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        default=Decimal("5.0"),
+        server_default=text("5.0"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class Camara(Base):
+    """Cámara de captura de placa (snapshot HTTP/JPEG).
+
+    Dispositivo gemelo de ``balanzas``/``semaforos``: config local de la
+    estación (no se sincroniza). El ADMIN registra la URL del snapshot y en qué
+    momento se la usa (``ubicacion`` entrada|salida|ambos). Las fotos de placa
+    se piden **una sola vez por boleto** (``boletos_pesaje.fotos_placa_tomadas``)
+    y **nunca** se incluyen en el ticket/PDF/TXT.
+    """
+
+    __tablename__ = "camaras"
+    __table_args__ = _idx_codigo_empresa("camaras_empresa_codigo_uk")
+
+    id_camara: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    descripcion: Mapped[str] = mapped_column(String(150))
+    marca: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    modelo: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fabricante: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_simulada: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: ip|local. Las ``local`` son cámaras USB/integradas de la computadora: no
+    #: tienen URL de snapshot y el *frame* lo captura el HAL con ffmpeg/v4l2.
+    origen: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="ip", server_default="ip"
+    )
+    #: URL completa del JPEG del snapshot (solo ``origen='ip'``).
+    url_snapshot: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    #: Ruta del dispositivo para las locales (ej. ``/dev/video0``); NULL si es IP.
+    dispositivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Credenciales opcionales del snapshot (HTTP basic). ``password`` nunca se
+    #: devuelve por la API.
+    usuario: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: entrada|salida|ambos.
+    ubicacion: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="ambos", server_default="ambos"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class Barrera(Base):
+    """Barrera de tránsito (control físico de acceso abrir/cerrar).
+
+    Dispositivo actuador de control de acceso: config local de la estación
+    (no se sincroniza). Soporta conexiones HTTP y serie/USB para comandos
+    de apertura y cierre automáticos o manuales (docs/DISPOSITIVOS.md §5).
+    """
+
+    __tablename__ = "barreras"
+    __table_args__ = _idx_codigo_empresa("barreras_empresa_codigo_uk")
+
+    id_barrera: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    descripcion: Mapped[str] = mapped_column(String(150))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_simulado: Mapped[bool] = mapped_column(Boolean, default=False)
+    protocolo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="http", server_default="http"
+    )
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    puerto_tcp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    puerto_com: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    baudrate: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=9600, server_default=text("9600")
+    )
+    ubicacion: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="ambos", server_default="ambos"
+    )
+    control_automatico: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    tiempo_espera_segundos: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5, server_default=text("5")
+    )
+    comando_abrir: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    comando_cerrar: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class Indicador(Base):
+    """Indicador (terminal) de peso, separado de la báscula física.
+
+    El terminal que muestra y transmite el peso (BKG LP7510, CAS C12001A,
+    Transcell TI500E, AND AD431, Cardinal UMC555, Toledo T4321, …) es una
+    entidad propia: protocolo, puerto/ip, formato de trama, baudrate y
+    delimitador son propiedades del *terminal*, no de la plataforma de pesaje.
+    La báscula física se enlaza con ``balanzas.id_indicador`` (nullable) para
+    que el ADMIN decida qué indicador va con qué báscula.
+
+    Config **local de la estación** (no se sincroniza), igual que
+    ``balanzas``/``semaforos``/``camaras``.
+    """
+
+    __tablename__ = "indicadores"
+    __table_args__ = _idx_codigo_empresa("indicadores_empresa_codigo_uk")
+
+    id_indicador: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    descripcion: Mapped[str] = mapped_column(String(150))
+    marca: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    modelo: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_simulado: Mapped[bool] = mapped_column(Boolean, default=False)
+    protocolo: Mapped[str | None] = mapped_column(String(20), default="tcp")
+    puerto_com: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    puerto_tcp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Formato de la trama en el cable: auto|json|ascii.
+    formato_trama: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="auto", server_default="auto"
+    )
+    # Solo aplica a serial.
+    baudrate: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=9600, server_default=text("9600")
+    )
+    # lf|cr|crlf|stx_etx; NULL = lf.
+    delimitador: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class VinculoBalanzaIndicador(Base):
+    __tablename__ = "vinculos_balanza_indicador"
+    __table_args__ = (
+        UniqueConstraint("id_bascula", name="uq_vinculo_bascula"),
+        UniqueConstraint("id_indicador", name="uq_vinculo_indicador"),
+        Index("ix_vinculos_empresa", "id_empresa"),
+    )
+
+    id_vinculo: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    id_bascula: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("balanzas.id_balanza")
+    )
+    id_indicador: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("indicadores.id_indicador")
+    )
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class ConceptoInventario(Base):
+    """Concepto (motivo) de un movimiento de inventario/kardex.
+
+    Catálogo por empresa que sustituye el texto libre ``kardex.documento``: el
+    ajuste de inventario elige un concepto del catálogo y el movimiento queda
+    enlazado por ``kardex.id_concepto``. ``tipo_movimiento`` acota qué conceptos
+    aplican a un ingreso (``ingreso``) o a un despacho (``despacho``); ``ajuste``
+    y ``ambos`` cubren los movimientos manuales. ``NULL`` = aplica a todo.
+
+    Config **local de la estación** (no se sincroniza), igual que
+    ``balanzas``/``semaforos``/``camaras``/``indicadores``.
+    """
+
+    __tablename__ = "conceptos_inventario"
+    __table_args__ = _idx_codigo_empresa("conceptos_inventario_empresa_codigo_uk")
+
+    id_concepto: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_uuid
+    )
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa")
+    )
+    codigo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    nombre: Mapped[str] = mapped_column(String(150))
+    descripcion: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tipo_movimiento: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc()
     )
@@ -544,6 +829,12 @@ class BoletoPesaje(Base):
     peso_salida_vehiculo: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     peso_salida_remolque: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     foto_salida_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: Fotos de placa (migración 027): TRUE cuando ya se pidieron una vez
+    #: (en la entrada o en la salida); no se vuelven a pedir en la otra pesada.
+    fotos_placa_tomadas: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     documento: Mapped[str | None] = mapped_column(String(100), nullable=True)
     guia_sunagro: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -793,6 +1084,11 @@ class Kardex(Base):
     )
     fecha_documento: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     documento: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Concepto del movimiento (catálogo `conceptos_inventario`, migración 029).
+    # `documento` se conserva para el histórico.
+    id_concepto: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conceptos_inventario.id_concepto"), nullable=True
+    )
     valor: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     boleto: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("boletos_pesaje.boleto"), nullable=True

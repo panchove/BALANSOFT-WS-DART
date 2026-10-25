@@ -318,6 +318,8 @@ class BalanzaOut(CatalogItemOut):
     formato_trama: str | None = None
     baudrate: int | None = None
     delimitador: str | None = None
+    #: Indicador (terminal) asignado, o None si aún no se ha enlazado.
+    id_indicador: uuid.UUID | None = None
 
 
 class BalanzaCreate(BaseModel):
@@ -336,6 +338,8 @@ class BalanzaCreate(BaseModel):
     formato_trama: str = Field("auto", pattern="^(auto|json|ascii)$")
     baudrate: int = Field(9600)
     delimitador: str | None = Field(None, pattern="^(lf|cr|crlf|stx_etx)$")
+    #: Indicador (terminal) a enlazar con esta báscula física (migración 028).
+    id_indicador: uuid.UUID | None = None
 
     @field_validator("baudrate")
     @classmethod
@@ -378,6 +382,405 @@ class BalanzaPruebaOut(BaseModel):
     detalle: str | None = None
     formato_trama: str | None = None
     delimitador: str | None = None
+
+
+class SemaforoOut(CatalogItemOut):
+    """Semáforo de pesaje registrado (actuador de salida)."""
+
+    id_semaforo: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str | None = None
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    puerto_com: str | None = None
+    baudrate: int | None = None
+    id_balanza: uuid.UUID | None = None
+    control_automatico: bool = False
+    umbral_cero_kg: Decimal | None = None
+
+
+class SemaforoCreate(BaseModel):
+    codigo: str | None = None
+    descripcion: str = Field(..., min_length=2)
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str = Field("http", pattern="^(http|serial)$")
+    ip_address: str | None = None
+    puerto_tcp: int | None = Field(None, gt=0, le=65535)
+    puerto_com: str | None = None
+    baudrate: int = Field(9600)
+    id_balanza: uuid.UUID | None = None
+    control_automatico: bool = False
+    umbral_cero_kg: Decimal = Field(Decimal("5.0"), ge=0, le=100000)
+
+    @field_validator("baudrate")
+    @classmethod
+    def _validar_baudrate_semaforo(cls, v: int) -> int:
+        # Mismo conjunto que las básculas/`ck_semaforos_baudrate`.
+        permitidos = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
+        if v not in permitidos:
+            raise ValueError(
+                "baudrate debe ser uno de: 1200, 2400, 4800, 9600, 19200, "
+                "38400, 57600, 115200"
+            )
+        return v
+
+
+class SemaforoDescubiertoOut(BaseModel):
+    """Semáforo detectado por el escaneo automático de dispositivos."""
+
+    descripcion: str
+    protocolo: str
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    puerto_com: str | None = None
+    is_simulado: bool = False
+    estado: dict[str, Any] | None = None
+
+
+class SemaforoPruebaOut(BaseModel):
+    """Resultado de la prueba de conexión del HAL de un semáforo."""
+
+    semaforo: str
+    conectado: bool
+    protocolo: str | None = None
+    estado: dict[str, Any] | None = None
+    detalle: str | None = None
+
+
+class SemaforoComandoIn(BaseModel):
+    """Comando de LED del semáforo (SPEC §4/§5.6, mismo JSON en todos los canales).
+
+    Forma canónica: ``{"color":"rojo","action":"on"|"off"|"flash"}``,
+    ``{"zumbador":"on"|"off"}``, ``{"all":"off"}``, ``{"reset":true}`` o
+    ``{"automatico":false}``. Se aceptan además el alias ``luz`` de ``color`` y
+    los **atajos planos** del SPEC §5.6 (``{"rojo":true}``, ``{"verde":"flash"}``,
+    ``{"rojo":false}``).
+    """
+
+    color: Literal["rojo", "amarillo", "verde"] | None = None
+    luz: Literal["rojo", "amarillo", "verde"] | None = None
+    action: Literal["on", "off", "flash"] | None = None
+    #: Atajos planos por color: booleano (encender/apagar) o acción del SPEC.
+    rojo: bool | Literal["on", "off", "flash"] | None = None
+    amarillo: bool | Literal["on", "off", "flash"] | None = None
+    verde: bool | Literal["on", "off", "flash"] | None = None
+    zumbador: bool | Literal["on", "off"] | None = None
+    all: Literal["off"] | None = None
+    reset: bool | None = None
+    automatico: bool | None = None
+
+
+class SemaforoEstadoOut(BaseModel):
+    """Estado publicado por el semáforo (SPEC §3) más metadatos de la app."""
+
+    semaforo: str
+    conectado: bool
+    automatico: bool = False
+    estado: dict[str, Any] | None = None
+    #: Fase decidida por la app (memoria del vigilante): AUTORIZADO, PESANDO, …
+    fase: str | None = None
+    #: Últimas luces ordenadas por la app: {rojo, amarillo, verde, zumbador}.
+    luces: dict[str, Any] | None = None
+    detalle: str | None = None
+
+
+class SemaforoAutomaticoIn(BaseModel):
+    """Activa/desactiva el control automático (vigilante backend)."""
+
+    activo: bool
+
+
+class SemaforoComandoOut(BaseModel):
+    """Resultado de un comando manual al semáforo."""
+
+    aplicado: bool
+    comando: dict[str, Any]
+    detalle: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Cámaras de captura de placa (migración 027)
+# ---------------------------------------------------------------------------
+
+
+class CamaraOut(CatalogItemOut):
+    """Cámara registrada. La ``password`` NUNCA se expone."""
+
+    id_camara: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    marca: str | None = None
+    modelo: str | None = None
+    fabricante: str | None = None
+    por_donde: str | None = None
+    activo: bool = True
+    is_simulada: bool = False
+    #: ip|local. Las locales (USB/integradas) capturan el *frame* con ffmpeg.
+    origen: Literal["ip", "local"] = "ip"
+    url_snapshot: str = ""
+    #: Ruta del dispositivo para las locales (ej. ``/dev/video0``).
+    dispositivo: str | None = None
+    usuario: str | None = None
+    ubicacion: Literal["entrada", "salida", "ambos"] = "ambos"
+    #: True si hay contraseña guardada (el valor no se devuelve).
+    password_configurada: bool = False
+
+
+class CamaraCreate(BaseModel):
+    codigo: str | None = Field(None, max_length=20)
+    descripcion: str = Field(..., min_length=2, max_length=150)
+    marca: str | None = Field(None, max_length=100)
+    modelo: str | None = Field(None, max_length=100)
+    fabricante: str | None = Field(None, max_length=100)
+    activo: bool = True
+    is_simulada: bool = False
+    origen: Literal["ip", "local"] = "ip"
+    #: Obligatoria solo para ``origen='ip'`` (se valida en la ruta).
+    url_snapshot: str = Field("", max_length=500)
+    #: Obligatoria solo para ``origen='local'`` (se valida en la ruta).
+    dispositivo: str | None = Field(None, max_length=255)
+    usuario: str | None = Field(None, max_length=100)
+    password: str | None = Field(None, max_length=255)
+    ubicacion: Literal["entrada", "salida", "ambos"] = "ambos"
+
+
+class CamaraDescubiertaOut(BaseModel):
+    """Cámara detectada por el escaneo (red local o dispositivo del equipo)."""
+
+    descripcion: str
+    origen: Literal["ip", "local"] = "ip"
+    url_snapshot: str = ""
+    dispositivo: str | None = None
+    marca: str | None = None
+    modelo: str | None = None
+    fabricante: str | None = None
+    por_donde: str | None = None
+    ubicacion: Literal["entrada", "salida", "ambos"] = "ambos"
+    is_simulada: bool = False
+    detalle: str | None = None
+
+
+class CamaraPruebaOut(BaseModel):
+    """Resultado de la prueba de conexión (descarga del snapshot sin persistir)."""
+
+    camara: str
+    conectado: bool
+    detalle: str | None = None
+    ancho: int | None = None
+    alto: int | None = None
+    tamano_kb: float | None = None
+
+
+class CamaraCapturarIn(BaseModel):
+    """Captura una foto de placa del boleto desde la cámara."""
+
+    boleto: uuid.UUID
+    #: placa_trasera | frente | placa_remolque (sufijo del nombre del archivo).
+    foto: Literal["placa_trasera", "frente", "placa_remolque"]
+
+
+# ---------------------------------------------------------------------------
+# Indicadores (terminal de peso) — migración 028
+# ---------------------------------------------------------------------------
+
+
+class IndicadorOut(CatalogItemOut):
+    """Indicador (terminal) registrado, enlazable a una báscula física."""
+
+    id_indicador: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    marca: str | None = None
+    modelo: str | None = None
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str | None = None
+    puerto_com: str | None = None
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    formato_trama: str | None = None
+    baudrate: int | None = None
+    delimitador: str | None = None
+    #: Básculas físicas enlazadas (para mostrar «en uso» en la UI).
+    balanzas_enlazadas: int = 0
+
+
+class IndicadorCreate(BaseModel):
+    codigo: str | None = Field(None, max_length=20)
+    descripcion: str = Field(..., min_length=2, max_length=150)
+    marca: str | None = Field(None, max_length=100)
+    modelo: str | None = Field(None, max_length=100)
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str | None = Field(None, pattern="^(tcp|serial)$")
+    puerto_com: str | None = Field(None, max_length=50)
+    ip_address: str | None = Field(None, max_length=45)
+    puerto_tcp: int | None = Field(None, gt=0, le=65535)
+    formato_trama: str = Field("auto", pattern="^(auto|json|ascii)$")
+    baudrate: int = Field(9600)
+    delimitador: str | None = Field(None, pattern="^(lf|cr|crlf|stx_etx)$")
+
+    @field_validator("baudrate")
+    @classmethod
+    def _validar_baudrate(cls, v: int) -> int:
+        # Debe coincidir con el CHECK `ck_indicadores_baudrate` de la BD.
+        permitidos = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
+        if v not in permitidos:
+            raise ValueError(
+                "baudrate debe ser uno de: 1200, 2400, 4800, 9600, 19200, "
+                "38400, 57600, 115200"
+            )
+        return v
+
+
+# ---------------------------------------------------------------------------
+# Conceptos de inventario (catálogo de motivos de kardex) — migración 029
+# ---------------------------------------------------------------------------
+
+
+class ConceptoInventarioOut(CatalogItemOut):
+    """Concepto de inventario (motivo de un movimiento de kardex)."""
+
+    id_concepto: uuid.UUID
+    codigo: str | None = None
+    nombre: str
+    descripcion: str | None = None
+    tipo_movimiento: str | None = None
+    activo: bool = True
+
+
+class ConceptoInventarioCreate(BaseModel):
+    """Alta/edición de un concepto de inventario."""
+
+    codigo: str | None = Field(None, max_length=20)
+    nombre: str = Field(..., min_length=2, max_length=150)
+    descripcion: str | None = Field(None, max_length=255)
+    tipo_movimiento: str | None = Field(
+        None, pattern="^(ingreso|despacho|ajuste|ambos)$"
+    )
+    activo: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Barreras de tránsito (control de acceso) — migración 032
+# ---------------------------------------------------------------------------
+
+
+class BarreraOut(CatalogItemOut):
+    """Barrera de control de acceso registrada."""
+
+    id_barrera: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str = "http"
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    puerto_com: str | None = None
+    baudrate: int = 9600
+    ubicacion: str = "ambos"
+    control_automatico: bool = False
+    tiempo_espera_segundos: int = 5
+    comando_abrir: str | None = None
+    comando_cerrar: str | None = None
+
+
+class BarreraCreate(BaseModel):
+    codigo: str | None = Field(None, max_length=20)
+    descripcion: str = Field(..., min_length=2, max_length=150)
+    activo: bool = True
+    is_simulado: bool = False
+    protocolo: str = Field("http", pattern="^(http|serial)$")
+    ip_address: str | None = Field(None, max_length=45)
+    puerto_tcp: int | None = Field(None, gt=0, le=65535)
+    puerto_com: str | None = Field(None, max_length=50)
+    baudrate: int = Field(9600)
+    ubicacion: str = Field("ambos", pattern="^(entrada|salida|ambos)$")
+    control_automatico: bool = False
+    tiempo_espera_segundos: int = Field(5, ge=1, le=3600)
+    comando_abrir: str | None = Field(None, max_length=255)
+    comando_cerrar: str | None = Field(None, max_length=255)
+
+    @field_validator("baudrate")
+    @classmethod
+    def _validar_baudrate(cls, v: int) -> int:
+        permitidos = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
+        if v not in permitidos:
+            raise ValueError(
+                "baudrate debe ser uno de: 1200, 2400, 4800, 9600, 19200, "
+                "38400, 57600, 115200"
+            )
+        return v
+
+
+class BarreraUpdate(BaseModel):
+    codigo: str | None = Field(None, max_length=20)
+    descripcion: str | None = Field(None, min_length=2, max_length=150)
+    activo: bool | None = None
+    is_simulado: bool | None = None
+    protocolo: str | None = Field(None, pattern="^(http|serial)$")
+    ip_address: str | None = Field(None, max_length=45)
+    puerto_tcp: int | None = Field(None, gt=0, le=65535)
+    puerto_com: str | None = Field(None, max_length=50)
+    baudrate: int | None = None
+    ubicacion: str | None = Field(None, pattern="^(entrada|salida|ambos)$")
+    control_automatico: bool | None = None
+    tiempo_espera_segundos: int | None = Field(None, ge=1, le=3600)
+    comando_abrir: str | None = Field(None, max_length=255)
+    comando_cerrar: str | None = Field(None, max_length=255)
+
+    @field_validator("baudrate")
+    @classmethod
+    def _validar_baudrate(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        permitidos = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
+        if v not in permitidos:
+            raise ValueError(
+                "baudrate debe ser uno de: 1200, 2400, 4800, 9600, 19200, "
+                "38400, 57600, 115200"
+            )
+        return v
+
+
+class BarreraDescubiertaOut(BaseModel):
+    descripcion: str
+    protocolo: str
+    ip_address: str | None = None
+    puerto_tcp: int | None = None
+    puerto_com: str | None = None
+    is_simulado: bool = False
+    estado: dict[str, Any] | None = None
+
+
+class BarreraPruebaOut(BaseModel):
+    barrera: str
+    conectado: bool
+    protocolo: str | None = None
+    estado: dict[str, Any] | None = None
+    detalle: str | None = None
+
+
+class BarreraEstadoOut(BaseModel):
+    barrera: str
+    conectado: bool
+    estado: dict[str, Any] | None = None
+    detalle: str | None = None
+
+
+class BarreraComandoIn(BaseModel):
+    action: Literal["open", "close"]
+
+
+class BarreraComandoOut(BaseModel):
+    aplicado: bool
+    action: str
+    detalle: str | None = None
 
 
 class TerceroOut(CatalogItemOut):
@@ -597,6 +1000,11 @@ class WeighingOut(BaseModel):
     balanza_nombre: str | None = None
     tercero_nombre: str | None = None
     remolque_placa: str | None = None
+    # Movimiento de kardex del boleto: 10 INGRESO / 60 DESPACHO / None sin
+    # asiento (boleto PENDIENTE). Alimenta INGRESOS / DESPACHOS en la lista.
+    kardex_mov: int | None = None
+    # Fotos de placa (migración 027): TRUE cuando ya se pidieron una vez.
+    fotos_placa_tomadas: bool = False
 
 
 class WeighingSyncItem(BaseModel):
@@ -768,6 +1176,9 @@ class EmpresaPerfilOut(BaseModel):
     impresora_nombre: str | None = None
     impresora_host: str | None = None
     impresora_puerto: int | None = None
+    # Fotos de placa (migración 027)
+    fotos_placa_activas: bool = False
+    fotos_placa_obligatorias: bool = False
     updated_at: datetime
 
     @field_validator("tamano_ticket_pdf", "fuente_ticket_pdf", mode="before")
@@ -806,6 +1217,8 @@ class EmpresaPerfilUpdate(BaseModel):
     impresora_nombre: str | None = Field(None, max_length=255)
     impresora_host: str | None = Field(None, max_length=100)
     impresora_puerto: int | None = Field(None, ge=1, le=65535)
+    fotos_placa_activas: bool | None = Field(None)
+    fotos_placa_obligatorias: bool | None = Field(None)
 
 
 # ---------------------------------------------------------------------------
@@ -827,6 +1240,18 @@ class AccesoUpdate(BaseModel):
     rol: str = Field(..., min_length=1)
     modulo: str = Field(..., min_length=1)
     acceso: str = Field(..., pattern=r"^(ver|editar|ninguno)$")
+
+
+class RolOut(BaseModel):
+    """Rol local de la estación con su descripción y usuarios asignados."""
+
+    clave: str
+    nombre: str
+    descripcion: str
+    usuarios: int = 0
+    modulos_editar: int = 0
+    modulos_ver: int = 0
+    modulos_ninguno: int = 0
 
 
 class SerieNumeracionCreate(BaseModel):
@@ -870,7 +1295,12 @@ class AjusteInventarioCreate(BaseModel):
       - ``60`` = DESPACHO por ajuste (negativo, reduce saldo)
 
     Solo se aceptan productos con ``es_kardex=true`` y almacenes
-    de la misma empresa. La justificación es obligatoria.
+    de la misma empresa.
+
+    El motivo del ajuste se elige de ``conceptos_inventario`` mediante
+    ``id_concepto``; el nombre del concepto se copia a ``documento`` para
+    conservar el histórico. ``documento`` sigue aceptándose para clientes
+    antiguos (compatibilidad), pero la UI nueva manda ``id_concepto``.
     """
 
     id_movimiento: Literal[10, 60] = Field(
@@ -879,8 +1309,13 @@ class AjusteInventarioCreate(BaseModel):
     id_producto: uuid.UUID
     id_almacen: uuid.UUID
     valor_kg: Decimal = Field(..., gt=0, description="Peso ajustado en kilogramos")
-    documento: str = Field(
-        ..., min_length=3, max_length=100, description="Justificación obligatoria del ajuste"
+    id_concepto: uuid.UUID | None = Field(
+        None, description="Concepto del movimiento (catálogo conceptos_inventario)"
+    )
+    documento: str | None = Field(
+        None,
+        max_length=100,
+        description="Texto libre (legado). Si se omite y hay id_concepto, se usa el nombre del concepto.",
     )
     fecha_documento: datetime | None = None
 
@@ -894,6 +1329,7 @@ class AjusteInventarioOut(BaseModel):
     id_movimiento: int
     id_producto: uuid.UUID | None
     id_almacen: uuid.UUID | None
+    id_concepto: uuid.UUID | None = None
     valor: Decimal
     documento: str | None
     fecha_kardex: datetime

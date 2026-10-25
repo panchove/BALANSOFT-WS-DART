@@ -5,7 +5,7 @@ No requiere SQL Server real: verifica la integridad del esquema canónico
 guards idempotentes, límite NVARCHAR(255) en columnas indexadas y paridad con
 el esquema PostgreSQL ``balansoft-ws-local.sql``).
 
-La paridad esperada es 31 tablas = 28 canónicas SQLite/PG + 3 auxiliares que
+La paridad esperada es 34 tablas = 31 canónicas SQLite/PG + 3 auxiliares que
 solo existen en SQL Server: ``password_reset_tokens``, ``series_numeracion``
 y ``schema_migrations``.
 """
@@ -20,21 +20,22 @@ ESQUEMA_MSSQL = Path(__file__).resolve().parents[1] / "sqlserver" / "balansoft-w
 MIGRACIONES_DIR = Path(__file__).resolve().parents[1] / "migrations"
 
 TABLAS_PG_Y_MSSQL = {
-    "almacenes", "auditoria", "balanzas", "boletos_pesaje", "boletos_ediciones",
-    "camiones",
+    "almacenes", "auditoria", "balanzas", "barreras", "boletos_pesaje", "boletos_ediciones",
+    "camiones", "camaras", "conceptos_inventario",
     "categorias", "conductores", "configuraciones", "empresas",
-    "identidad_local", "imagenes_pesaje", "kardex", "llaves_activacion",
+    "identidad_local", "imagenes_pesaje", "indicadores", "kardex", "llaves_activacion",
     "logs_sistema", "marcas",
     "modelos_camion", "notificaciones", "parametros_sistema",
-    "permisos_acceso", "productos", "recordatorios", "remolques", "sync_logs",
+    "permisos_acceso", "productos", "recordatorios", "remolques", "semaforos",
+    "sync_logs",
     "sync_queue", "terceros", "transportes", "usuarios",
 }
 TABLAS_SOLO_MSSQL = {"password_reset_tokens", "series_numeracion", "schema_migrations"}
 TABLAS_ESPERADAS_MSSQL = TABLAS_PG_Y_MSSQL | TABLAS_SOLO_MSSQL
 
-ESPERADAS_PK = 31
-ESPERADAS_FK = 46
-ESPERADAS_MIGRACIONES_PLEGADAS = 25
+ESPERADAS_PK = 36
+ESPERADAS_FK = 54
+ESPERADAS_MIGRACIONES_PLEGADAS = 32
 MAX_NVARCHAR_INDEXADA = 255
 
 
@@ -95,7 +96,7 @@ def test_cabecera_transaccional():
 # ---------------------------------------------------------------------------
 def test_conteo_tablas():
     assert _tablas_mssql(_leer_mssql()) == TABLAS_ESPERADAS_MSSQL
-    assert len(_tablas_mssql(_leer_mssql())) == 31
+    assert len(_tablas_mssql(_leer_mssql())) == len(TABLAS_ESPERADAS_MSSQL)
 
 
 def test_conteo_pk():
@@ -122,13 +123,16 @@ def test_guards_idempotentes_tablas():
     texto = _leer_mssql()
     crea = len(re.findall(r"CREATE TABLE", texto, re.I))
     guards = len(re.findall(r"IF OBJECT_ID", texto, re.I))
-    assert crea == guards == 31, f"CREATE TABLE={crea} guards={guards}"
+    esperadas = len(TABLAS_ESPERADAS_MSSQL)
+    assert crea == guards == esperadas, f"CREATE TABLE={crea} guards={guards}"
 
 
 def test_guards_idempotentes_indices_y_fk():
     """Índices y FKs se crean con IF NOT EXISTS sobre sys.indexes/foreign_keys."""
     texto = _leer_mssql()
-    assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.indexes") >= 31
+    assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.indexes") >= len(
+        TABLAS_ESPERADAS_MSSQL
+    )
     assert texto.count("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys") == ESPERADAS_FK
 
 
@@ -221,10 +225,10 @@ def test_paridad_tablas_pg_vs_mssql():
 
 
 def test_migraciones_plegadas_documentadas():
-    """Las 25 migraciones 001-025 existen como archivo (las pliega el WServer).
+    """Las 30 migraciones 001-030 existen como archivo (las pliega el WServer).
 
     ``wserver._sembrar_migraciones_sqlserver`` itera las migraciones del disco
-    (``_archivos_migracion``); si el directorio real no tuviera esos 25
+    (``_archivos_migracion``); si el directorio real no tuviera esos 30
     archivos, la siembra en SQL Server (N1) registraría menos versiones y el
     esquema quedaría desincronizado respecto a PostgreSQL. Verificar contra el
     directorio real (no contra una constante) evita un test tautológico.
@@ -234,7 +238,7 @@ def test_migraciones_plegadas_documentadas():
         f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
         f"hay {len(archivos)} aplicables en {MIGRACIONES_DIR}"
     )
-    # Numeración contigua 001..025 (sin huecos) para que la siembra sea determinista.
+    # Numeración contigua 001..030 (sin huecos) para que la siembra sea determinista.
     for i in range(1, ESPERADAS_MIGRACIONES_PLEGADAS + 1):
         assert any(p.startswith(f"{i:03d}_") for p in archivos), f"falta la migración {i:03d}_*.sql"
 

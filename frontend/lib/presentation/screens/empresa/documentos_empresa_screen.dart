@@ -43,6 +43,10 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
   List<PhotoCaptured> _logo = const [];
   String _formatoTicket = 'PDF';
 
+  // Fotos de placa (cámaras): config por empresa (migración 027).
+  bool _fotosPlacaActivas = false;
+  bool _fotosPlacaObligatorias = false;
+
   // Series de numeración (CRUD; el campo de trabajo elige cuál usar)
   List<dynamic> _series = const [];
   String? _idSerieActiva;
@@ -87,6 +91,8 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
         _usuario = u;
         _logoUrl = perfil['logo_url'] as String?;
         _formatoTicket = '${perfil['formato_ticket'] ?? 'PDF'}';
+        _fotosPlacaActivas = perfil['fotos_placa_activas'] == true;
+        _fotosPlacaObligatorias = perfil['fotos_placa_obligatorias'] == true;
         _logo = const [];
         _nombreFiscalCtrl.text = '${perfil['nombre_fiscal'] ?? ''}';
         _nombreComercialCtrl.text = '${perfil['nombre_comercial'] ?? ''}';
@@ -247,6 +253,8 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
         'email': _oNulo(_emailCtrl.text),
         'formato_ticket': _formatoTicket,
         'logo_url': logoUrl,
+        'fotos_placa_activas': _fotosPlacaActivas,
+        'fotos_placa_obligatorias': _fotosPlacaObligatorias,
       });
       if (!mounted) return;
       // El logo/nombre del top-nav salen del usuario EN SESIÓN: sin este
@@ -467,6 +475,36 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
                   isDense: true,
                 ),
               ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              key: const Key('fotos_placa_activas_switch'),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _fotosPlacaActivas,
+              onChanged: _esAdmin
+                  ? (v) => setState(() {
+                        _fotosPlacaActivas = v;
+                        if (!v) _fotosPlacaObligatorias = false;
+                      })
+                  : null,
+              title: Text('placa_cfg_activas'.tr(),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text('placa_cfg_activas_desc'.tr(),
+                  style: const TextStyle(fontSize: 11)),
+            ),
+            SwitchListTile(
+              key: const Key('fotos_placa_obligatorias_switch'),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _fotosPlacaObligatorias,
+              onChanged: (_esAdmin && _fotosPlacaActivas)
+                  ? (v) => setState(() => _fotosPlacaObligatorias = v)
+                  : null,
+              title: Text('placa_cfg_obligatorias'.tr(),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text('placa_cfg_obligatorias_desc'.tr(),
+                  style: const TextStyle(fontSize: 11)),
             ),
             const SizedBox(height: 8),
             Align(
