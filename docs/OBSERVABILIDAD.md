@@ -9,14 +9,14 @@ consume y qué alertas hay. Documento vigente del alcance.
 
 ## Encabezado editorial
 
-| Campo | Valor |
-|-------|-------|
-| Versión | 1.0 |
-| Fecha | 2026-10-01 |
-| Estado | Vigente |
-| Autor | Equipo BALANSOFT-WS |
-| Norma | AGENTS.md v3.6, `docs/MANEJO_DB.md` |
-| Fuente | `backend/app/core/monitoring.py`, `backend/app/core/config.py`, `backend/app/main.py`, `backend/deploy/observability/` |
+| Campo   | Valor                                                                                                                  |
+|---------|------------------------------------------------------------------------------------------------------------------------|
+| Versión | 1.0                                                                                                                    |
+| Fecha   | 2026-10-01                                                                                                             |
+| Estado  | Vigente                                                                                                                |
+| Autor   | Equipo BALANSOFT-WS                                                                                                    |
+| Norma   | AGENTS.md v3.6, `docs/MANEJO_DB.md`                                                                                    |
+| Fuente  | `backend/app/core/monitoring.py`, `backend/app/core/config.py`, `backend/app/main.py`, `backend/deploy/observability/` |
 
 ---
 
@@ -29,19 +29,19 @@ de verdad para trazabilidad de acciones de usuario.
 
 Lo que este documento **no** cubre (y está en otro lado):
 
-| Necesidad | Dónde resolverla |
-|-----------|------------------|
-| Quién hizo qué y cuándo | `GET /api/v1/auditoria` (endpoint `auditoria.py`) |
-| Reglas de negocio de pesaje | `docs/MODELO_ESTANDAR.md` |
-| Sincronización offline | `docs/MANEJO_DB.md` |
+| Necesidad                   | Dónde resolverla                                  |
+|-----------------------------|---------------------------------------------------|
+| Quién hizo qué y cuándo     | `GET /api/v1/auditoria` (endpoint `auditoria.py`) |
+| Reglas de negocio de pesaje | `docs/MODELO_ESTANDAR.md`                         |
+| Sincronización offline      | `docs/MANEJO_DB.md`                               |
 
 ---
 
 ## 2. Activación
 
-| Variable | Por defecto | Efecto |
-|----------|-------------|--------|
-| `METRICS_ENABLED` | `true` | `false` desactiva tanto el middleware como el endpoint `/metrics` |
+| Variable          | Por defecto | Efecto                                                            |
+|-------------------|-------------|-------------------------------------------------------------------|
+| `METRICS_ENABLED` | `true`      | `false` desactiva tanto el middleware como el endpoint `/metrics` |
 
 En `app/main.py` el middleware `MetricsMiddleware` y la ruta `/metrics` se
 montan solo si el flag está activo. Con el flag apagado, Prometheus verá un 404
@@ -63,11 +63,11 @@ Cinco métricas. Todas agregadas y técnicas: **ninguna lleva `id_empresa`** (ve
 
 Requests atendidos, por código de respuesta.
 
-| Label | Valores | Significado |
-|-------|---------|-------------|
-| `method` | `GET`, `POST`, `PUT`, `DELETE` | Método HTTP |
-| `endpoint` | Ruta normalizada a `{id}` | Ej. `/api/v1/weighing/boleto/{id}` |
-| `status` | Código HTTP | `200`, `401`, `409`, `500`… |
+| Label      | Valores                        | Significado                        |
+|------------|--------------------------------|------------------------------------|
+| `method`   | `GET`, `POST`, `PUT`, `DELETE` | Método HTTP                        |
+| `endpoint` | Ruta normalizada a `{id}`      | Ej. `/api/v1/weighing/boleto/{id}` |
+| `status`   | Código HTTP                    | `200`, `401`, `409`, `500`…        |
 
 ```promql
 sum by (status) (rate(balansoft_http_requests_total[5m]))
@@ -85,10 +85,10 @@ histogram_quantile(0.95, sum by (le, endpoint) (rate(balansoft_api_latency_secon
 
 ### 3.3 `balansoft_pesajes_total` — Counter
 
-| Label | Valores |
-|-------|---------|
+| Label     | Valores                           |
+|-----------|-----------------------------------|
 | `estatus` | `PENDIENTE`, `CERRADO`, `ANULADO` |
-| `tier` | `DEMO`, `CENTRAL` |
+| `tier`    | `DEMO`, `CENTRAL`                 |
 
 Un boleto cuenta **una vez por estado que alcanza**: al abrirlo se incrementa
 `PENDIENTE`, al cerrarlo `CERRADO`, al anularlo `ANULADO`. No hay `MODIFICADO`
@@ -96,9 +96,9 @@ porque la métrica sigue la transición de estados, no cada edición.
 
 ### 3.4 `balansoft_license_errors_total` — Counter
 
-| Label | Valores |
-|-------|---------|
-| `tier` | `DEMO`, `CENTRAL` |
+| Label    | Valores                                                                 |
+|----------|-------------------------------------------------------------------------|
+| `tier`   | `DEMO`, `CENTRAL`                                                       |
 | `reason` | Motivo del fallo (LM inalcanzable, licencia inválida, expirada, tamper) |
 
 Es la señal más valiosa en campo: si sube, la estación opera en modo degradado.
@@ -127,16 +127,16 @@ concreto. Para eso está la base de datos y la auditoría.
 
 Definidas en `backend/deploy/observability/alerts/balansoft-alerts.yml`.
 
-| Alerta | Severidad | Condición |
-|--------|-----------|-----------|
-| `BalansoftApiCaida` | critical | `up{job="balansoft-api"} == 0` por 2 min |
-| `BalansoftLatenciaAlta` | warning | p95 > 1 s por 10 min |
-| `BalansoftLatenciaCritica` | critical | p95 > 2,5 s por 5 min |
-| `BalansoftErrores5xx` | critical | > 0,5 5xx/s por 10 min |
-| `BalansoftErrores4xx` | warning | > 1 4xx/s por 15 min |
-| `BalansoftErroresLicencia` | critical | > 5 fallos de licencia en 15 min |
-| `BalansoftLicenciaSinUso` | info | 0 sesiones en 3 h |
-| `BalansoftPesajesDetenidos` | warning | se cierran pesajes y ninguno queda pendiente |
+| Alerta                      | Severidad | Condición                                    |
+|-----------------------------|-----------|----------------------------------------------|
+| `BalansoftApiCaida`         | critical  | `up{job="balansoft-api"} == 0` por 2 min     |
+| `BalansoftLatenciaAlta`     | warning   | p95 > 1 s por 10 min                         |
+| `BalansoftLatenciaCritica`  | critical  | p95 > 2,5 s por 5 min                        |
+| `BalansoftErrores5xx`       | critical  | > 0,5 5xx/s por 10 min                       |
+| `BalansoftErrores4xx`       | warning   | > 1 4xx/s por 15 min                         |
+| `BalansoftErroresLicencia`  | critical  | > 5 fallos de licencia en 15 min             |
+| `BalansoftLicenciaSinUso`   | info      | 0 sesiones en 3 h                            |
+| `BalansoftPesajesDetenidos` | warning   | se cierran pesajes y ninguno queda pendiente |
 
 Cada alerta lleva `severity` y un `runbook` con el enlace a la sección de
 diagnóstico de este documento. `alertmanager.yml` silencia latencia y 5xx
@@ -173,13 +173,13 @@ El detalle por empresa sale de `auditoria` (filtrable por fecha y entidad).
 
 Guía de lectura de síntomas:
 
-| Síntoma | Dónde mirar primero | Qué hacer |
-|---------|--------------------|-----------|
-| Panel en gris, sin datos | Prometheus → Status → Targets | Backend caído, `METRICS_ENABLED=false` o target mal configurado |
-| p95 alto en un solo endpoint | `topk` de requests: si además es el más tráfico, es carga; si es Poco y lento, es una consulta | Revisar índices y la query en `services/` |
-| `license_errors_total` subiendo | Label `reason`: `unreachable` es red; `invalid`/`expired` es licencia | Red primero; si es licencia, `GET /api/v1/auth/license` |
-| 4xx sostenidos | Tabla `auditoria` (`accion`, `email`, `ip`) | Credenciales o cliente desactualizado |
-| `up == 0` | Log del WServer / journald | El proceso no está vivo |
+| Síntoma                         | Dónde mirar primero                                                                            | Qué hacer                                                       |
+|---------------------------------|------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| Panel en gris, sin datos        | Prometheus → Status → Targets                                                                  | Backend caído, `METRICS_ENABLED=false` o target mal configurado |
+| p95 alto en un solo endpoint    | `topk` de requests: si además es el más tráfico, es carga; si es Poco y lento, es una consulta | Revisar índices y la query en `services/`                       |
+| `license_errors_total` subiendo | Label `reason`: `unreachable` es red; `invalid`/`expired` es licencia                          | Red primero; si es licencia, `GET /api/v1/auth/license`         |
+| 4xx sostenidos                  | Tabla `auditoria` (`accion`, `email`, `ip`)                                                    | Credenciales o cliente desactualizado                           |
+| `up == 0`                       | Log del WServer / journald                                                                     | El proceso no está vivo                                         |
 
 El backend escribe log estructurado con `LOG_FORMAT=json`, que incluye la misma
 información con más detalle (ver `app/core/logging_config.py` y
@@ -189,12 +189,12 @@ información con más detalle (ver `app/core/logging_config.py` y
 
 ## 8. Pendiente de infraestructura
 
-| Ítem | Por qué no se cierra aquí |
-|------|---------------------------|
-| Canal de notificación (correo/Slack) | Requiere decidir destinatarios y credenciales del servicio |
-| Retención a largo plazo y réplicas | Requiere definir almacenamiento y su respaldo |
-| TLS y autenticación en Prometheus/Grafana | Requiere dominio y certificado (mismo bloqueo que H4/H3) |
-| Alta disponibilidad | Fuera de alcance: una estación no necesita HA |
+| Ítem                                      | Por qué no se cierra aquí                                  |
+|-------------------------------------------|------------------------------------------------------------|
+| Canal de notificación (correo/Slack)      | Requiere decidir destinatarios y credenciales del servicio |
+| Retención a largo plazo y réplicas        | Requiere definir almacenamiento y su respaldo              |
+| TLS y autenticación en Prometheus/Grafana | Requiere dominio y certificado (mismo bloqueo que H4/H3)   |
+| Alta disponibilidad                       | Fuera de alcance: una estación no necesita HA              |
 
 El receptor de Alertmanager es `null` a propósito: en desarrollo no debe
 llegar ninguna notificación real.

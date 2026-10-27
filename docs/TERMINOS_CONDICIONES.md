@@ -312,22 +312,22 @@ El Cliente se obliga a:
 
 ## ANEXO A — RESUMEN DE RESTRICCIONES CLAVE
 
-| Aspecto | Regla |
-|--------|-------|
-| Modalidad de licencia | Únicamente CENTRAL |
-| Planes | Básico o Premium |
-| Número de sesiones | Solicitado por el Cliente al comprar; define el costo y el límite de dispositivos simultáneos |
-| Creación de cuenta ADMIN | Exclusivamente por el Proveedor |
-| Entrega de credenciales | El Proveedor envía email y contraseña al Cliente |
-| Autorización de equipos Operador | El Cliente, emitiendo una llave de activación de un solo uso desde la cuenta ADMIN |
-| Vínculo de cuenta | Al primer dispositivo donde se activa (Servidor Local) |
-| Creación de operadores | El Cliente, desde la cuenta ADMIN |
-| Descarga del instalador | Solo desde https://balansoft.com.ve/downloads |
-| Copia/difusión de archivos | Prohibida |
-| Difusión de esquemas de BD | Prohibida |
-| Elusión de límites | Prohibida |
-| Incumplimiento | Revocación inmediata de la licencia |
-| Aceptación | Digital (casilla + botón) en página del producto e instalador |
+| Aspecto                          | Regla                                                                                         |
+|----------------------------------|-----------------------------------------------------------------------------------------------|
+| Modalidad de licencia            | Únicamente CENTRAL                                                                            |
+| Planes                           | Básico o Premium                                                                              |
+| Número de sesiones               | Solicitado por el Cliente al comprar; define el costo y el límite de dispositivos simultáneos |
+| Creación de cuenta ADMIN         | Exclusivamente por el Proveedor                                                               |
+| Entrega de credenciales          | El Proveedor envía email y contraseña al Cliente                                              |
+| Autorización de equipos Operador | El Cliente, emitiendo una llave de activación de un solo uso desde la cuenta ADMIN            |
+| Vínculo de cuenta                | Al primer dispositivo donde se activa (Servidor Local)                                        |
+| Creación de operadores           | El Cliente, desde la cuenta ADMIN                                                             |
+| Descarga del instalador          | Solo desde https://balansoft.com.ve/downloads                                                 |
+| Copia/difusión de archivos       | Prohibida                                                                                     |
+| Difusión de esquemas de BD       | Prohibida                                                                                     |
+| Elusión de límites               | Prohibida                                                                                     |
+| Incumplimiento                   | Revocación inmediata de la licencia                                                           |
+| Aceptación                       | Digital (casilla + botón) en página del producto e instalador                                 |
 
 ---
 

@@ -17,13 +17,13 @@
 
 #### 1. Catálogos (Datos Maestros)
 
-| Módulo | Descripción / Reglas |
-| --- | --- |
-| **Clientes** | Registro de entidades receptoras. Clasificación: `C` (Cliente) / `A` (Ambos). |
-| **Proveedores** | Registro de entidades proveedoras. Clasificación: `P` (Proveedor) / `A` (Ambos). |
-| **Flota y Transporte** | Registro de **Camiones**, **Conductores** y **Empresas de Transporte**. |
-| **Inventario Base** | Registro de **Categorías**, **Productos** y **Almacenes**. |
-| **Kardex** | Configuración de **Conceptos de Movimiento** para el control de inventario. |
+| Módulo                 | Descripción / Reglas                                                             |
+|------------------------|----------------------------------------------------------------------------------|
+| **Clientes**           | Registro de entidades receptoras. Clasificación: `C` (Cliente) / `A` (Ambos).    |
+| **Proveedores**        | Registro de entidades proveedoras. Clasificación: `P` (Proveedor) / `A` (Ambos). |
+| **Flota y Transporte** | Registro de **Camiones**, **Conductores** y **Empresas de Transporte**.          |
+| **Inventario Base**    | Registro de **Categorías**, **Productos** y **Almacenes**.                       |
+| **Kardex**             | Configuración de **Conceptos de Movimiento** para el control de inventario.      |
 
 > **Estructura de Unidad Tractora:**
 > * **Configuración estándar:** Chuto + Trailer (+ Remolque opcional).

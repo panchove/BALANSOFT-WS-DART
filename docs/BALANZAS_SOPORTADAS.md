@@ -1,8 +1,8 @@
 # BALANZAS SOPORTADAS — Matriz de compatibilidad de indicadores reales
 
-| Versión | Fecha | Estado | Autor | Norma | Fuente |
-|---------|-------|--------|-------|-------|--------|
-| 1.0 | 2026-10-12 | Vigente | ENCARGADO BALANSOFT-WS | AGENTS.md v3.21 | `app/core/scale_parser.py`, `app/core/scale_hal.py`, manuales de protocolo públicos |
+| Versión | Fecha      | Estado  | Autor                  | Norma           | Fuente                                                                              |
+|---------|------------|---------|------------------------|-----------------|-------------------------------------------------------------------------------------|
+| 1.0     | 2026-10-12 | Vigente | ENCARGADO BALANSOFT-WS | AGENTS.md v3.21 | `app/core/scale_parser.py`, `app/core/scale_hal.py`, manuales de protocolo públicos |
 
 Identificador trazable: `REQ-NF-BAL-001` (hardenización del HAL para básculas reales multi-marca).
 
@@ -33,36 +33,36 @@ protocolo públicos y el parser multi-marca.
 
 ## 3. Matriz de marcas y protocolos
 
-| Marca / equipo (según foto del cliente) | Protocolo serie típico | Ejemplo de trama | ¿Cubierto? | Configuración recomendada |
-|---|---|---|---|---|
-| **Syneria** / **Ichiban** — comercial torre y mostrador (rebranding de indicadores chinos) | Continuo estilo Toledo/GSI o Yaohua "=" | `ST,GS,+00042.5kg` / `=+000023.5kg` | ✅ | `formato_trama=auto`, `delimitador=lf\|crlf`, `baudrate=9600`; activar salida continua en el indicador |
-| **Ichiban** — indicador ABS (LCD/LED) y de piso | Toledo clon / Yaohua "=" | `ST,GS,+00320.0kg` / `=+000023.5kg` | ✅ | igual que arriba |
-| **Yaohua** — XK3190-A9/A9+/C8/DS3 (indicadores en gabinete acero inox. y ABS) | Modo PC continuo de 10 bytes: inicio `=`, 8 datos ASCII, stop; con o sin espacios | `=+000023.5kg`, `= 00023.5 kg` | ✅ | `formato_trama=ascii` si el indicador lo soporta o `auto`; el estado se deduce por repetición (la trama "=" no lleva `ST`) |
-| **Keli** — indicadores (y celdas) | Toledo clon `ST,GS,` o trama 22 bytes STX/ETX + checksum XOR | `ST,GS,+00320.0kg` | ✅ | `formato_trama=auto`; si el indicador usa checksum obligatorio, activar modo Toledo sin checksum (ver §6.4) |
-| **Torrey** — LQ (indicadores industriales) | Salida continua estilo Toledo/GSI | `ST,GS,+00042.5kg` CR LF | ✅ | `formato_trama=auto` (`ascii` si se fija), `delimitador=lf\|crlf` |
-| **Torrey** — LEQ-HS y básculas de mostrador retail | Emiten **por comando** (envían peso tras recibir `P`/print) | — | ⚠️ Ver §6.1 | Activar modo continuo en el indicador |
-| **Rice Lake** — 120 / iQ / iQ+ | Paralelo estilo Toledo `ST,GS,` o dirección adherida | `ST,GS,+000320.0` / `01+000320.0` | ✅ | `formato_trama=auto`; `01+...` no lleva estado → deducción por repetición |
-| **Excel** (indicadores) | Continuo configurable estilo Toledo | `ST,GS,+00042.5kg` | ✅ | `formato_trama=auto` |
-| **Roccia** | Comercialización de indicadores (rebranding) | según indicador | ✅ | depende del indicador real |
-| **Celdas de carga Keli / Zemic / Mavin** | Señal analógica mV/V → van al **indicador**, no hablan protocolo | N/A | N/A | Se conectan al indicador; el sistema lee del indicador |
-| **Junction boxes Keli / Yaohua** | Suma analógica de celdas, sin protocolo | N/A | N/A | N/A |
-| **Repetidor / display LED gigante** (Yaohua/Ichiban) | Es **receptor** (corriente 20 mA / comando) del indicador | N/A | N/A | Leer del indicador, no del repetidor |
+| Marca / equipo (según foto del cliente)                                                    | Protocolo serie típico                                                            | Ejemplo de trama                    | ¿Cubierto? | Configuración recomendada                                                                                                  |
+|--------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------------|------------|----------------------------------------------------------------------------------------------------------------------------|
+| **Syneria** / **Ichiban** — comercial torre y mostrador (rebranding de indicadores chinos) | Continuo estilo Toledo/GSI o Yaohua "="                                           | `ST,GS,+00042.5kg` / `=+000023.5kg` | ✅          | `formato_trama=auto`, `delimitador=lf\|crlf`, `baudrate=9600`; activar salida continua en el indicador                     |
+| **Ichiban** — indicador ABS (LCD/LED) y de piso                                            | Toledo clon / Yaohua "="                                                          | `ST,GS,+00320.0kg` / `=+000023.5kg` | ✅          | igual que arriba                                                                                                           |
+| **Yaohua** — XK3190-A9/A9+/C8/DS3 (indicadores en gabinete acero inox. y ABS)              | Modo PC continuo de 10 bytes: inicio `=`, 8 datos ASCII, stop; con o sin espacios | `=+000023.5kg`, `= 00023.5 kg`      | ✅          | `formato_trama=ascii` si el indicador lo soporta o `auto`; el estado se deduce por repetición (la trama "=" no lleva `ST`) |
+| **Keli** — indicadores (y celdas)                                                          | Toledo clon `ST,GS,` o trama 22 bytes STX/ETX + checksum XOR                      | `ST,GS,+00320.0kg`                  | ✅          | `formato_trama=auto`; si el indicador usa checksum obligatorio, activar modo Toledo sin checksum (ver §6.4)                |
+| **Torrey** — LQ (indicadores industriales)                                                 | Salida continua estilo Toledo/GSI                                                 | `ST,GS,+00042.5kg` CR LF            | ✅          | `formato_trama=auto` (`ascii` si se fija), `delimitador=lf\|crlf`                                                          |
+| **Torrey** — LEQ-HS y básculas de mostrador retail                                         | Emiten **por comando** (envían peso tras recibir `P`/print)                       | —                                   | ⚠️ Ver §6.1 | Activar modo continuo en el indicador                                                                                      |
+| **Rice Lake** — 120 / iQ / iQ+                                                             | Paralelo estilo Toledo `ST,GS,` o dirección adherida                              | `ST,GS,+000320.0` / `01+000320.0`   | ✅          | `formato_trama=auto`; `01+...` no lleva estado → deducción por repetición                                                  |
+| **Excel** (indicadores)                                                                    | Continuo configurable estilo Toledo                                               | `ST,GS,+00042.5kg`                  | ✅          | `formato_trama=auto`                                                                                                       |
+| **Roccia**                                                                                 | Comercialización de indicadores (rebranding)                                      | según indicador                     | ✅          | depende del indicador real                                                                                                 |
+| **Celdas de carga Keli / Zemic / Mavin**                                                   | Señal analógica mV/V → van al **indicador**, no hablan protocolo                  | N/A                                 | N/A        | Se conectan al indicador; el sistema lee del indicador                                                                     |
+| **Junction boxes Keli / Yaohua**                                                           | Suma analógica de celdas, sin protocolo                                           | N/A                                 | N/A        | N/A                                                                                                                        |
+| **Repetidor / display LED gigante** (Yaohua/Ichiban)                                       | Es **receptor** (corriente 20 mA / comando) del indicador                         | N/A                                 | N/A        | Leer del indicador, no del repetidor                                                                                       |
 
 ## 4. Tramas ya fijadas por test (regresión)
 
-Formato | Ejemplo | Resultado
---------|---------|----------
-Toledo/GSI | `ST,GS,+00320.00kg` | `(320.0, stable)`
-Toledo/GSI con espacios | `ST,GS,+  320.00 kg` | `(320.0, stable)`
-Yaohua "=" (compacto) | `=+000023.5kg` | `(23.5, None)` — estado deducido
-Yaohua "=" (espaciado) | `= 00023.5 kg` | `(23.5, None)`
-Yaohua "=" negativo | `=-001234.0kg` | `(-1234.0, None)`
-Torrey LQ / Keli | `ST,GS,+00042.5kg` | `(42.5, stable)`
-Rice Lake/iQ con dirección | `01+000320.0` | `(320.0, None)`
-MT-SICS | `S S 320.00 kg` | `(320.0, None)`
-Signo suelto | `-  12.50KG` | `(-12.5, None)`
-STX/ETX + checksum XOR | `\x02ST,GS,+00320.00kg\x032B` | `(320.0, stable)` (checksum validado)
-ETX suelto en payload | `ST,GS,320.00kg\x03` | `(320.0, stable)`
+| Formato                    | Ejemplo                       | Resultado                             |
+|----------------------------|-------------------------------|---------------------------------------|
+| Toledo/GSI                 | `ST,GS,+00320.00kg`           | `(320.0, stable)`                     |
+| Toledo/GSI con espacios    | `ST,GS,+  320.00 kg`          | `(320.0, stable)`                     |
+| Yaohua "=" (compacto)      | `=+000023.5kg`                | `(23.5, None)` — estado deducido      |
+| Yaohua "=" (espaciado)     | `= 00023.5 kg`                | `(23.5, None)`                        |
+| Yaohua "=" negativo        | `=-001234.0kg`                | `(-1234.0, None)`                     |
+| Torrey LQ / Keli           | `ST,GS,+00042.5kg`            | `(42.5, stable)`                      |
+| Rice Lake/iQ con dirección | `01+000320.0`                 | `(320.0, None)`                       |
+| MT-SICS                    | `S S 320.00 kg`               | `(320.0, None)`                       |
+| Signo suelto               | `-  12.50KG`                  | `(-12.5, None)`                       |
+| STX/ETX + checksum XOR     | `\x02ST,GS,+00320.00kg\x032B` | `(320.0, stable)` (checksum validado) |
+| ETX suelto en payload      | `ST,GS,320.00kg\x03`          | `(320.0, stable)`                     |
 
 Rechazadas por diseño (anti-falso-positivo): `1234567890`, `01`, `=000001`
 (número desnudo) y `123.4 567.8` (ambigüedad).

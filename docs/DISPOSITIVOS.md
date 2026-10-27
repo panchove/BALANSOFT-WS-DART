@@ -72,9 +72,9 @@ Dispositivos de salida para la emisión física del ticket de pesaje.
 
 Para garantizar la operatividad de la estación con cualquier cantidad de hardware disponible, el sistema debe aplicar las siguientes reglas de auto-configuración para los flujos de **Entrada** y **Salida**:
 
-| Escenario de Hardware | Configuración Requerida en el Sistema |
-| :--- | :--- |
-| **1 Báscula + 1 Indicador** | El único indicador y la única báscula se configuran para operar tanto en la **Entrada** como en la **Salida** automáticamente. |
-| **2 Básculas + 1 Indicador** | El indicador se vincula a ambas básculas. Debe mostrar dinámicamente el valor de la báscula que esté en uso (Entrada o Salida). |
-| **1 Báscula + 2 Indicadores** | La única báscula se vincula a ambos indicadores, enviando el mismo peso a los dos simultáneamente, sin importar el modo. |
-| **2 Básculas + 2 Indicadores** | Vinculación directa y exclusiva: *Báscula de Entrada → Indicador de Entrada* y *Báscula de Salida → Indicador de Salida*. |
+| Escenario de Hardware          | Configuración Requerida en el Sistema                                                                                           |
+|:-------------------------------|:--------------------------------------------------------------------------------------------------------------------------------|
+| **1 Báscula + 1 Indicador**    | El único indicador y la única báscula se configuran para operar tanto en la **Entrada** como en la **Salida** automáticamente.  |
+| **2 Básculas + 1 Indicador**   | El indicador se vincula a ambas básculas. Debe mostrar dinámicamente el valor de la báscula que esté en uso (Entrada o Salida). |
+| **1 Báscula + 2 Indicadores**  | La única báscula se vincula a ambos indicadores, enviando el mismo peso a los dos simultáneamente, sin importar el modo.        |
+| **2 Básculas + 2 Indicadores** | Vinculación directa y exclusiva: *Báscula de Entrada → Indicador de Entrada* y *Báscula de Salida → Indicador de Salida*.       |

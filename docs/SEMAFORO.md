@@ -60,12 +60,12 @@ backend mantiene un **vigilante** por semáforo.
 El **mismo JSON de comandos** viaja por todos los canales; el transporte lo
 resuelve `app/core/semaforo_hal.py` (`get_semaforo_hal`):
 
-| Canal | Fase | Comando | Estado |
-|-------|------|---------|--------|
-| HTTP/REST | **2 (implementado)** | `POST http://{ip}:{puerto}/api/semaforo` | `GET` mismo endpoint (SPEC §3) |
-| USB serie CDC-ACM | **3 (implementado)** | `/dev/bsdd_semaforo_acm` (default 9600 8N1), línea JSON + `\n` | una línea JSON |
-| Modbus TCP | 4 (diferido) | `127.0.0.1:5020` FC05; bobinas `0=rojo, 1=amarillo, 2=verde, 3=zumbador, 10=demo, 11=reset` | FC01 |
-| MQTT | 5 (diferido) | `127.0.0.1:1883`, tópico `semaforo/cmd` | tópico `semaforo/estado` |
+| Canal             | Fase                 | Comando                                                                                     | Estado                         |
+|-------------------|----------------------|---------------------------------------------------------------------------------------------|--------------------------------|
+| HTTP/REST         | **2 (implementado)** | `POST http://{ip}:{puerto}/api/semaforo`                                                    | `GET` mismo endpoint (SPEC §3) |
+| USB serie CDC-ACM | **3 (implementado)** | `/dev/bsdd_semaforo_acm` (default 9600 8N1), línea JSON + `\n`                              | una línea JSON                 |
+| Modbus TCP        | 4 (diferido)         | `127.0.0.1:5020` FC05; bobinas `0=rojo, 1=amarillo, 2=verde, 3=zumbador, 10=demo, 11=reset` | FC01                           |
+| MQTT              | 5 (diferido)         | `127.0.0.1:1883`, tópico `semaforo/cmd`                                                     | tópico `semaforo/estado`       |
 
 La configuración `protocolo` ∈ `http | serial` decide el HAL: `http` usa
 `ip_address`/`puerto_tcp` (default `127.0.0.1:8080`); `serial` usa
@@ -114,14 +114,14 @@ de §4.
 `decidir_semaforo(ContextoSemaforo)` es una **función pura** (fácil de probar)
 con este orden de precedencia:
 
-| Fase | Condición | Luces |
-|------|-----------|-------|
-| `SIN_BALANZA` | sin lectura viva de la báscula | ROJO fijo |
-| `SALIDA` | último boleto `CERRADO`/`MODIFICADO`, sin pendientes y con `fecha_hora_salida` | VERDE fijo |
-| `AUTORIZADO` | peso ≤ `umbral_cero_kg` y sin boleto pendiente | VERDE fijo |
-| `ESPERANDO` | peso ≤ `umbral_cero_kg` con boleto pendiente | ROJO fijo |
-| `INESTABLE` | peso > umbral y lectura inestable | ROJO fijo + AMARILLO intermitente |
-| `PESANDO` | peso > umbral y lectura estable | ROJO fijo |
+| Fase          | Condición                                                                      | Luces                             |
+|---------------|--------------------------------------------------------------------------------|-----------------------------------|
+| `SIN_BALANZA` | sin lectura viva de la báscula                                                 | ROJO fijo                         |
+| `SALIDA`      | último boleto `CERRADO`/`MODIFICADO`, sin pendientes y con `fecha_hora_salida` | VERDE fijo                        |
+| `AUTORIZADO`  | peso ≤ `umbral_cero_kg` y sin boleto pendiente                                 | VERDE fijo                        |
+| `ESPERANDO`   | peso ≤ `umbral_cero_kg` con boleto pendiente                                   | ROJO fijo                         |
+| `INESTABLE`   | peso > umbral y lectura inestable                                              | ROJO fijo + AMARILLO intermitente |
+| `PESANDO`     | peso > umbral y lectura estable                                                | ROJO fijo                         |
 
 `umbral_cero_kg` (default `5.0`) separa "plataforma libre" de "vehículo sobre
 la plataforma". La salida se concede por **estado del último boleto**, no por
@@ -129,17 +129,17 @@ ventana de tiempo.
 
 ## 5. Superficie REST (rol local)
 
-| Método | Ruta | Rol | Descripción |
-|--------|------|-----|-------------|
-| `GET` | `/api/v1/semaforos` | operador | Lista los semáforos de la empresa |
-| `POST` | `/api/v1/semaforos` | ADMIN | Alta (valida canal y báscula) |
-| `PUT` | `/api/v1/semaforos/{id}` | ADMIN | Edición (reinicia el vigilante) |
-| `DELETE` | `/api/v1/semaforos/{id}` | ADMIN | Baja (detiene el vigilante) |
-| `GET` | `/api/v1/semaforos/descubrir` | operador | Escaneo HTTP + serie (`incluir_simulados=true` por defecto) |
-| `POST` | `/api/v1/semaforos/{id}/probar` | operador | Lee el estado publicado (diagnóstico) |
-| `GET` | `/api/v1/semaforos/{id}/estado` | operador | Estado del equipo + fase/luces de la app |
-| `POST` | `/api/v1/semaforos/{id}/comando` | operador | Comando manual (banco de pruebas; se audita) |
-| `POST` | `/api/v1/semaforos/{id}/automatico` | operador | Activa/desactiva el control automático |
+| Método   | Ruta                                | Rol      | Descripción                                                 |
+|----------|-------------------------------------|----------|-------------------------------------------------------------|
+| `GET`    | `/api/v1/semaforos`                 | operador | Lista los semáforos de la empresa                           |
+| `POST`   | `/api/v1/semaforos`                 | ADMIN    | Alta (valida canal y báscula)                               |
+| `PUT`    | `/api/v1/semaforos/{id}`            | ADMIN    | Edición (reinicia el vigilante)                             |
+| `DELETE` | `/api/v1/semaforos/{id}`            | ADMIN    | Baja (detiene el vigilante)                                 |
+| `GET`    | `/api/v1/semaforos/descubrir`       | operador | Escaneo HTTP + serie (`incluir_simulados=true` por defecto) |
+| `POST`   | `/api/v1/semaforos/{id}/probar`     | operador | Lee el estado publicado (diagnóstico)                       |
+| `GET`    | `/api/v1/semaforos/{id}/estado`     | operador | Estado del equipo + fase/luces de la app                    |
+| `POST`   | `/api/v1/semaforos/{id}/comando`    | operador | Comando manual (banco de pruebas; se audita)                |
+| `POST`   | `/api/v1/semaforos/{id}/automatico` | operador | Activa/desactiva el control automático                      |
 
 Todas las rutas filtran por `id_empresa` (aislamiento multi-tenant) y las de
 escritura exigen `require_admin` salvo el comando manual y el interruptor de

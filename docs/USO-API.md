@@ -30,12 +30,12 @@ En la app Android eso es `LicenseManager.validateAndStore(licenseKey)` (`License
 **Cabeceras en `/activate` y `/validate`:** `Authorization: Bearer <token>` + `Content-Type: application/json`.  
 **Timeouts:** 10s.
 
-| Endpoint | Uso | Cuerpo |
-| :--- | :--- | :--- |
-| `POST /token` | Obtener Bearer token por licencia | `{"license_key": "BIDP-XXXX-..."}` |
-| `POST /validate` | Decisión de validez (firma decisiva) | `license_key`, `hardware_id`, `mac_address`, `device_brand`, `device_model`, `os_version`, `product_code` ("IDP") |
-| `POST /activate` | Activación inicial | Mismos campos + opcionalmente `client_name`/`email`/`phone`/`company`/`distributor_id` (auto-activación) |
-| `GET /{license_key}/check` | Informativo pre-activación (no firmado) | — |
+| Endpoint                   | Uso                                     | Cuerpo                                                                                                            |
+|:---------------------------|:----------------------------------------|:------------------------------------------------------------------------------------------------------------------|
+| `POST /token`              | Obtener Bearer token por licencia       | `{"license_key": "BIDP-XXXX-..."}`                                                                                |
+| `POST /validate`           | Decisión de validez (firma decisiva)    | `license_key`, `hardware_id`, `mac_address`, `device_brand`, `device_model`, `os_version`, `product_code` ("IDP") |
+| `POST /activate`           | Activación inicial                      | Mismos campos + opcionalmente `client_name`/`email`/`phone`/`company`/`distributor_id` (auto-activación)          |
+| `GET /{license_key}/check` | Informativo pre-activación (no firmado) | —                                                                                                                 |
 
 **Token (anti-DDoS):** Si `/activate` / `/validate` devuelven `401 "Token inválido o expirado"`, se re-pide un token (1 sola vez) y se reintenta. Cada `POST /token` incrementa `auth_token_version` → **solo un token activo por licencia.**
 
@@ -78,11 +78,11 @@ Los 3 endpoints de validación exponen al **distribuidor responsable** de la lic
 
 Campos devueltos (en todos los endpoints): `id`, `name` (=`full_name`), `email`, `phone`, `company`.
 
-| Endpoint | Dónde va | Formato |
-| :--- | :--- | :--- |
-| `GET /{license_key}/check` (público) | planos en la raíz | `distributor_id`, `distributor_name`, `distributor_email`, `distributor_phone`, `distributor_company` |
-| `POST /validate` (Bearer) | planos en la raíz | mismos campos (`ValidateResponse`) |
-| `POST /activate` (Bearer) | anidados en `license.*` | `ActivateLicenseResponse.license = _license_to_dict(lic)` |
+| Endpoint                             | Dónde va                | Formato                                                                                               |
+|:-------------------------------------|:------------------------|:------------------------------------------------------------------------------------------------------|
+| `GET /{license_key}/check` (público) | planos en la raíz       | `distributor_id`, `distributor_name`, `distributor_email`, `distributor_phone`, `distributor_company` |
+| `POST /validate` (Bearer)            | planos en la raíz       | mismos campos (`ValidateResponse`)                                                                    |
+| `POST /activate` (Bearer)            | anidados en `license.*` | `ActivateLicenseResponse.license = _license_to_dict(lic)`                                             |
 
 **Importante para el software cliente:** en `/validate` el contacto del distribuidor es **metadata NO firmada** (ver `_build_signed_response`, `validation.py:564`). La firma Ed25519 cubre solo `valid`/`status`/`expires_at`/`tier`/`plan_type`/`features`/`server_time`/`nonce`; `distributor_*` se añade después y **no participa de la firma ni del anti-replay**. El cliente debe mostrarlo como *"a quién acudir por soporte/renovación"*, nunca usarlo para decisiones de seguridad.
 
@@ -118,11 +118,11 @@ Ejemplo de `/validate` para una licencia con cliente cuya distribución es *Dist
 
 El servidor calcula features por tier (`_get_features_for_tier` en `validation.py`). Para el producto **IDP** se agregan límites de inventario (configurables por `system_configurations`):
 
-| Tier | max_categorias | max_productos | Otros |
-| :--- | :--- | :--- | :--- |
-| **DEMO** | 1 | 5 | + `days_remaining`; 15 días gratis |
-| **MONOPUESTO** | 10 | 100 | `max_users`: 1, sin multi-empresa |
-| **CENTRAL** | null (∞) | null (∞) | `max_users`: 10, multi-empresa |
+| Tier           | max_categorias | max_productos | Otros                              |
+|:---------------|:---------------|:--------------|:-----------------------------------|
+| **DEMO**       | 1              | 5             | + `days_remaining`; 15 días gratis |
+| **MONOPUESTO** | 10             | 100           | `max_users`: 1, sin multi-empresa  |
+| **CENTRAL**    | null (∞)       | null (∞)      | `max_users`: 10, multi-empresa     |
 
 En la app, `InventoryViewModel.insertCategoria()` / `insertProducto()` **bloquean** la escritura local si `lic.valid != true` o se alcanzó el tope (`max == null` → ilimitado).
 

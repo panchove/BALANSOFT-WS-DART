@@ -11,14 +11,14 @@ tiers, límites técnicos, validación criptográfica y reglas de negocio.
 
 ## Encabezado editorial
 
-| Campo | Valor |
-|-------|-------|
-| Versión | 1.0 |
-| Fecha | 2026-10-13 |
-| Estado | Vigente |
-| Autor | Equipo BALANSOFT |
-| Norma | REQ-FN-NNN (funcional), REQ-NF-<área>-NNN (no funcional), UX-NNN (interacción) |
-| Fuente | `backend/app/api/v1/endpoints/auth.py`, `auth.py::/license`, `backend/app/api/v1/endpoints/servidor.py`, `backend/app/core/config.py`, `backend/app/schemas_server.py`, `.env.example` |
+| Campo   | Valor                                                                                                                                                                                  |
+|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Versión | 1.0                                                                                                                                                                                    |
+| Fecha   | 2026-10-13                                                                                                                                                                             |
+| Estado  | Vigente                                                                                                                                                                                |
+| Autor   | Equipo BALANSOFT                                                                                                                                                                       |
+| Norma   | REQ-FN-NNN (funcional), REQ-NF-<área>-NNN (no funcional), UX-NNN (interacción)                                                                                                         |
+| Fuente  | `backend/app/api/v1/endpoints/auth.py`, `auth.py::/license`, `backend/app/api/v1/endpoints/servidor.py`, `backend/app/core/config.py`, `backend/app/schemas_server.py`, `.env.example` |
 
 > Este documento reemplaza a la versión anterior, que describía **BALANSOFT SG**
 > (producto ganadero: MONOPUESTO/Premium, 1 hato, 50 animales, 200 registros).
@@ -42,10 +42,10 @@ funcionales, límites técnicos y reglas de negocio. Sirve como guía para:
 
 BALANSOFT-WS solo admite **dos** tiers:
 
-| Tier | Modelo | Equipos | Sesiones simultáneas | Registros (boletos) |
-|------|--------|---------|----------------------|---------------------|
-| **DEMO** | Prueba de un solo puesto | **1** | **3** | **`DEMO_MAX_RECORDS`** (default **10**) |
-| **CENTRAL** | Cuenta multiequipo | Ilimitados | Ilimitadas | Ilimitados |
+| Tier        | Modelo                   | Equipos    | Sesiones simultáneas | Registros (boletos)                     |
+|-------------|--------------------------|------------|----------------------|-----------------------------------------|
+| **DEMO**    | Prueba de un solo puesto | **1**      | **3**                | **`DEMO_MAX_RECORDS`** (default **10**) |
+| **CENTRAL** | Cuenta multiequipo       | Ilimitados | Ilimitadas           | Ilimitados                              |
 
 - **No existe MONOPUESTO en WS.** Una estación de pesaje necesita, como mínimo,
   3 tipos de trabajo simultáneos (báscula, reportes, administración); un plan de
@@ -68,15 +68,15 @@ BALANSOFT-WS solo admite **dos** tiers:
 
 ## 3. Qué incluye cada plan
 
-| Alcance | DEMO | CENTRAL |
-|---------|------|---------|
-| Boletos de pesaje (entrada/salida) | Hasta `DEMO_MAX_RECORDS` | Sin límite |
-| Equipos de la cuenta | 1 | Ilimitados (sujeto a la licencia) |
-| Sesiones simultáneas | 3 | Ilimitadas |
-| Sincronización con el central | No | Sí |
-| Aprobación de equipos (RB-12) | No aplica (un equipo) | Sí |
-| Marca de agua en el ticket | No | No |
-| Panel del proveedor | Sí | Sí |
+| Alcance                            | DEMO                     | CENTRAL                           |
+|------------------------------------|--------------------------|-----------------------------------|
+| Boletos de pesaje (entrada/salida) | Hasta `DEMO_MAX_RECORDS` | Sin límite                        |
+| Equipos de la cuenta               | 1                        | Ilimitados (sujeto a la licencia) |
+| Sesiones simultáneas               | 3                        | Ilimitadas                        |
+| Sincronización con el central      | No                       | Sí                                |
+| Aprobación de equipos (RB-12)      | No aplica (un equipo)    | Sí                                |
+| Marca de agua en el ticket         | No                       | No                                |
+| Panel del proveedor                | Sí                       | Sí                                |
 
 > El **tope de la demo** se cuenta sobre los boletos de la empresa
 > (`registros_actuales`) y se expone al cliente vía `GET /api/v1/auth/license`.
@@ -98,11 +98,11 @@ BALANSOFT-WS solo admite **dos** tiers:
   estación (`hardware_id`), expiración y ventana de `server_time`
   (anti-replay de `nonce`). Ver `backend/tests/e2e/` y `scripts/lm_stub.py`.
 - **Estados:**
-  | Estado | ¿Vigente? | Significado |
-  |--------|-----------|-------------|
-  | `ACTIVA` | Sí | Licencia en uso. |
-  | `AVAILABLE` | Sí | Virgen: aún sin equipo titular; se normaliza a `ACTIVA` (`_normalizar_estado_lm`). |
-  | `SUSPENDIDA` / `VENCIDA` / `INACTIVA` | No | Bloquean login y operación. |
+  | Estado                                | ¿Vigente? | Significado                                                                        |
+  |---------------------------------------|-----------|------------------------------------------------------------------------------------|
+  | `ACTIVA`                              | Sí        | Licencia en uso.                                                                   |
+  | `AVAILABLE`                           | Sí        | Virgen: aún sin equipo titular; se normaliza a `ACTIVA` (`_normalizar_estado_lm`). |
+  | `SUSPENDIDA` / `VENCIDA` / `INACTIVA` | No        | Bloquean login y operación.                                                        |
 - La licencia se **re-valida en vivo** contra el LM en `GET /api/v1/auth/license`
   y `POST /api/v1/auth/validate-license`; si el LM no responde, se conserva el
   estado cacheado sin bloquear (operación offline).
@@ -137,12 +137,12 @@ BALANSOFT-WS solo admite **dos** tiers:
 
 ## 6. Errores de licencia
 
-| Código | HTTP | Cuándo |
-|--------|------|--------|
-| `LICENSE_DEVICE_MISMATCH` | 403 | El login viene de un equipo distinto al titular (DEMO / equipo ya amarrado). |
-| `DEMO_LIMIT_REACHED` | 403 | La demo alcanzó `DEMO_MAX_RECORDS` boletos. |
-| `espacio_de_trabajo_ocupado` | 403 | La cuenta supera las sesiones concurrentes del tier. |
-| Licencia no vigente | 403 | Estado `SUSPENDIDA` / `VENCIDA` / `INACTIVA`. |
+| Código                       | HTTP | Cuándo                                                                       |
+|------------------------------|------|------------------------------------------------------------------------------|
+| `LICENSE_DEVICE_MISMATCH`    | 403  | El login viene de un equipo distinto al titular (DEMO / equipo ya amarrado). |
+| `DEMO_LIMIT_REACHED`         | 403  | La demo alcanzó `DEMO_MAX_RECORDS` boletos.                                  |
+| `espacio_de_trabajo_ocupado` | 403  | La cuenta supera las sesiones concurrentes del tier.                         |
+| Licencia no vigente          | 403  | Estado `SUSPENDIDA` / `VENCIDA` / `INACTIVA`.                                |
 
 ---
 
