@@ -111,7 +111,7 @@ ThemeData buildLightTheme({String? familia, double factorIconos = 1.0}) {
     iconTheme: IconThemeData(size: tamanoIcono),
     primaryIconTheme: IconThemeData(size: tamanoIcono),
     appBarTheme: AppBarTheme(
-      iconTheme: IconThemeData(size: tamanoIcono),
+      iconTheme: IconThemeData(size: tamanoIcono, color: SwsColors.dark),
       backgroundColor: SwsColors.light,
       foregroundColor: SwsColors.dark,
       surfaceTintColor: Colors.transparent,
@@ -210,7 +210,7 @@ ThemeData buildDarkTheme({String? familia, double factorIconos = 1.0}) {
     primaryIconTheme: IconThemeData(size: tamanoIcono),
 
     appBarTheme: AppBarTheme(
-      iconTheme: IconThemeData(size: tamanoIcono),
+      iconTheme: IconThemeData(size: tamanoIcono, color: SwsColors.darkText),
       backgroundColor: SwsColors.darkBg,
       foregroundColor: SwsColors.darkText,
       surfaceTintColor: Colors.transparent,

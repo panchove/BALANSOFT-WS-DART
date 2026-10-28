@@ -109,6 +109,7 @@ class _IndicadoresConfigTabState extends State<IndicadoresConfigTab> {
                       itemCount: filtrados.length,
                       itemBuilder: (context, i) {
                         final item = filtrados[i];
+                        final vinculado = item.balanzasEnlazadas > 0;
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: ListTile(
@@ -124,7 +125,10 @@ class _IndicadoresConfigTabState extends State<IndicadoresConfigTab> {
                             title: Text(
                                 '${item.marca ?? ''} ${item.modelo ?? item.descripcion}'
                                     .trim()),
-                            subtitle: Text(item.configuracionHardware),
+                            subtitle: Text(
+                              '${item.configuracionHardware} · '
+                              '${vinculado ? "Vinculado a ${item.balanzasEnlazadas} báscula(s)" : "Sin vincular"}',
+                            ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => _abrirDetalle(item),
                           ),
@@ -138,8 +142,7 @@ class _IndicadoresConfigTabState extends State<IndicadoresConfigTab> {
 }
 
 class _IndicadorDetailSheet extends StatefulWidget {
-  const _IndicadorDetailSheet(
-      {required this.indicador, required this.onGuardado});
+  const _IndicadorDetailSheet({required this.indicador, required this.onGuardado});
 
   final Indicador indicador;
   final VoidCallback onGuardado;
@@ -151,27 +154,11 @@ class _IndicadorDetailSheet extends StatefulWidget {
 class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
   final _api = di.sl<ApiClient>();
 
-  late String _protocolo = widget.indicador.protocolo;
-  late String _formatoTrama = widget.indicador.formatoTrama;
-  late int _baudrate = widget.indicador.baudrate;
-  late String _delimitador = widget.indicador.delimitador ?? 'lf';
-  late final TextEditingController _ipCtrl =
-      TextEditingController(text: widget.indicador.ipAddress ?? '');
-  late final TextEditingController _puertoCtrl = TextEditingController(
-      text: widget.indicador.puertoTcp?.toString() ?? '5001');
-  late final TextEditingController _comCtrl =
-      TextEditingController(text: widget.indicador.puertoCom ?? '');
-
+  late bool _activo = widget.indicador.activo;
   bool _guardando = false;
   String? _error;
 
-  @override
-  void dispose() {
-    _ipCtrl.dispose();
-    _puertoCtrl.dispose();
-    _comCtrl.dispose();
-    super.dispose();
-  }
+  bool get _vinculado => widget.indicador.balanzasEnlazadas > 0;
 
   String _detalleError(Object e) {
     if (e is DioException) {
@@ -181,44 +168,32 @@ class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
     return 'No se pudo guardar la configuración.';
   }
 
+  /// Guarda solo lo permisivo (activo). La conexión (puerto/config de trama)
+  /// se reenvía con sus valores originales para no perderla: el puerto del
+  /// indicador es identidad/heredado y no se edita aquí.
   Future<void> _guardar() async {
-    if (_protocolo == 'tcp') {
-      if (_ipCtrl.text.trim().isEmpty ||
-          int.tryParse(_puertoCtrl.text.trim()) == null) {
-        setState(() => _error = 'Indique IP y puerto TCP válidos.');
-        return;
-      }
-    } else {
-      if (_comCtrl.text.trim().isEmpty) {
-        setState(() => _error = 'Indique puerto serie/USB.');
-        return;
-      }
-    }
-
     setState(() {
       _guardando = true;
       _error = null;
     });
-
     try {
+      final i = widget.indicador;
       final body = <String, dynamic>{
-        'descripcion': widget.indicador.descripcion,
-        'codigo': widget.indicador.codigo,
-        'marca': widget.indicador.marca,
-        'modelo': widget.indicador.modelo,
-        'activo': widget.indicador.activo,
-        'is_simulado': widget.indicador.isSimulado,
-        'protocolo': _protocolo,
-        'ip_address': _protocolo == 'tcp' ? _ipCtrl.text.trim() : null,
-        'puerto_tcp': _protocolo == 'tcp'
-            ? int.tryParse(_puertoCtrl.text.trim())
-            : null,
-        'puerto_com': _protocolo == 'serial' ? _comCtrl.text.trim() : null,
-        'formato_trama': _formatoTrama,
-        'baudrate': _protocolo == 'serial' ? _baudrate : 9600,
-        'delimitador': _delimitador,
+        'descripcion': i.descripcion,
+        'codigo': i.codigo,
+        'marca': i.marca,
+        'modelo': i.modelo,
+        'activo': _activo,
+        'is_simulado': i.isSimulado,
+        'protocolo': i.protocolo,
+        'ip_address': i.ipAddress,
+        'puerto_tcp': i.puertoTcp,
+        'puerto_com': i.puertoCom,
+        'formato_trama': i.formatoTrama,
+        'baudrate': i.baudrate,
+        'delimitador': i.delimitador,
       };
-      await _api.updateItem(ApiConstants.indicador(widget.indicador.id), body);
+      await _api.actualizarIndicador(i.id, body);
       if (!mounted) return;
       widget.onGuardado();
       Navigator.of(context).pop();
@@ -241,6 +216,7 @@ class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
     final media = MediaQuery.of(context).size;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final i = widget.indicador;
     return Container(
       height: media.height * 0.9,
       decoration: BoxDecoration(
@@ -257,8 +233,7 @@ class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${widget.indicador.marca ?? ''} ${widget.indicador.modelo ?? widget.indicador.descripcion}'
-                        .trim(),
+                    '${i.marca ?? ''} ${i.modelo ?? i.descripcion}'.trim(),
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -278,124 +253,131 @@ class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Tipo de conexión',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                          value: 'tcp',
-                          label: Text('TCP / Red'),
-                          icon: Icon(Icons.wifi)),
-                      ButtonSegment(
-                          value: 'serial',
-                          label: Text('Serie / USB'),
-                          icon: Icon(Icons.usb)),
-                    ],
-                    selected: {_protocolo},
-                    onSelectionChanged: (s) =>
-                        setState(() => _protocolo = s.first),
-                  ),
-                  const SizedBox(height: 18),
-                  if (_protocolo == 'tcp') ...[
-                    Row(
+                  // ─── Estado de vinculación con báscula ──────────────────
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _vinculado
+                          ? SwsColors.success.withValues(alpha: 0.1)
+                          : SwsColors.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _vinculado
+                            ? SwsColors.success.withValues(alpha: 0.5)
+                            : SwsColors.warning.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Expanded(
-                          flex: 3,
-                          child: TextField(
-                            controller: _ipCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Dirección IP',
-                                hintText: '192.168.1.150'),
-                          ),
+                        Icon(
+                          _vinculado ? Icons.link : Icons.link_off,
+                          color: _vinculado
+                              ? SwsColors.success
+                              : SwsColors.warning,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _puertoCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                labelText: 'Puerto', hintText: '5001'),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _vinculado
+                                    ? 'Vinculado a ${i.balanzasEnlazadas} báscula(s)'
+                                    : 'Sin vincular a ninguna báscula',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _vinculado
+                                        ? SwsColors.success
+                                        : SwsColors.warning),
+                              ),
+                              Text(
+                                _vinculado
+                                    ? 'Recibe el peso de la báscula asignada.'
+                                    : 'Enlácela desde la báscula para que muestre peso.',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54),
+                              ),
+                            ],
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // ─── Conexión (heredada, NO editable) ───────────────────
+                  const Text('Conexión (heredada de la báscula)',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'El indicador es un dispositivo de salida: muestra el peso '
+                    'que la app le envía. Su puerto y configuración provienen de '
+                    'la báscula vinculada y no se modifican aquí.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  _campoLectura(
+                    context,
+                    etiqueta: 'Protocolo',
+                    valor:
+                        i.protocolo == 'serial' ? 'SERIAL / USB' : 'TCP / RED',
+                    icono:
+                        i.protocolo == 'serial' ? Icons.usb : Icons.router_outlined,
+                  ),
+                  const SizedBox(height: 10),
+                  if (i.protocolo == 'tcp') ...[
+                    _campoLectura(
+                      context,
+                      etiqueta: 'Dirección IP',
+                      valor: i.ipAddress ?? '—',
+                      icono: Icons.language,
+                    ),
+                    const SizedBox(height: 10),
+                    _campoLectura(
+                      context,
+                      etiqueta: 'Puerto TCP',
+                      valor: '${i.puertoTcp ?? 5555}',
+                      icono: Icons.router_outlined,
                     ),
                   ] else ...[
-                    TextField(
-                      controller: _comCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Puerto Serie/USB',
-                          hintText: '/dev/ttyUSB0 o COM3'),
+                    _campoLectura(
+                      context,
+                      etiqueta: 'Puerto serie',
+                      valor: i.puertoCom ?? '—',
+                      icono: Icons.usb,
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<int>(
-                            initialValue: _baudrate,
-                            decoration:
-                                const InputDecoration(labelText: 'Baudrate'),
-                            items: const [
-                              DropdownMenuItem(value: 1200, child: Text('1200')),
-                              DropdownMenuItem(value: 2400, child: Text('2400')),
-                              DropdownMenuItem(value: 4800, child: Text('4800')),
-                              DropdownMenuItem(value: 9600, child: Text('9600')),
-                              DropdownMenuItem(
-                                  value: 19200, child: Text('19200')),
-                              DropdownMenuItem(
-                                  value: 38400, child: Text('38400')),
-                              DropdownMenuItem(
-                                  value: 57600, child: Text('57600')),
-                              DropdownMenuItem(
-                                  value: 115200, child: Text('115200')),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _baudrate = v ?? 9600),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _delimitador,
-                            decoration:
-                                const InputDecoration(labelText: 'Delimitador'),
-                            items: const [
-                              DropdownMenuItem(value: 'lf', child: Text('LF (\\n)')),
-                              DropdownMenuItem(value: 'cr', child: Text('CR (\\r)')),
-                              DropdownMenuItem(
-                                  value: 'crlf', child: Text('CRLF (\\r\\n)')),
-                              DropdownMenuItem(
-                                  value: 'stx_etx',
-                                  child: Text('STX/ETX')),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _delimitador = v ?? 'lf'),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 10),
+                    _campoLectura(
+                      context,
+                      etiqueta: 'Velocidad (baudrate)',
+                      valor: '${i.baudrate}',
+                      icono: Icons.speed,
                     ),
                   ],
-                  const SizedBox(height: 18),
-                  const Text('Trama',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _formatoTrama,
-                    decoration: const InputDecoration(labelText: 'Formato de trama'),
-                    items: const [
-                      DropdownMenuItem(value: 'auto', child: Text('Auto-detectar')),
-                      DropdownMenuItem(value: 'ascii', child: Text('ASCII')),
-                      DropdownMenuItem(value: 'json', child: Text('JSON')),
-                    ],
-                    onChanged: (v) => setState(() => _formatoTrama = v ?? 'auto'),
+                  const SizedBox(height: 10),
+                  _campoLectura(
+                    context,
+                    etiqueta: 'Formato de trama',
+                    valor: i.formatoTrama.toUpperCase(),
+                    icono: Icons.code,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 18),
                   const Text(
                     'Compatible con Toledo, Yaohua, Rice Lake, Torrey, Keli, MT-SICS y otros indicadores.',
                     style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const Divider(height: 28),
+                  // ─── Único campo editable: activo ───────────────────────
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Indicador activo'),
+                      subtitle: const Text(
+                          'Desactívalo para que la app no le envíe peso.'),
+                      value: _activo,
+                      onChanged: (v) => setState(() => _activo = v),
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -434,6 +416,34 @@ class _IndicadorDetailSheetState extends State<_IndicadorDetailSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _campoLectura(
+    BuildContext context, {
+    required String etiqueta,
+    required String valor,
+    required IconData icono,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        prefixIcon: Icon(icono),
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        suffixIcon: Tooltip(
+          message: 'No editable: se hereda de la báscula vinculada',
+          child: Icon(Icons.lock_outline, size: 16, color: scheme.outline),
+        ),
+      ),
+      child: Text(
+        valor,
+        style: TextStyle(
+          fontSize: 16,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
       ),
     );
   }

@@ -409,7 +409,7 @@ class _AccesoSegmentado extends StatelessWidget {
                 child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: habilitado ? SwsColors.light : destacado,
+          color: habilitado ? destacado : Theme.of(context).colorScheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: SwsColors.gray200),
         ),

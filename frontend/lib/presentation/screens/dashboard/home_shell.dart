@@ -14,6 +14,7 @@ import '../../../core/theme/theme_controller.dart';
 import '../../../core/services/dialog_keyboard.dart';
 import '../../../core/services/modal_manager.dart';
 import '../../../core/utils/focus_search_bus.dart';
+import '../../../core/utils/report_presets.dart';
 import '../../../core/widgets/keyboard_dialog_wrapper.dart';
 import '../../../core/widgets/welcome_guide_dialog.dart';
 import '../../../data/datasources/local/local_storage.dart';
@@ -56,8 +57,6 @@ class HomeShell extends StatefulWidget {
   final ThemeController themeController;
   const HomeShell({super.key, required this.themeController});
 
-  /// Alias cortos de la paleta de comandos (`docs/INPUTS_MAP.md` §5):
-  /// `go:wm`, `go:wa`, `go:in`, `go:out`, `go:fleet`, `go:cfg`.
   static const Map<String, String> aliasAcciones = {
     'wm': 'pesaje_manual',
     'wa': 'pesaje_automatico',
@@ -91,7 +90,7 @@ class _HomeShellState extends State<HomeShell> {
     (_) => const KardexScreen(),                                         // 9  Kardex
     (_) => const WeighingListScreen(titulo: 'Entradas'),                 // 10 Entradas
     (_) => const WeighingListScreen(estadoInicial: 'CERRADO', titulo: 'Salidas'), // 11 Salidas
-    (_) => const ReportsScreen(),                                        // 12 Reportes
+    (_) => const ReportsScreen(),                                        // 12 Reportes Generales
     (_) => const DispositivosScreen(),                                   // 13 Dispositivos
     (_) => const SeguridadScreen(),                                      // 14 Seguridad
     (_) => const DocumentosEmpresaScreen(),                              // 15 Empresa
@@ -111,7 +110,10 @@ class _HomeShellState extends State<HomeShell> {
     (_) => const DispositivosScreen(initialTab: 3),                      // 26 Cámaras
     (_) => const DispositivosScreen(initialTab: 5),                      // 27 Barreras
     (_) => const DispositivosScreen(initialTab: 4),                      // 28 Impresoras
-    (_) => const ConceptosKardexScreen(), // 29 Conceptos Kardex
+    (_) => const ConceptosKardexScreen(),                                // 29 Conceptos Kardex
+    (_) => const ReportsScreen(preset: ReportPreset.diarios),            // 30 Diarios
+    (_) => const ReportsScreen(preset: ReportPreset.mensuales),          // 31 Mensuales
+    (_) => const ReportsScreen(preset: ReportPreset.personalizado),      // 32 Personalizado
   ];
 
   @override
@@ -120,13 +122,9 @@ class _HomeShellState extends State<HomeShell> {
     context.read<WeighingBloc>().add(const ListWeighingsEvent());
     ServicesBinding.instance.keyboard.addHandler(_onKey);
     WidgetsBinding.instance.addPostFrameCallback((_) => _abrirOnboardingSiFalta());
-    // Respaldo automático por inactividad (REQ-NF-BKP-001): solo arranca en
-    // estaciones SERVIDOR; el servicio se detiene al cerrar la sesión.
     AutoBackupService.instance.iniciar();
   }
 
-  /// Primera instalación: el primer ADMIN completa empresa, formatos de
-  /// exportación y carpeta de reportes (REQ-NF-ONB-002).
   Future<void> _abrirOnboardingSiFalta() async {
     if (AppConfig.onboardingCompletado || !mounted) return;
     final usuario = await di.sl<LocalStorage>().getCachedUser();
@@ -142,7 +140,6 @@ class _HomeShellState extends State<HomeShell> {
             onFinish: () {
               Navigator.of(ctx).pop();
               if (mounted) setState(() {});
-              // Tras completar la empresa, mini tutorial de bienvenida (una vez).
               WidgetsBinding.instance
                   .addPostFrameCallback((_) => _abrirTutorialSiEsPrimeraVez());
             },
@@ -152,9 +149,6 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Primera instalación: después de completar la configuración inicial se
-  /// muestra el mini tutorial una sola vez (`AppConfig.tutorialVisto`). Se
-  /// puede repetir desde Ayuda y Soporte.
   Future<void> _abrirTutorialSiEsPrimeraVez() async {
     if (AppConfig.tutorialVisto ||
         !AppConfig.onboardingCompletado ||
@@ -208,9 +202,9 @@ class _HomeShellState extends State<HomeShell> {
       'salidas': 11,
       'reportes': 12,
       'reportes_generales': 12,
-      'reportes_diarios': 12,
-      'reportes_mensuales': 12,
-      'reportes_personalizado': 12,
+      'reportes_diarios': 30,
+      'reportes_mensuales': 31,
+      'reportes_personalizado': 32,
       'dispositivos': 13,
       'seguridad': 14,
       'documentos_empresa': 15,
@@ -235,14 +229,8 @@ class _HomeShellState extends State<HomeShell> {
 
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
-    // Toda interacción de teclado cuenta como actividad para el respaldo
-    // automático por inactividad (mismo efecto que el puntero).
     AutoBackupService.instance.registrarActividad();
 
-    // ── Modal abierto: los atajos del shell NO operan debajo ──────────────
-    // Diálogos, dropdowns, bottom sheets y modales registrados en
-    // ModalManager bloquean navegación y acciones globales. Aquí se resuelven
-    // además ENTER (botón primario) y ESC (cancelar) del modal.
     if (di.sl<ModalManager>().hasOpenModals ||
         DialogKeyboard.hayModalAbierto()) {
       return DialogKeyboard.manejarTeclaEnModal(event);
@@ -255,72 +243,88 @@ class _HomeShellState extends State<HomeShell> {
     final alt = kb.isAltPressed;
 
     // ── Teclas de función (sin modificadores) ───────────────────────────────
-    //
-    // Las teclas de lectura de pantalla (F1, F5, F6) solo responden cuando el
-    // shell es la ruta visible: con una pantalla encima (p. ej. el formulario de
-    // pesaje, que registra F2..F6 propias) NO se interceptan. F2, F7, F8, F9,
-    // F10 y F11 son globales y no colisionan con el formulario. F3 y F4
-    // (capturar peso / tarar) las atiende el formulario de pesaje.
+    // ── Teclas de función (sin modificadores) ───────────────────────────────
+    // F1-F7 solo actúan fuera del formulario de pesaje (ese tiene sus propias
+    // teclas F1-F7). F8-F12 actúan siempre.
     if (event is KeyDownEvent && !ctrl && !alt) {
-      final enShell = _enShellVisible();
-      if (enShell && event.physicalKey == LogicalKeyboardKey.f1) {
-        _abrirNuevoPesaje();
-        return true;
+      final enFormularioPesaje = _rutaSuperior() == 'nuevo_pesaje';
+
+      if (!enFormularioPesaje) {
+        // F1 → Nuevo pesaje (igual que Ctrl+N).
+        if (event.physicalKey == LogicalKeyboardKey.f1) {
+          _abrirNuevoPesaje();
+          return true;
+        }
+        // F2 → Nuevo registro estándar según la pantalla actual.
+        if (event.physicalKey == LogicalKeyboardKey.f2) {
+          _nuevoRegistroEstandar();
+          return true;
+        }
+        // F4 → Guardar (delegado a la pantalla actual, si aplica).
+        if (event.physicalKey == LogicalKeyboardKey.f4) {
+          _guardarActual();
+          return true;
+        }
+        // F5 → Imprimir/Exportar según la pantalla.
+        if (event.physicalKey == LogicalKeyboardKey.f5) {
+          _imprimirActual();
+          return true;
+        }
+        // F6 → Buscar (enfoca buscador o abre paleta).
+        if (event.physicalKey == LogicalKeyboardKey.f6) {
+          _buscarActual();
+          return true;
+        }
+        // F7 → Búsqueda rápida / paleta.
+        if (event.physicalKey == LogicalKeyboardKey.f7) {
+          _toggleCommandPalette();
+          return true;
+        }
       }
-      if (event.physicalKey == LogicalKeyboardKey.f2) {
-        _abrirNuevoPesaje();
-        return true;
-      }
-      if (enShell && event.physicalKey == LogicalKeyboardKey.f5) {
-        _refrescarModuloActual();
-        return true;
-      }
-      if (enShell && event.physicalKey == LogicalKeyboardKey.f6) {
-        if (FocusSearchBus.instance.enfocar()) return true;
-        return false;
-      }
-      if (event.physicalKey == LogicalKeyboardKey.f7) {
-        _abrirNuevoVehiculo();
-        return true;
-      }
+
+      // F8 → Nuevo conductor (global, incluso en el formulario de pesaje).
       if (event.physicalKey == LogicalKeyboardKey.f8) {
         _abrirNuevoConductor();
         return true;
       }
+      // F9 → Maximizar/restaurar.
       if (event.physicalKey == LogicalKeyboardKey.f9) {
         _alternarMaximizado();
         return true;
       }
+      // F10 → Toggle sidebar.
       if (event.physicalKey == LogicalKeyboardKey.f10) {
         _toggleSidebar();
         return true;
       }
+      // F11 → Pantalla completa.
       if (event.physicalKey == LogicalKeyboardKey.f11) {
         _alternarPantallaCompleta();
         return true;
       }
+      // F12 → Cancelar operación.
       if (event.physicalKey == LogicalKeyboardKey.f12) {
         _cancelarOperacion();
         return true;
       }
+      // Esc → no interceptar (lo maneja el modal/diálogo si aplica).
       if (key == LogicalKeyboardKey.escape) {
-        // Esc: si hay un modal abierto, lo cierra el propio modal. Aquí solo
-        // evitamos interferir con el foco de inputs.
         return false;
       }
-      // Backspace/Delete para volver atrás si no hay input en foco
+      // Backspace/Delete → volver atrás si no hay input en foco.
       if ((key == LogicalKeyboardKey.backspace ||
               key == LogicalKeyboardKey.delete) &&
           !_hayTextoEnFoco()) {
         _volverAtras();
         return true;
       }
+      // `~` (backquote) → paleta de comandos (alternativa a Ctrl+K).
+      if (key == LogicalKeyboardKey.backquote) {
+        _toggleCommandPalette();
+        return true;
+      }
     }
 
-    // Alternativas a F9/F11 para teclados donde la fila F actúa como teclas de
-    // medios (FnLock activo) y el SO nunca entrega F9/F11 a la app:
-    //   Ctrl+Alt+Enter → maximizar/restaurar   (equivalente a F9)
-    //   Ctrl+Enter      → pantalla completa    (equivalente a F11)
     if (event is KeyDownEvent && ctrl && key == LogicalKeyboardKey.enter) {
       if (alt) {
         _alternarMaximizado();
@@ -330,79 +334,63 @@ class _HomeShellState extends State<HomeShell> {
       return true;
     }
 
-    // ── Ctrl + tecla ────────────────────────────────────────────────────────
     if (ctrl && !alt) {
-      // Ctrl+Q → salir
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyQ) {
         _salirDelSistema();
         return true;
       }
-      // Ctrl+N → nuevo pesaje
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyN) {
         _abrirNuevoPesaje();
         return true;
       }
-      // Ctrl+Shift+N → nuevo pesaje manual (mismo form por ahora)
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyN) {
         _abrirNuevoPesaje();
         return true;
       }
-      // Ctrl+Shift+V → nuevo vehículo
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyV) {
         _abrirNuevoVehiculo();
         return true;
       }
-      // Ctrl+Shift+D → nuevo conductor
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyD) {
         _abrirNuevoConductor();
         return true;
       }
-      // Ctrl+Shift+T → módulo de transportes
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyT) {
         _irA('transportes');
         return true;
       }
-      // Ctrl+Shift+L → cambiar tema
       if (event is KeyDownEvent && shift && key == LogicalKeyboardKey.keyL) {
         _alternarTema();
         return true;
       }
-      // Ctrl+B → toggle sidebar
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyB) {
         _toggleSidebar();
         return true;
       }
-      // Ctrl+K → paleta de comandos
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyK) {
         _toggleCommandPalette();
         return true;
       }
-      // Ctrl+H → inicio
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyH) {
         _irA('inicio');
         return true;
       }
-      // Ctrl+L → cerrar sesión / bloquear
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyL) {
         _cerrarSesion();
         return true;
       }
-      // Ctrl+A → ajustes de inventario
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyA) {
         _abrirAjustesInventario();
         return true;
       }
-      // Ctrl+, → configuración
       if (event is KeyDownEvent && key == LogicalKeyboardKey.comma) {
         _abrirConfiguracion();
         return true;
       }
-      // Ctrl+R → sincronizar ahora
       if (event is KeyDownEvent && !shift && key == LogicalKeyboardKey.keyR) {
         context.read<WeighingBloc>().add(SyncWeighingsEvent());
         return true;
       }
-      // Ctrl+1..5 → navegación rápida
       if (event is KeyDownEvent) {
         final idx = _numeroCtrl(key);
         if (idx != null) {
@@ -410,9 +398,15 @@ class _HomeShellState extends State<HomeShell> {
           return true;
         }
       }
+      // 🆕 Ctrl+= → nuevo registro estándar (alias de F2)
+      if (event is KeyDownEvent &&
+          (key == LogicalKeyboardKey.equal ||
+           key == LogicalKeyboardKey.numpadAdd)) {
+        _nuevoRegistroEstandar();
+        return true;
+      }
     }
 
-    // ── Alt + tecla (navegación mnemónica) ──────────────────────────────────
     if (alt && !ctrl && event is KeyDownEvent) {
       final destino = _destinoPorAlt(key);
       if (destino != null) {
@@ -424,12 +418,6 @@ class _HomeShellState extends State<HomeShell> {
     return false;
   }
 
-  /// Mapea Ctrl+1..5 a índices de página.
-  ///   1 → Inicio (0)
-  ///   2 → Entradas (10)
-  ///   3 → Salidas (11)
-  ///   4 → Reportes (12)
-  ///   5 → Kardex (9)
   int? _numeroCtrl(LogicalKeyboardKey key) {
     final d = key.keyLabel;
     if (d.isEmpty || d.length != 1) return null;
@@ -449,27 +437,26 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  /// Alt + letra → módulo destino (mnemónico).
   String? _destinoPorAlt(LogicalKeyboardKey key) {
     switch (key) {
       case LogicalKeyboardKey.keyC:
-        return 'terceros'; // Clientes / Proveedores
+        return 'terceros';
       case LogicalKeyboardKey.keyF:
-        return 'camiones'; // Flota
+        return 'camiones';
       case LogicalKeyboardKey.keyP:
-        return 'productos'; // Productos
+        return 'productos';
       case LogicalKeyboardKey.keyA:
-        return 'almacenes'; // Almacenes
+        return 'almacenes';
       case LogicalKeyboardKey.keyK:
-        return 'kardex'; // Kardex
+        return 'kardex';
       case LogicalKeyboardKey.keyU:
-        return 'usuarios'; // Usuarios
+        return 'usuarios';
       case LogicalKeyboardKey.keyD:
-        return 'dispositivos'; // Dispositivos
+        return 'dispositivos';
       case LogicalKeyboardKey.keyS:
-        return 'seguridad'; // Seguridad
+        return 'seguridad';
       case LogicalKeyboardKey.keyR:
-        return 'reportes'; // Reportes
+        return 'reportes';
       default:
         return null;
     }
@@ -478,21 +465,13 @@ class _HomeShellState extends State<HomeShell> {
   void _toggleSidebar() =>
       setState(() => _sidebarVisible = !_sidebarVisible);
 
-  /// Despachador único de acciones `go:*` (sidebar, paleta, quick actions).
-  ///
-  /// Se mantiene una sola implementación para que el menú lateral, la paleta y
-  /// los atajos no diverjan. Las hojas que son páginas del shell se resuelven
-  /// por clave (`_claveAIndice`); el resto abre su pantalla o ejecuta la
-  /// acción correspondiente.
   void ejecutarAccion(String comando) {
     final partes = comando.split(':');
     if (partes.first != 'go' || partes.length < 2) return;
 
-    final destino =
-        HomeShell.aliasAcciones[partes[1]] ?? partes[1];
+    final destino = HomeShell.aliasAcciones[partes[1]] ?? partes[1];
 
     switch (destino) {
-      // ── Páginas del shell (por clave o alias) ───────────────────────────
       case 'inicio':
       case 'terceros':
       case 'clientes':
@@ -515,13 +494,11 @@ class _HomeShellState extends State<HomeShell> {
       case 'diseno_ticket':
         _irA(partes[1]);
 
-      // ── Módulos "operación" de pesaje ─────────────────────────────────────
       case 'pesaje_automatico':
         _irA('entradas');
       case 'pesaje_manual':
         _abrirNuevoPesaje();
 
-      // ── Hojas fuera del shell ────────────────────────────────────────────
       case 'ajustes':
         _abrirAjustesInventario();
       case 'auditoria':
@@ -537,7 +514,6 @@ class _HomeShellState extends State<HomeShell> {
       case 'ayuda':
         _abrirAyuda();
 
-      // ── Búsquedas directas (paleta) ──────────────────────────────────────
       case 'vehiculo':
         _irA('camiones');
       case 'conductor':
@@ -548,8 +524,6 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  /// `go:` de la paleta: `t:#123` busca boleto, `p:A12BC3` placa, `c:V12345678`
-  /// conductor. El parámetro es el texto a colocar en el buscador de destino.
   void _buscarEn(String destino, String texto) {
     switch (destino) {
       case 't':
@@ -564,8 +538,6 @@ class _HomeShellState extends State<HomeShell> {
     FocusSearchBus.instance.registrarTexto(texto);
   }
 
-  /// Menú de navegación para móvil: bottom sheet con **todas** las acciones
-  /// del rol (misma matriz que el sidebar de desktop, sin sidebar).
   void _mostrarMenuNavegacion() {
     mostrarNavMovil(
       context,
@@ -577,8 +549,6 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Módulos (hojas) accesibles para el rol actual, en orden del árbol de
-  /// menú. Usado por el bottom bar móvil para mostrar todas las acciones.
   List<MenuNode> _modulosVisibles() {
     final authState = context.read<AuthBloc>().state;
     final rol = authState is AuthAuthenticated ? authState.user.rol : 'OPERADOR';
@@ -602,12 +572,8 @@ class _HomeShellState extends State<HomeShell> {
       setState(() => _commandPaletteOpen = !_commandPaletteOpen);
 
   void _cambiarIndice(int nuevo) {
-    // Con un modal abierto no se navega (los atajos ya están bloqueados;
-    // aquí se protege también a los llamados programáticos).
     if (di.sl<ModalManager>().hasOpenModals) return;
 
-    // Si hay una pantalla empujada encima, primero se sale de ella para no
-    // dejar capas apiladas debajo del módulo destino.
     final ruta = ModalRoute.of(context);
     if (ruta != null && !ruta.isCurrent) {
       Navigator.of(context).popUntil((r) => r == ruta);
@@ -626,10 +592,6 @@ class _HomeShellState extends State<HomeShell> {
     if (idx != -1) _cambiarIndice(idx);
   }
 
-  /// Nombre de la ruta superior del navegador raíz, o `null`.
-  ///
-  /// Truco de `popUntil` con predicado cierto en la primera evaluación: solo
-  /// consulta la ruta superior sin retirar ninguna.
   String? _rutaSuperior() {
     String? nombre;
     Navigator.of(context).popUntil((ruta) {
@@ -639,8 +601,6 @@ class _HomeShellState extends State<HomeShell> {
     return nombre;
   }
 
-  /// Empuja una pantalla solo si no es ya la visible: pulsar dos veces el
-  /// mismo atajo no apila copias de la misma pantalla.
   void _pushSiNoEsta(String nombre, Widget Function() builder) {
     if (_rutaSuperior() == nombre) return;
     Navigator.of(context).push(
@@ -657,21 +617,14 @@ class _HomeShellState extends State<HomeShell> {
     return contexto.findAncestorStateOfType<EditableTextState>() != null;
   }
 
-  /// ¿El shell es la ruta visible (no hay pantalla ni diálogo encima)?
-  /// Determina si las teclas de operación global deben appliquer.
   bool _enShellVisible() {
     final ruta = ModalRoute.of(context);
     if (ruta == null || !ruta.isCurrent) return false;
-
-    // Si hay modales abiertos (diálogos, bottom sheets), no aplicar atajos globales
     if (di.sl<ModalManager>().hasOpenModals) return false;
-
+    if (_rutaSuperior() != null) return false;  // 🆕 NO capturar si hay pantalla encima
     return true;
   }
 
-  /// F12: cancela la operación en curso. Cierra el diálogo o la pantalla
-  /// abierta (descarta el boleto en borrador) y, si no hay nada que cerrar,
-  /// vuelve al Inicio.
   void _cancelarOperacion() {
     final nav = Navigator.of(context);
     if (nav.canPop()) {
@@ -681,7 +634,6 @@ class _HomeShellState extends State<HomeShell> {
     if (_index != 0) _irA('inicio');
   }
 
-  /// F5: refresca los datos del módulo visible sin cambiar de pantalla.
   void _refrescarModuloActual() {
     final catalogosPorIndice = <int, CatalogResource>{
       1: AppCatalogos.tercerosResource,
@@ -702,8 +654,6 @@ class _HomeShellState extends State<HomeShell> {
       context.read<WeighingBloc>().add(const ListWeighingsEvent());
       return;
     }
-    // Los módulos restantes (reportes, seguridad, configuración…) se refrescan
-    // reconstruyendo la vista activa.
     setState(() {});
   }
 
@@ -733,7 +683,6 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {}
   }
 
-  /// Maximiza la ventana o la restaura a su tamaño anterior (F9).
   Future<void> _alternarMaximizado() async {
     if (!(Platform.isLinux || Platform.isWindows || Platform.isMacOS)) return;
     try {
@@ -747,7 +696,6 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {}
   }
 
-  /// Cierra la aplicación tras confirmación (Ctrl+Q).
   Future<void> _salirDelSistema() async {
     final confirmar = await di.sl<ModalManager>().showModal<bool>(
       context: context,
@@ -779,6 +727,55 @@ class _HomeShellState extends State<HomeShell> {
     SystemNavigator.pop();
   }
 
+  // ── Nuevos métodos de atajos (F2, F4, F5, F6) ──────────────────────
+
+  /// F2: crea un registro nuevo en el catálogo de la pantalla actual.
+  /// Si la pantalla no es un catálogo, no hace nada.
+  void _nuevoRegistroEstandar() {
+    final recurso = switch (_index) {
+      1 => AppCatalogos.tercerosResource,
+      3 => AppCatalogos.camionResource,
+      4 => AppCatalogos.conductorResource,
+      5 => AppCatalogos.transporteResource,
+      6 => AppCatalogos.categoriaResource,
+      7 => AppCatalogos.productoResource,
+      8 => AppCatalogos.almacenResource,
+      18 => AppCatalogos.clienteResource,
+      19 => AppCatalogos.proveedorResource,
+      29 => AppCatalogos.conceptoKardexResource,
+      _ => null,
+    };
+    if (recurso == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CatalogEditScreen(recurso: recurso),
+      ),
+    );
+  }
+
+  /// F4: guardar. Si la pantalla actual tiene un formulario abierto con
+  /// `FormState`, delega. Si no, no hace nada (el formulario ya maneja F4).
+  void _guardarActual() {
+    // No-op en shell. Los formularios capturan F4 ellos mismos.
+  }
+
+  /// F5: imprimir/exportar según la pantalla.
+  void _imprimirActual() {
+    // Por ahora no-op. En una siguiente iteración conectar con:
+    // - Entradas/Salidas: imprimir último boleto.
+    // - Reportes: exportar.
+    // - Kardex: exportar.
+  }
+
+  /// F6: buscar. Si la pantalla tiene un buscador enfocable, lo enfoca.
+  /// Si no, abre la paleta de comandos.
+  void _buscarActual() {
+    if (FocusSearchBus.instance.enfocar()) return;
+    _toggleCommandPalette();
+  }
+
+  // ── Acciones existentes ─────────────────────────────────────────────
+
   void _abrirNuevoPesaje() {
     _pushSiNoEsta('nuevo_pesaje', () => const WeighingFormScreen());
   }
@@ -803,7 +800,6 @@ class _HomeShellState extends State<HomeShell> {
     _pushSiNoEsta('auditoria', () => const AuditoriaScreen());
   }
 
-  /// RB-12: equipos de la cuenta (aprobación contra el servidor central).
   void _abrirSesiones() {
     _pushSiNoEsta('sesiones', () => const SesionesScreen());
   }
@@ -831,9 +827,6 @@ class _HomeShellState extends State<HomeShell> {
     _pushSiNoEsta('licencia', () => const LicenseAdminScreen());
   }
 
-  /// Conexiones: URL de la API de la estación + prueba de /health. En el
-  /// OPERADOR esa URL apunta al servidor titular; en el SERVIDOR es la
-  /// propia (docs/MANEJO_DB.md §13).
   void _abrirConexiones() {
     _pushSiNoEsta('conexiones', () => const ConnectionsScreen());
   }
@@ -930,9 +923,6 @@ class _HomeShellState extends State<HomeShell> {
           ejecutarAccion(command);
           return;
         }
-        // Búsqueda dirigida: `t:#123` (boleto), `p:A12BC3` (placa),
-        // `c:V12345678` (conductor). Se quita el prefijo `:` que la paleta
-        // usa para separar destino y parámetro.
         final partes = command.split(':');
         if (partes.length == 3 && partes[0] == 'buscar') {
           _buscarEn(partes[1], partes[2]);
@@ -981,7 +971,6 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Cuerpo móvil: TopNavBar + QuickActionsBar + contenido + BottomNavBar.
   Widget _buildMobileBody(int idx, Widget contenido) {
     return Column(
       children: [
@@ -1009,7 +998,6 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Cuerpo desktop/tablet: TopNavBar + (sidebar | quick actions + contenido).
   Widget _buildDesktopBody(int idx, Widget contenido) {
     return Column(
       children: [
@@ -1061,9 +1049,6 @@ class _HomeShellState extends State<HomeShell> {
 
 // ── BottomNavBar (móvil) ──────────────────────────────────────────────
 
-/// Bottom bar de Android: muestra las acciones del rol del usuario. Si el rol
-/// accede a pocos módulos, se exponen **todos** directamente en la barra; si
-/// accede a muchos, se muestran los 4 principales + "Más" (menú móvil).
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.indiceActual,
@@ -1077,7 +1062,6 @@ class _BottomNavBar extends StatelessWidget {
   final ValueChanged<int> alSeleccionar;
   final void Function(BuildContext) abrirMas;
 
-  /// ¿Cabe todo en la barra (5 destinos) o hace falta "Más"?
   bool get _hayMas => modulos.length > 4;
 
   List<MenuNode> get _tabs => _hayMas ? modulos.take(4).toList() : modulos;

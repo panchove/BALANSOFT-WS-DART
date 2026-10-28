@@ -29,6 +29,7 @@ from app.api.dependencies import (
     require_admin,
 )
 from app.core.database import get_db
+from app.core.indicador_hal import get_indicador_hal  # <-- IMPORTANTE AÑADIR ESTO
 from app.models import Balanza, Empresa, Indicador, Usuario
 from app.schemas import IndicadorCreate, IndicadorOut
 from app.services.catalog_service import CatalogService
@@ -183,7 +184,7 @@ async def delete_indicador(
             status_code=409,
             detail=(
                 f"No se puede eliminar: {enlazadas} báscula(s) usan este "
-                "indicador. Desenlácelas primero."
+                "indicador. Desenláncelas primero."
             ),
         )
     await _SERVICE.delete(
@@ -283,3 +284,49 @@ async def _fijar_enlace(
         delimitador=indicador.delimitador,
         balanzas_enlazadas=enlazadas,
     )
+
+
+# ---------------------------------------------------------------------------
+# Prueba de conexión (Echo Test)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/indicadores/{id_indicador}/probar",
+    summary="Probar conexión con el indicador (envía un peso de prueba)",
+)
+async def probar_indicador(
+    id_indicador: uuid.UUID,
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Prueba la comunicación en vivo con el indicador.
+    
+    - **Serial**: Abre el puerto, envía un peso de prueba ('000.00\n') y 
+      espera hasta 1.5 segundos a que el dispositivo responda.
+    - **HTTP**: Hace un POST al endpoint configurado con un peso falso.
+    
+    Retorna un JSON con el estado y el "Preview" de la respuesta.
+    """
+    # 1. Buscar el indicador (con aislamiento de empresa)
+    indicador = await _obtener_indicador(db, empresa, id_indicador)
+    
+    # 2. Obtener el Hardware Abstraction Layer (HAL)
+    hal = get_indicador_hal(indicador)
+    
+    # 3. Ejecutar la prueba según el protocolo
+    if hasattr(hal, "probar_conexion"):
+        # Es serial, hacemos el Echo Test
+        resultado = await hal.probar_conexion()
+        return resultado
+    
+    # 4. Fallback para HTTP (o si no tiene método de prueba)
+    try:
+        # Enviamos un peso falso por HTTP
+        ok = await hal.enviar_peso(0.00, status="test")
+        if ok:
+            return {"conectado": True, "recibido": "HTTP 200 OK", "detalle": "Servidor respondió correctamente"}
+        return {"conectado": False, "detalle": "El servidor HTTP rechazó la petición"}
+    except Exception as exc:
+        return {"conectado": False, "detalle": f"Error HTTP: {exc}"}

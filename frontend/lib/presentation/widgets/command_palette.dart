@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/i18n/translations.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Paleta de comandos global (Ctrl+K).
+/// Paleta de comandos global (Ctrl+K o `~`).
 /// Permite navegar y ejecutar acciones escribiendo términos, prefijos cortos
 /// o atajos (según docs/NAV.md).
 class CommandPalette extends StatefulWidget {
@@ -39,7 +39,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Pesaje Manual',
       icon: Icons.edit_note,
-      shortcut: 'Ctrl+Shift+N  /  F2',
+      shortcut: 'Ctrl+Shift+N',
       action: 'go:pesaje_manual',
     ),
     const _Command(
@@ -75,7 +75,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Camiones / Vehículos',
       icon: Icons.directions_car_outlined,
-      shortcut: 'Alt+F  /  F7',
+      shortcut: 'Alt+F',
       action: 'go:camiones',
     ),
     const _Command(
@@ -182,7 +182,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Nuevo Ticket de Pesaje',
       icon: Icons.add_circle_outline,
-      shortcut: 'Ctrl+N',
+      shortcut: 'Ctrl+N  /  F1',
       action: 'new:ticket',
     ),
     const _Command(
@@ -194,7 +194,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     const _Command(
       label: 'Nuevo Conductor',
       icon: Icons.person_add_outlined,
-      shortcut: 'Ctrl+Shift+D',
+      shortcut: 'Ctrl+Shift+D  /  F8',
       action: 'new:driver',
     ),
     // Configuración
@@ -237,8 +237,6 @@ class _CommandPaletteState extends State<CommandPalette> {
   }
 
   /// Búsqueda dirigida por prefijo (`t:#123`, `p:A12BC3`, `c:V12345678`).
-  /// Devuelve el comando sintético `buscar:<tipo>:<texto>` cuando el texto
-  /// empieza por un prefijo válido y ya trae un parámetro.
   List<_Command> get _comandos {
     final directa = _comandoDeBusquedaDirecta();
     if (directa != null) return [directa];

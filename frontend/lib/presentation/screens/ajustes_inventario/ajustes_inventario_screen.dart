@@ -14,9 +14,9 @@ import '../../screens/kardex/kardex_screen.dart';
 
 /// Gestión: Ajustes de Inventario.
 ///
-/// Estado actual de existencias por almacén (desde el catálogo) y formulario
-/// de registro de movimientos de ajuste manual (mermas, conteos físicos,
-/// correcciones) contra el kardex de inventario (REQ-FN-INV-010).
+/// Muestra el estado actual de existencias por almacén y permite abrir un
+/// diálogo modal para registrar movimientos de ajuste manual (mermas,
+/// conteos físicos, correcciones) contra el kardex de inventario.
 class AjustesInventarioScreen extends StatefulWidget {
   const AjustesInventarioScreen({super.key});
 
@@ -28,9 +28,7 @@ class AjustesInventarioScreen extends StatefulWidget {
 class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
   List<Warehouse> _almacenes = [];
   List<Product> _productos = [];
-  // Nota: _cargando es mutable — cambia al refrescar stocks tras un ajuste.
-  // ignore: prefer_final_fields
-  bool _cargando = false;
+  bool _cargando = true;
 
   @override
   void initState() {
@@ -44,7 +42,22 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
     setState(() {
       _almacenes = data?.warehouses.toList() ?? [];
       _productos = data?.products.where((p) => p.esKardex).toList() ?? [];
+      _cargando = false;
     });
+  }
+
+  Future<void> _abrirModalAjuste() async {
+    final registrado = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DialogoAjuste(
+        productos: _productos,
+        almacenes: _almacenes,
+      ),
+    );
+    if (registrado == true && mounted) {
+      await _cargar();
+    }
   }
 
   @override
@@ -65,6 +78,13 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
             icon: const Icon(Icons.table_chart_outlined),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _abrirModalAjuste,
+        backgroundColor: SwsColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.tune),
+        label: Text('Nuevo ajuste'),
       ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
@@ -107,21 +127,24 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         'stocks_by_warehouse'.tr(),
-                        style: const TextStyle(fontSize: 12.5, color: SwsColors.gray700),
+                        style: const TextStyle(
+                            fontSize: 12.5, color: SwsColors.gray700),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
                   if (isWide)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
                         columns: [
                           DataColumn(label: Text('warehouse'.tr())),
                           DataColumn(label: Text('code'.tr())),
                           DataColumn(label: Text('location'.tr())),
-                          DataColumn(label: Text('cap_ton'.tr()), numeric: true),
-                          DataColumn(label: Text('stock_ton'.tr()), numeric: true),
+                          DataColumn(
+                              label: Text('cap_ton'.tr()), numeric: true),
+                          DataColumn(
+                              label: Text('stock_ton'.tr()), numeric: true),
                         ],
                         rows: [
                           for (final w in _almacenes)
@@ -130,42 +153,65 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
                               DataCell(Text(w.codigo ?? '—')),
                               DataCell(Text(w.ubicacion ?? '—')),
                               DataCell(Text(
-                                  w.capacidadMaxTon?.toStringAsFixed(2) ?? '—')),
-                              DataCell(Text(
-                                  w.stockActualTon.toStringAsFixed(2))),
+                                  w.capacidadMaxTon?.toStringAsFixed(2) ??
+                                      '—')),
+                              DataCell(
+                                  Text(w.stockActualTon.toStringAsFixed(2))),
                             ]),
                         ],
                       ),
                     )
-                    else
-                      ..._almacenes.map(
-                        (w) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: const Icon(Icons.warehouse_outlined,
-                                color: SwsColors.primary),
-                            title: Text(w.nombre),
-                            subtitle: Text([
-                              if (w.codigo != null) w.codigo!,
-                              if (w.ubicacion != null) w.ubicacion!,
-                            ].join(' · ')),
-                            trailing: Text(
-                              '${w.stockActualTon.toStringAsFixed(2)} t',
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                ),
+                  else
+                    ..._almacenes.map(
+                      (w) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(Icons.warehouse_outlined,
+                              color: SwsColors.primary),
+                          title: Text(w.nombre),
+                          subtitle: Text([
+                            if (w.codigo != null) w.codigo!,
+                            if (w.ubicacion != null) w.ubicacion!,
+                          ].join(' · ')),
+                          trailing: Text(
+                            '${w.stockActualTon.toStringAsFixed(2)} t',
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ),
+                    ),
                   const SizedBox(height: 20),
                 ],
 
-                // ── Formulario de ajuste manual ───────────────────────────
-                _FormularioAjuste(
-                  productos: _productos,
-                  almacenes: _almacenes,
-                  onAjusteRegistrado: _cargar,
+                // ── Nota informativa ──────────────────────────────────────
+                Card(
+                  color: SwsColors.accent.withValues(alpha: 0.08),
+                  elevation: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: SwsColors.accent, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Los ajustes manuales se registran contra el '
+                            'kardex de inventario y requieren justificación. '
+                            'Usa el botón inferior para abrir el formulario.',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: SwsColors.gray700,
+                                height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 80), // espacio para el FAB
               ],
             ),
     );
@@ -203,30 +249,30 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Formulario de registro de ajuste
+// Diálogo modal de registro de ajuste
 // ---------------------------------------------------------------------------
 
-/// Formulario para registrar movimientos manuales de kardex por ajuste.
+/// Diálogo modal para registrar movimientos manuales de kardex por ajuste.
 ///
 /// Permite al administrador registrar entradas (mermas recuperadas, compras,
 /// devoluciones) o salidas (mermas, pérdidas, correcciones) con justificación
 /// obligatoria auditada. Llama a POST /api/v1/inventario/ajustes.
-class _FormularioAjuste extends StatefulWidget {
+///
+/// Devuelve `true` vía `Navigator.pop` cuando el ajuste se registró con éxito.
+class _DialogoAjuste extends StatefulWidget {
   final List<Product> productos;
   final List<Warehouse> almacenes;
-  final VoidCallback onAjusteRegistrado;
 
-  const _FormularioAjuste({
+  const _DialogoAjuste({
     required this.productos,
     required this.almacenes,
-    required this.onAjusteRegistrado,
   });
 
   @override
-  State<_FormularioAjuste> createState() => _FormularioAjusteState();
+  State<_DialogoAjuste> createState() => _DialogoAjusteState();
 }
 
-class _FormularioAjusteState extends State<_FormularioAjuste> {
+class _DialogoAjusteState extends State<_DialogoAjuste> {
   final _formKey = GlobalKey<FormState>();
   final _pesoCtrl = TextEditingController();
 
@@ -249,7 +295,8 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
 
   Future<void> _cargarConceptos() async {
     try {
-      final response = await di.sl<ApiClient>().getList(ApiConstants.conceptosKardex);
+      final response =
+          await di.sl<ApiClient>().getList(ApiConstants.conceptosKardex);
       final conceptos = (response.data as List? ?? [])
           .whereType<Map<String, dynamic>>()
           .toList();
@@ -280,284 +327,267 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
   Future<void> _registrar() async {
     if (!_formKey.currentState!.validate()) return;
     if (_producto == null || _almacen == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('select_product_warehouse'.tr()),
-          backgroundColor: SwsColors.danger,
-        ),
-      );
+      _snack('select_product_warehouse'.tr(), SwsColors.danger);
       return;
     }
     if (_conceptoId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona un concepto de kardex'),
-          backgroundColor: SwsColors.danger,
-        ),
-      );
+      _snack('Selecciona un concepto de kardex', SwsColors.danger);
       return;
     }
     final valor = double.parse(_pesoCtrl.text.replaceAll(',', '.'));
     // El signo de la cantidad debe acompañar al signo del concepto: el backend
     // lo rechaza con 422, pero se avisa antes de gastar la llamada.
     if (_conceptoSigno == 'positivo' && valor <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'El concepto es positivo; la cantidad debe ser mayor que cero',
-          ),
-          backgroundColor: SwsColors.danger,
-        ),
+      _snack(
+        'El concepto es positivo; la cantidad debe ser mayor que cero',
+        SwsColors.danger,
       );
       return;
     }
     if (_conceptoSigno == 'negativo' && valor >= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'El concepto es negativo; la cantidad debe ser menor que cero',
-          ),
-          backgroundColor: SwsColors.danger,
-        ),
+      _snack(
+        'El concepto es negativo; la cantidad debe ser menor que cero',
+        SwsColors.danger,
       );
       return;
     }
 
     setState(() => _guardando = true);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final cantidad = _conceptoSigno == 'negativo' ? -valor : valor;
       await di.sl<ApiClient>().crearAjusteInventario(
-        idConcepto: _conceptoId!,
-        idProducto: _producto!.id,
-        idAlmacen: _almacen!.id,
-        cantidad: cantidad,
-        motivo: 'Ajuste manual de inventario',
-      );
+            idConcepto: _conceptoId!,
+            idProducto: _producto!.id,
+            idAlmacen: _almacen!.id,
+            cantidad: cantidad,
+            motivo: 'Ajuste manual de inventario',
+          );
 
       final tipo = _tipoMovimiento == 10 ? 'INGRESO' : 'DESPACHO';
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Ajuste $tipo de ${_pesoCtrl.text} kg registrado en kardex',
-          ),
-          backgroundColor: SwsColors.success,
-        ),
+      _snack(
+        'Ajuste $tipo de ${_pesoCtrl.text} kg registrado en kardex',
+        SwsColors.success,
       );
-      // Limpiar formulario y refrescar stocks
-      _formKey.currentState!.reset();
-      _pesoCtrl.clear();
-      setState(() {
-        _producto = null;
-        _almacen = null;
-        _tipoMovimiento = 10;
-        _conceptoId = null;
-        _conceptoSigno = null;
-      });
-      widget.onAjusteRegistrado();
+
+      // Cerrar modal devolviendo true para que la pantalla refresque stocks.
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Error al registrar ajuste: $e'),
-          backgroundColor: SwsColors.danger,
-        ),
-      );
+      _snack('Error al registrar ajuste: $e', SwsColors.danger);
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
   }
 
+  void _snack(String mensaje, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje), backgroundColor: color),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final esWide = MediaQuery.sizeOf(context).width >= 700;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Encabezado
-              Row(
-                children: [
-                  const Icon(Icons.tune, color: SwsColors.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'register_inventory_adjust'.tr(),
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const Spacer(),
-                  Chip(
-                    label: Text(
-                      'admin_only'.tr(),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    backgroundColor: SwsColors.accent.withValues(alpha: 0.12),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Registra entradas/salidas manuales por mermas, conteos físicos '
-                'o correcciones. Requiere justificación obligatoria.',
-                style: TextStyle(fontSize: 12.5, color: SwsColors.gray600),
-              ),
-              const Divider(height: 24),
 
-              // Tipo de movimiento: al cambiar se descarta el concepto
-              // elegido, porque el signo del concepto debe acompañar al tipo.
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('movement_type'.tr(),
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ),
-                  ChoiceChip(
-                    label: Text('ingreso'.tr()),
-                    selected: _tipoMovimiento == 10,
-                    selectedColor: SwsColors.success.withValues(alpha: 0.18),
-                    onSelected: (_) => setState(() {
-                      _tipoMovimiento = 10;
-                      _conceptoId = null;
-                      _conceptoSigno = null;
-                    }),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: Text('despacho'.tr()),
-                    selected: _tipoMovimiento == 60,
-                    selectedColor: SwsColors.danger.withValues(alpha: 0.18),
-                    onSelected: (_) => setState(() {
-                      _tipoMovimiento = 60;
-                      _conceptoId = null;
-                      _conceptoSigno = null;
-                    }),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Producto + Almacén
-              if (esWide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _dropdownProducto()),
-                    const SizedBox(width: 12),
-                    Expanded(child: _dropdownAlmacen()),
-                  ],
-                )
-              else ...[
-                _dropdownProducto(),
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.tune, color: SwsColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'register_inventory_adjust'.tr(),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Chip(
+            label: Text(
+              'admin_only'.tr(),
+              style: const TextStyle(fontSize: 11),
+            ),
+            backgroundColor: SwsColors.accent.withValues(alpha: 0.12),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 640,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Registra entradas/salidas manuales por mermas, conteos '
+                  'físicos o correcciones. Requiere justificación obligatoria.',
+                  style:
+                      TextStyle(fontSize: 12.5, color: SwsColors.gray600),
+                ),
                 const SizedBox(height: 12),
-                _dropdownAlmacen(),
-              ],
-              const SizedBox(height: 12),
+                const Divider(height: 1),
 
-              // Concepto del movimiento (catálogo conceptos_kardex, migración
-              // 031). El signo del concepto elegido fija el signo de la
-              // cantidad: no se admite una cantidad del signo contrario.
-              DropdownButtonFormField<int>(
-                // ignore: deprecated_member_use
-                value: _conceptoId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Concepto de kardex *',
-                  prefixIcon: Icon(Icons.rule_folder_outlined),
+                // Tipo de movimiento: al cambiar se descarta el concepto
+                // elegido, porque el signo del concepto debe acompañar al tipo.
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('movement_type'.tr(),
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    ChoiceChip(
+                      label: Text('ingreso'.tr()),
+                      selected: _tipoMovimiento == 10,
+                      selectedColor:
+                          SwsColors.success.withValues(alpha: 0.18),
+                      onSelected: _guardando
+                          ? null
+                          : (_) => setState(() {
+                                _tipoMovimiento = 10;
+                                _conceptoId = null;
+                                _conceptoSigno = null;
+                              }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('despacho'.tr()),
+                      selected: _tipoMovimiento == 60,
+                      selectedColor:
+                          SwsColors.danger.withValues(alpha: 0.18),
+                      onSelected: _guardando
+                          ? null
+                          : (_) => setState(() {
+                                _tipoMovimiento = 60;
+                                _conceptoId = null;
+                                _conceptoSigno = null;
+                              }),
+                    ),
+                  ],
                 ),
-                hint: const Text('Selecciona el motivo del movimiento'),
-                items: _conceptosDelTipo
-                    .map(
-                      (c) => DropdownMenuItem<int>(
-                        value: c['id_concepto'] is int
-                            ? c['id_concepto'] as int
-                            : int.tryParse('${c['id_concepto']}'),
-                        child: Text('${c['id_concepto']} - ${c['nombre'] ?? ''}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  setState(() {
-                    _conceptoId = v;
-                    _conceptoSigno = v == null
-                        ? null
-                        : _conceptos
-                            .firstWhere(
-                              (c) => c['id_concepto'] == v,
-                              orElse: () => <String, dynamic>{},
-                            )['signo']
-                            ?.toString();
-                  });
-                },
-                validator: (v) => v == null ? 'Selecciona un concepto' : null,
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
-              // Cantidad: el prefijo muestra el signo que impone el concepto.
-              TextFormField(
-                controller: _pesoCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Cantidad a ajustar *',
-                  hintText: 'Ej.: 1500.00',
-                  prefixIcon: const Icon(Icons.scale_outlined),
-                  prefixText: _conceptoSigno == 'negativo'
-                      ? '- '
-                      : (_conceptoSigno == 'positivo' ? '+ ' : null),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                // Producto + Almacén
+                if (esWide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _dropdownProducto()),
+                      const SizedBox(width: 12),
+                      Expanded(child: _dropdownAlmacen()),
+                    ],
+                  )
+                else ...[
+                  _dropdownProducto(),
+                  const SizedBox(height: 12),
+                  _dropdownAlmacen(),
                 ],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Campo requerido';
-                  final val = double.tryParse(v.replaceAll(',', '.'));
-                  if (val == null || val <= 0) {
-                    return 'Debe ser mayor que cero';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
-              // Botón
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _guardando ? null : _registrar,
-                  icon: _guardando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : Icon(_tipoMovimiento == 10
-                          ? Icons.add_circle_outline
-                          : Icons.remove_circle_outline),
-                  label: Text(
-                    _guardando
-                        ? 'Registrando…'
-                        : _tipoMovimiento == 10
-                            ? 'Registrar ingreso al kardex'
-                            : 'Registrar despacho del kardex',
+                // Concepto del movimiento.
+                DropdownButtonFormField<int>(
+                  // ignore: deprecated_member_use
+                  value: _conceptoId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Concepto de kardex *',
+                    prefixIcon: Icon(Icons.rule_folder_outlined),
                   ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _tipoMovimiento == 10
-                        ? SwsColors.success
-                        : SwsColors.danger,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
+                  hint: const Text('Selecciona el motivo del movimiento'),
+                  items: _conceptosDelTipo
+                      .map(
+                        (c) => DropdownMenuItem<int>(
+                          value: c['id_concepto'] is int
+                              ? c['id_concepto'] as int
+                              : int.tryParse('${c['id_concepto']}'),
+                          child: Text(
+                              '${c['id_concepto']} - ${c['nombre'] ?? ''}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _guardando
+                      ? null
+                      : (v) {
+                          setState(() {
+                            _conceptoId = v;
+                            _conceptoSigno = v == null
+                                ? null
+                                : _conceptos
+                                    .firstWhere(
+                                      (c) => c['id_concepto'] == v,
+                                      orElse: () => <String, dynamic>{},
+                                    )['signo']
+                                    ?.toString();
+                          });
+                        },
+                  validator: (v) =>
+                      v == null ? 'Selecciona un concepto' : null,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+
+                // Cantidad: el prefijo muestra el signo que impone el concepto.
+                TextFormField(
+                  controller: _pesoCtrl,
+                  enabled: !_guardando,
+                  decoration: InputDecoration(
+                    labelText: 'Cantidad a ajustar *',
+                    hintText: 'Ej.: 1500.00',
+                    prefixIcon: const Icon(Icons.scale_outlined),
+                    prefixText: _conceptoSigno == 'negativo'
+                        ? '- '
+                        : (_conceptoSigno == 'positivo' ? '+ ' : null),
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Campo requerido';
+                    final val = double.tryParse(v.replaceAll(',', '.'));
+                    if (val == null || val <= 0) {
+                      return 'Debe ser mayor que cero';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _guardando ? null : () => Navigator.of(context).pop(false),
+          child: Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _guardando ? null : _registrar,
+          icon: _guardando
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(_tipoMovimiento == 10
+                  ? Icons.add_circle_outline
+                  : Icons.remove_circle_outline),
+          label: Text(
+            _guardando
+                ? 'Registrando…'
+                : (_tipoMovimiento == 10
+                    ? 'Registrar ingreso'
+                    : 'Registrar despacho'),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor:
+                _tipoMovimiento == 10 ? SwsColors.success : SwsColors.danger,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -574,7 +604,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
       items: widget.productos
           .map((p) => DropdownMenuItem(value: p, child: Text(p.nombre)))
           .toList(),
-      onChanged: (v) => setState(() => _producto = v),
+      onChanged: _guardando ? null : (v) => setState(() => _producto = v),
       validator: (v) => v == null ? 'Selecciona un producto' : null,
     );
   }
@@ -592,7 +622,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
       items: widget.almacenes
           .map((w) => DropdownMenuItem(value: w, child: Text(w.nombre)))
           .toList(),
-      onChanged: (v) => setState(() => _almacen = v),
+      onChanged: _guardando ? null : (v) => setState(() => _almacen = v),
       validator: (v) => v == null ? 'Selecciona un almacén' : null,
     );
   }

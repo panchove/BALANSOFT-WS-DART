@@ -84,6 +84,8 @@ class VinculoManager:
     async def _loop(self, db: AsyncSession, id_empresa: UUID, vinculo: VinculoBalanzaIndicador, ev: asyncio.Event):
         key = str(vinculo.id_vinculo)
         fallos_conexion = 0
+        log.info("INICIANDO BUCLE para vínculo %s", key)
+        
         try:
             mgr = get_scale_session_manager()
             res_b = await db.execute(
@@ -95,13 +97,18 @@ class VinculoManager:
             )
             ind = res_i.scalar_one_or_none()
             if not bal or not ind:
+                log.warning("Vínculo %s sin hardware (bal=%s, ind=%s)", key, bal, ind)
                 await self._marcar_inactivo(vinculo.id_vinculo, "sin_hardware")
                 return
+                
             hal_ind = get_indicador_hal(ind)
+            log.info("Vínculo %s: Báscula='%s' (puerto=%s) -> Indicador='%s' (proto=%s, puerto=%s)", 
+                     key, bal.descripcion, bal.puerto_com, ind.descripcion, ind.protocolo, ind.puerto_com)
+            
             ses = None
             try:
                 ses = await mgr.obtener(bal)
-                if not ses.conectado():
+                if not ses.conectado:
                     try:
                         ses.iniciar()
                     except Exception:
@@ -113,15 +120,17 @@ class VinculoManager:
             except Exception as exc:
                 log.debug("vinculo obtener sesion fallo: %s", exc)
                 fallos_conexion += 1
+                
             ultimo_peso = None
             ultimo_status = None
+            
             while not ev.is_set():
                 try:
-                    if ses is None or not ses.conectado():
+                    if ses is None or not ses.conectado:
                         fallos_conexion += 1
                         try:
                             ses = await mgr.obtener(bal)
-                            if ses and not ses.conectado():
+                            if ses and not ses.conectado:
                                 try:
                                     ses.iniciar()
                                 except Exception:
@@ -139,14 +148,25 @@ class VinculoManager:
                         await asyncio.sleep(1.0)
                         continue
                     fallos_conexion = 0
-                    m = ses.ultimo()
-                    if m is not None and (ultimo_peso != m.peso_kg or ultimo_status != m.status):
+                    
+                    # Leemos el peso actual y el estado de estabilidad
+                    peso_actual = ses.peso_kg
+                    estable_actual = getattr(ses, 'estable', True)
+                    status_texto = "ok" if estable_actual else "inestable"
+
+                    # Solo enviamos si el peso cambió o el estado cambió
+                    if peso_actual is not None and (ultimo_peso != peso_actual or ultimo_status != status_texto):
+                        log.info(">>> ENVIANDO PESO AL INDICADOR: %s kg (estado: %s)", peso_actual, status_texto)
                         try:
-                            await hal_ind.enviar_peso(m.peso_kg, None, m.status)
+                            exito = await hal_ind.enviar_peso(peso_actual, None, status_texto)
+                            if exito:
+                                log.info(">>> PESO ENVIADO CON ÉXITO AL INDICADOR")
+                            else:
+                                log.warning(">>> FALLÓ EL ENVÍO DEL PESO AL INDICADOR (hal devolvió False)")
                         except Exception as exc:
-                            log.debug("reenvio a indicador fallo: %s", exc)
-                        ultimo_peso = m.peso_kg
-                        ultimo_status = m.status
+                            log.error(">>> ERROR CRÍTICO AL ENVIAR PESO: %s", exc)
+                        ultimo_peso = peso_actual
+                        ultimo_status = status_texto
                 except Exception as exc:
                     log.debug("vinculo leer sesion fallo: %s", exc)
                     fallos_conexion += 1
@@ -156,7 +176,9 @@ class VinculoManager:
                         break
                     await asyncio.sleep(0.5)
                     continue
-                await asyncio.sleep(0.2)
+                # Pausa de 1 segundo entre comprobaciones
+                await asyncio.sleep(1.0)
+                
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -176,6 +198,7 @@ class VinculoManager:
                         pass
             except Exception:
                 pass
+            log.info("DETENIENDO BUCLE para vínculo %s", key)
             self._tasks.pop(key, None)
             self._stop.pop(key, None)
 

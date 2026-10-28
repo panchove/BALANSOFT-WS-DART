@@ -540,14 +540,6 @@ class MenuConfig {
       isSectionHeader: true,
       children: [
         MenuNode(
-          label: 'Peso Manual',
-          icon: Icons.edit_note,
-          activeIcon: Icons.edit_note,
-          accion: 'go:pesaje_manual',
-          shortcut: 'F2',
-          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
-        ),
-        MenuNode(
           label: 'Peso Automático',
           icon: Icons.smart_toy_outlined,
           activeIcon: Icons.smart_toy,
@@ -634,7 +626,7 @@ class MenuConfig {
           icon: Icons.today_outlined,
           activeIcon: Icons.today,
           clave: 'reportes_diarios',
-          index: 24,
+          index: 30,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
@@ -642,7 +634,7 @@ class MenuConfig {
           icon: Icons.calendar_month_outlined,
           activeIcon: Icons.calendar_month,
           clave: 'reportes_mensuales',
-          index: 25,
+          index: 31,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
@@ -650,7 +642,7 @@ class MenuConfig {
           icon: Icons.date_range_outlined,
           activeIcon: Icons.date_range,
           clave: 'reportes_personalizado',
-          index: 26,
+          index: 32,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(

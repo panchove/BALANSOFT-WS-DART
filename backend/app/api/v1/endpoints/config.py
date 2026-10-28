@@ -109,3 +109,55 @@ async def get_account_info(
         server_api_url=settings.server_api_url or None,
         ultima_validacion=identidad.ultima_validacion.isoformat() if identidad.ultima_validacion else None,
     )
+
+# ─── Configuración: peso manual ────────────────────────────────────────
+
+class _PesoManualConfig(BaseModel):
+    permitido: bool
+
+
+@router.get("/peso-manual", response_model=_PesoManualConfig)
+async def get_peso_manual(
+    db: AsyncSession = Depends(get_db),
+) -> _PesoManualConfig:
+    """Devuelve si el peso manual está permitido para esta empresa."""
+    from app.models import Configuracion
+
+    row = await db.execute(
+        select(Configuracion).where(Configuracion.clave == "peso_manual_permitido")
+    )
+    config = row.scalar_one_or_none()
+    # Si no existe la fila, el default es True (compatibilidad hacia atrás).
+    permitido = config is None or config.valor == "true"
+    return _PesoManualConfig(permitido=permitido)
+
+
+@router.put("/peso-manual", response_model=_PesoManualConfig)
+async def set_peso_manual(
+    payload: _PesoManualConfig,
+    db: AsyncSession = Depends(get_db),
+    _user: Usuario = Depends(get_current_user),
+) -> _PesoManualConfig:
+    """Activa/desactiva el peso manual. Solo ADMIN."""
+    from app.models import Configuracion
+
+    if _user.rol != "ADMIN":
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el ADMIN puede cambiar esta configuración",
+        )
+
+    row = await db.execute(
+        select(Configuracion).where(Configuracion.clave == "peso_manual_permitido")
+    )
+    config = row.scalar_one_or_none()
+    valor = "true" if payload.permitido else "false"
+
+    if config:
+        config.valor = valor
+    else:
+        db.add(Configuracion(clave="peso_manual_permitido", valor=valor))
+
+    await db.commit()
+    return _PesoManualConfig(permitido=payload.permitido)

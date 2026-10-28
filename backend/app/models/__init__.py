@@ -1239,3 +1239,14 @@ class Notificacion(Base):
         DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
     )
 
+class Configuracion(Base):
+    """Parámetros de configuración de la empresa (tabla `configuraciones`)."""
+
+    __tablename__ = "configuraciones"
+
+    clave: Mapped[str] = mapped_column(String(100), primary_key=True)
+    valor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    id_empresa: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+

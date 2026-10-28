@@ -218,10 +218,10 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     final esAmarillo = status == ScaleStatus.inestable || conectando;
 
     final estadoColor = esVerde
-        ? SwsColors.success
-        : esAmarillo
-            ? SwsColors.warning
-            : SwsColors.danger;
+      ? SwsColors.success
+      : esAmarillo
+          ? SwsColors.warning
+          : SwsColors.gray500;   // ← gris en vez de rojo
     final estadoTexto = esVerde
         ? context.tr('Estable')
         : esAmarillo
@@ -277,7 +277,9 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                         '${cliente.host}:${cliente.port} · $estadoTexto',
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: estadoColor,
+                          color: conectado
+                              ? estadoColor
+                              : SwsColors.gray500,   // ← gris cuando está desconectado
                           fontWeight: FontWeight.w600,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -350,19 +352,22 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
               ),
             ],
 
-            if (cliente.error.isNotEmpty) ...[
+            if (cliente.error.isNotEmpty && !conectado) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.error_outline,
-                      size: 14, color: SwsColors.danger),
+                  Icon(Icons.link_off,
+                      size: 14, color: SwsColors.gray500),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      cliente.error,
-                      style: const TextStyle(
-                          fontSize: 11, color: SwsColors.danger),
-                      maxLines: 2,
+                      'Báscula desconectada',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: SwsColors.gray500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

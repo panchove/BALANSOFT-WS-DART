@@ -237,7 +237,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Column(
               children: [
-                _modoChips(),
                 const SizedBox(height: 8),
                 if (_avanzado)
                   _controlesAvanzados(isWide)
@@ -312,21 +311,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _modoChips() {
-    return SegmentedButton<String>(
-      showSelectedIcon: false,
-      segments: [
-        ButtonSegment(value: 'diario', label: Text('daily'.tr())),
-        ButtonSegment(value: 'mensual', label: Text('monthly'.tr())),
-        ButtonSegment(value: 'avanzado', label: Text('advanced'.tr())),
-      ],
-      selected: _avanzado
-          ? {'avanzado'}
-          : (_mensual ? {'mensual'} : {'diario'}),
-      onSelectionChanged: (s) => _cambiarModo(s.first),
     );
   }
 

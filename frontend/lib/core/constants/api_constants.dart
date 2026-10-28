@@ -189,4 +189,7 @@ class ApiConstants {
   // Dispositivos / Vinculación
   static const String dispositivosDescubrir = '$apiPrefix/dispositivos/descubrir';
   static const String vinculos = '$apiPrefix/vinculos';
+
+  // Configuración
+  static const String configPesoManual = '$apiPrefix/config/peso-manual';
 }

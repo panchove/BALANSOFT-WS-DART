@@ -110,6 +110,14 @@ class _RolesScreenState extends State<RolesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final fondoAviso = oscuro ? SwsColors.darkCard : const Color(0xFFFFF4E5);
+    final fondoInfo = oscuro ? SwsColors.darkCard : SwsColors.blue100;
+    // En tema oscuro usamos darkCard y el texto debe ser claro (colorScheme.onSurface);
+    // en tema claro usamos el fondo del aviso y el texto debe ser oscuro (colorScheme.onSurface).
+    // En ambos casos `colorScheme.onSurface` se adapta bien.
+    final colorTexto = Theme.of(context).colorScheme.onSurface;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Roles'),
@@ -132,42 +140,48 @@ class _RolesScreenState extends State<RolesScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 if (_error != null)
-                  const Card(
-                    color: Color(0xFFFFF4E5),
-                    margin: EdgeInsets.only(bottom: 12),
+                  Card(
+                    color: fondoAviso,
+                    margin: const EdgeInsets.only(bottom: 12),
                     child: Padding(
-                      padding: EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          Icon(Icons.cloud_off_outlined,
+                          const Icon(Icons.cloud_off_outlined,
                               color: SwsColors.warning, size: 20),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'Sin conexión con la API: se muestra la '
                               'descripción local de los roles.',
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorTexto,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                const Card(
-                  margin: EdgeInsets.only(bottom: 12),
-                  color: SwsColors.blue100,
+                Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: fondoInfo,
                   child: Padding(
-                    padding: EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline,
+                        const Icon(Icons.info_outline,
                             color: SwsColors.primary, size: 22),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'Los roles de la estación son fijos. Su alcance '
                             'por módulo se ajusta en Seguridad y Accesos.',
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colorTexto,
+                            ),
                           ),
                         ),
                       ],

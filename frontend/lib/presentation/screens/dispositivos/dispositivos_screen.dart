@@ -27,7 +27,8 @@ enum EstadoBalanza { sinVerificar, disponible, inestable, noDisponible }
 /// Módulo de dispositivos: configuración de la conexión de las básculas
 /// (hardware HAL: TCP / serial), prueba de conexión en vivo y monitoreo.
 class DispositivosScreen extends StatefulWidget {
-  const DispositivosScreen({super.key});
+  final int initialTab;
+  const DispositivosScreen({super.key, this.initialTab = 0});
 
   @override
   State<DispositivosScreen> createState() => _DispositivosScreenState();
@@ -304,9 +305,17 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       builder: (_) => _BalanzaDetailSheet(
         balanza: balanza,
         esAdmin: _esAdmin,
-        onGuardado: () => unawaited(_escanear(silencioso: true)),
+        onGuardado: () {
+          unawaited(_cargar());
+          unawaited(_escanear(silencioso: true));
+        },
       ),
-    );
+    ).then((_) {
+      if (mounted) {
+        unawaited(_cargar());
+        unawaited(_escanear(silencioso: true));
+      }
+    });
   }
 
   Future<void> _probarRapido(Scale balanza) async {
@@ -363,6 +372,7 @@ class _DispositivosScreenState extends State<DispositivosScreen> {
       onNuevo: () => unawaited(_escanear()),
       child: DefaultTabController(
         length: 6,
+        initialIndex: widget.initialTab.clamp(0, 5),
         child: Scaffold(
           appBar: AppBar(
             title: Text(context.tr('Dispositivos de Campo')),
@@ -717,7 +727,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
   late final ApiClient _api = di.sl<ApiClient>();
   late final ScaleApiClient _scaleClient = di.sl<ScaleApiClient>();
 
-  late String _protocolo = widget.balanza.protocolo;
+  late final String _protocolo = widget.balanza.protocolo;
   late String _formatoTrama = widget.balanza.formatoTrama;
   late int _baudrate = widget.balanza.baudrate;
   late String _delimitador = widget.balanza.delimitador ?? 'lf';
@@ -733,6 +743,128 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
   bool _monitoreo = false;
   bool _guardando = false;
   String? _error;
+
+  /// id → etiqueta de los indicadores de la empresa, para mostrar cuál está
+  /// vinculado a esta báscula y permitir (re)asignarlo desde aquí.
+  Map<String, String> _indicadoresNombres = {};
+
+  /// Indicador seleccionado para vincular a esta báscula (`null` = sin
+  /// vincular). Se compara contra el original al guardar para saber si hay
+  /// que enlazar/desenlazar.
+  late String? _indicadorSel = widget.balanza.idIndicador;
+
+  List<Map<String, dynamic>> _vinculosBalanza = [];
+  bool _cargandoVinculos = false;
+  bool _activandoVinculo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarIndicadores();
+    _cargarVinculos();
+  }
+
+  Future<void> _cargarVinculos() async {
+    if (!mounted) return;
+    setState(() => _cargandoVinculos = true);
+    try {
+      final list = await _api.listarVinculos();
+      final filtrados = list
+          .whereType<Map<String, dynamic>>()
+          .where((v) => '${v['id_bascula']}' == widget.balanza.id)
+          .toList();
+      if (!mounted) return;
+      setState(() => _vinculosBalanza = filtrados);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _vinculosBalanza = []);
+    } finally {
+      if (mounted) setState(() => _cargandoVinculos = false);
+    }
+  }
+
+  Future<void> _activarVinculo(Map<String, dynamic> vinculo) async {
+    if (_activandoVinculo) return;
+    setState(() => _activandoVinculo = true);
+    try {
+      final idVinculo = '${vinculo['id_vinculo']}';
+      await _api.activarVinculo(idVinculo);
+      await _cargarVinculos();
+      widget.onGuardado();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vínculo activado correctamente'),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_detalleError(e)),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _activandoVinculo = false);
+    }
+  }
+
+  Future<void> _cargarIndicadores() async {
+    try {
+      final filas = await _api.listarIndicadores();
+      if (!mounted) return;
+      final mapa = <String, String>{};
+      for (final f in filas) {
+        final id = '${f['id_indicador']}';
+        final marca = (f['marca'] ?? '').toString().trim();
+        final modelo = (f['modelo'] ?? '').toString().trim();
+        final etiqueta = '$marca $modelo'.trim();
+        mapa[id] = etiqueta.isNotEmpty ? etiqueta : '${f['descripcion']}';
+      }
+      setState(() => _indicadoresNombres = mapa);
+    } catch (_) {
+      // Silencioso: la sección de indicador es informativa.
+    }
+  }
+
+  /// Etiqueta legible del indicador vinculado a esta báscula (o "Sin vincular").
+  String get _indicadorVinculadoTexto {
+    final id = widget.balanza.idIndicador;
+    if (id == null || id.isEmpty) return 'Sin vincular';
+    return _indicadoresNombres[id] ?? 'Vinculado (indicador $id)';
+  }
+
+  /// Campo de SOLO LECTURA: muestra un valor de identidad del dispositivo
+  /// (puerto/protocolo) con apariencia de campo pero sin permitir edición.
+  Widget _campoLectura(
+    BuildContext context, {
+    required String etiqueta,
+    required String valor,
+    required IconData icono,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        prefixIcon: Icon(icono),
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        suffixIcon: Tooltip(
+          message: 'No editable: identifica al dispositivo',
+          child: Icon(Icons.lock_outline, size: 16, color: scheme.outline),
+        ),
+      ),
+      child: Text(
+        valor,
+        style: TextStyle(
+          fontSize: 16,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -774,24 +906,11 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
   }
 
   Future<void> _guardar() async {
-    final ip = _protocolo == 'tcp' ? _ipCtrl.text.trim() : null;
-    final ipVal = ip ?? '';
-    final puertoTcp =
-        _protocolo == 'tcp' ? int.tryParse(_puertoCtrl.text.trim()) : null;
-    final puertoCom =
-        _protocolo == 'serial' ? _comCtrl.text.trim() : null;
-
-    if (_protocolo == 'tcp' &&
-        (ipVal.isEmpty || puertoTcp == null || puertoTcp <= 0)) {
-      setState(() => _error = 'Indique una IP y un puerto TCP válidos.');
-      return;
-    }
-    if (_protocolo == 'serial' && (puertoCom == null || puertoCom.isEmpty)) {
-      setState(() => _error = 'Indique el puerto serial (ej. /dev/ttyUSB0).');
-      return;
-    }
-
     final b = widget.balanza;
+    // La conexión (protocolo/IP/puerto/COM) es la identidad del dispositivo y
+    // ya no es editable: se reenvía con sus valores originales. Solo se aplica
+    // la configuración de lectura (formato de trama/velocidad/delimitador) y el
+    // vínculo con el indicador.
     final body = <String, dynamic>{
       'codigo': b.codigo,
       'descripcion': b.descripcion,
@@ -802,11 +921,12 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       'activo': b.activo,
       'is_simulada': b.isSimulada,
       'protocolo': _protocolo,
-      'ip_address': ip,
-      'puerto_tcp': puertoTcp,
-      'puerto_com': (puertoCom == null || puertoCom.isEmpty)
-          ? null
-          : puertoCom,
+      'ip_address': _protocolo == 'tcp' ? _ipCtrl.text.trim() : null,
+      'puerto_tcp':
+          _protocolo == 'tcp' ? int.tryParse(_puertoCtrl.text.trim()) : null,
+      'puerto_com': _protocolo == 'serial'
+          ? (_comCtrl.text.trim().isEmpty ? null : _comCtrl.text.trim())
+          : null,
       'formato_trama': _formatoTrama,
       'baudrate': _protocolo == 'serial' ? _baudrate : 9600,
       'delimitador': _delimitador,
@@ -818,6 +938,19 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
     });
     try {
       await _api.updateItem(ApiConstants.balanza(b.id), body);
+
+      // Vínculo con el indicador: se asegura el estado final seleccionado
+      // (enlaza/desenlaza vía el endpoint dedicado, que es idempotente).
+      final nuevoInd =
+          (_indicadorSel != null && _indicadorSel!.isNotEmpty)
+              ? _indicadorSel
+              : null;
+      if (nuevoInd != null) {
+        await _api.enlazarIndicador(nuevoInd, b.id);
+      } else if (b.idIndicador != null && b.idIndicador!.isNotEmpty) {
+        await _api.enlazarIndicador(b.idIndicador!, b.id, enlazar: false);
+      }
+
       if (!mounted) return;
       widget.onGuardado();
       Navigator.of(context).pop();
@@ -880,55 +1013,190 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
             ),
             const SizedBox(height: 16),
 
+            // ─── Conexión: identidad del dispositivo (NO editable) ──────────
+            Text('Conexión (identidad del dispositivo)',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'El puerto identifica físicamente al dispositivo: si aparece con '
+              'esa entrada es porque así fue detectado y no se modifica aquí. '
+              'Para cambiar la conexión, elimínela y vuelva a detectarla.',
+              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            ),
+            const SizedBox(height: 10),
+            _campoLectura(
+              context,
+              etiqueta: 'Protocolo',
+              valor: _protocolo == 'serial' ? 'SERIAL / USB' : 'TCP / RED',
+              icono:
+                  _protocolo == 'serial' ? Icons.usb : Icons.router_outlined,
+            ),
+            const SizedBox(height: 10),
+            if (_protocolo == 'tcp') ...[
+              _campoLectura(
+                context,
+                etiqueta: 'Dirección IP',
+                valor: b.ipAddress ?? '—',
+                icono: Icons.language,
+              ),
+              const SizedBox(height: 10),
+              _campoLectura(
+                context,
+                etiqueta: 'Puerto TCP',
+                valor: '${b.puertoTcp ?? 5555}',
+                icono: Icons.router_outlined,
+              ),
+            ] else ...[
+              _campoLectura(
+                context,
+                etiqueta: 'Puerto serie',
+                valor: b.puertoCom ?? '—',
+                icono: Icons.usb,
+              ),
+            ],
+            const SizedBox(height: 14),
+            // ─── Indicador vinculado (selector funcional, solo ADMIN) ────────
+            const Text('Indicador vinculado',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            const SizedBox(height: 4),
+            const Text(
+              'Asigna qué indicador (terminal de peso) muestra el peso de esta '
+              'báscula. El indicador es esclavo: solo muestra lo que la app le '
+              'envía.',
+              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            ),
+            const SizedBox(height: 8),
+            if (widget.esAdmin)
+              DropdownButtonFormField<String?>(
+                initialValue: _indicadoresNombres.containsKey(_indicadorSel)
+                    ? _indicadorSel
+                    : null,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Indicador de esta báscula',
+                  prefixIcon: Icon(Icons.speed_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Sin vincular'),
+                  ),
+                  ..._indicadoresNombres.entries.map(
+                    (e) => DropdownMenuItem<String?>(
+                      value: e.key,
+                      child:
+                          Text(e.value, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _indicadorSel = v),
+              )
+            else
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.speed_outlined),
+                  title: const Text('Indicador vinculado'),
+                  subtitle: Text(_indicadorVinculadoTexto),
+                  trailing: (widget.balanza.idIndicador != null)
+                      ? const Icon(Icons.link, color: SwsColors.success)
+                      : const Text('—'),
+                ),
+              ),
+            const Divider(height: 24),
+            // ─── Vínculos báscula-indicador ────────────────────────────────
+            const Text('Vínculos con indicadores',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            const SizedBox(height: 4),
+            const Text(
+              'Si el vínculo aparece inactivo, actívalo aquí para que el puente '
+              'empiece a enviar el peso al indicador.',
+              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            ),
+            const SizedBox(height: 10),
+            if (_cargandoVinculos)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else if (_vinculosBalanza.isEmpty)
+              const Text('Sin vínculos registrados para esta báscula',
+                  style: TextStyle(fontSize: 12, color: SwsColors.gray500))
+            else
+              ..._vinculosBalanza.map((v) {
+                final activo = v['activo'] == true;
+                final idInd = '${v['id_indicador'] ?? ''}';
+                final indLabel =
+                    _indicadoresNombres[idInd] ?? 'Indicador $idInd';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: SwsColors.gray200),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        activo ? Icons.link : Icons.link_off,
+                        color: activo ? SwsColors.success : SwsColors.gray400,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(indLabel,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              activo ? 'Activo' : 'Inactivo',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: activo
+                                    ? SwsColors.success
+                                    : SwsColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!activo && widget.esAdmin)
+                        FilledButton.tonalIcon(
+                          onPressed: _activandoVinculo
+                              ? null
+                              : () => _activarVinculo(v),
+                          icon: _activandoVinculo
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2))
+                              : const Icon(Icons.play_arrow),
+                          label: const Text('Activar'),
+                        )
+                      else if (activo)
+                        const Icon(Icons.check_circle,
+                            color: SwsColors.success),
+                    ],
+                  ),
+                );
+              }),
+            const Divider(height: 24),
+            // ─── Configuración de lectura (editable, con ayuda) ─────────────
             if (widget.esAdmin) ...[
-              Text('connection'.tr(),
+              Text('Configuración de lectura',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(value: 'tcp', label: Text('tcp'.tr())),
-                  ButtonSegment(value: 'serial', label: Text('serial'.tr())),
-                ],
-                selected: {_protocolo},
-                onSelectionChanged: (sel) =>
-                    setState(() => _protocolo = sel.first),
-              ),
-              const SizedBox(height: 12),
-              if (_protocolo == 'tcp') ...[
-                TextField(
-                  controller: _ipCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Dirección IP',
-                    hintText: '192.168.1.50',
-                    prefixIcon: Icon(Icons.language),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _puertoCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Puerto TCP',
-                    hintText: '5555',
-                    prefixIcon: Icon(Icons.router_outlined),
-                  ),
-                ),
-              ] else ...[
-                TextField(
-                  controller: _comCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Puerto serial',
-                    hintText: '/dev/ttyUSB0 o /tmp/bsdd_entrada',
-                    prefixIcon: Icon(Icons.usb),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
               DropdownButtonFormField<String>(
                 initialValue: _formatoTrama,
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'frame_format'.tr(),
+                  helperText: 'Idioma del cable: cómo el indicador envía el '
+                      'peso. "Auto" lo detecta solo.',
+                  helperMaxLines: 3,
                   prefixIcon: const Icon(Icons.code),
                 ),
                 items: [
@@ -947,9 +1215,12 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                 DropdownButtonFormField<int>(
                   initialValue: _baudrate,
                   isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'baudrate'.tr(),
-                    prefixIcon: const Icon(Icons.speed),
+                  decoration: const InputDecoration(
+                    labelText: 'Velocidad (baudrate)',
+                    helperText: 'Velocidad del puerto serie; debe coincidir con '
+                        'la del indicador.',
+                    helperMaxLines: 3,
+                    prefixIcon: Icon(Icons.speed),
                   ),
                   items: const [
                     DropdownMenuItem(value: 1200, child: Text('1200')),
@@ -968,9 +1239,12 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
               DropdownButtonFormField<String>(
                 initialValue: _delimitador,
                 isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'frame_delimiter'.tr(),
-                  prefixIcon: const Icon(Icons.format_align_left),
+                decoration: const InputDecoration(
+                  labelText: 'Delimitador de trama',
+                  helperText: 'Marca de fin de cada lectura de peso (salto de '
+                      'línea, retorno de carro, etc.).',
+                  helperMaxLines: 3,
+                  prefixIcon: Icon(Icons.format_align_left),
                 ),
                 items: [
                   DropdownMenuItem(
@@ -989,7 +1263,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
               FilledButton.icon(
                 onPressed: _guardando ? null : _guardar,
                 icon: const Icon(Icons.save_outlined),
-                label: Text(_guardando ? 'Guardando…' : 'Guardar conexión'),
+                label: Text(_guardando ? 'Guardando…' : 'Guardar configuración'),
               ),
               const SizedBox(height: 8),
             ],

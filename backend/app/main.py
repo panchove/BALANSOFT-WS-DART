@@ -35,11 +35,8 @@ log = configurar_logging(
 )
 API_VERSION = "1.0.0"
 
-# Rol del despliegue: "local" monta la API operativa (estación); "server" monta
-# la API de cuenta/licencia central (docs/MANEJO_DB.md).
 ROUTERS = SERVER_ROUTERS if settings.app_role == "server" else API_ROUTERS
 
-# --- CORS hardening --------------------------------------------------------
 _origins = settings.cors_origins_list
 if "*" in _origins and settings.app_env != "development":
     log.warning(
@@ -54,14 +51,10 @@ async def lifespan(app: FastAPI):
     log.info(
         "Balansoft-WS API iniciando (env=%s, rol=%s)", settings.app_env, settings.app_role
     )
-    # Programador de notificaciones: único proceso que sobrevive al cierre de
-    # la app Flutter, así que él dibuja los avisos del SO cuando corresponde.
     programador = get_notification_scheduler()
     programador.iniciar()
-    # Semáforos con control automático: el vigilante decide el LED según el peso
-    # en vivo de la báscula vinculada (docs/SEMAFORO.md).
     await get_semaforo_controller().asegurar_activos()
-    # Restauración de vínculos Báscula -> Indicador (sobreviven a reinicios)
+    
     try:
         async with AsyncSessionLocal() as db:
             res = await db.execute(
@@ -75,14 +68,15 @@ async def lifespan(app: FastAPI):
             log.info("Vínculos activos restaurados")
     except Exception as exc:
         log.debug("Error restaurando vínculos: %s", exc)
+        
     yield
+    
     await programador.detener()
     await get_semaforo_controller().detener_todas()
     try:
         await VINCULO_MGR.detener_todos()
     except Exception:
         pass
-    # Emparejamiento: cerrar las conexiones persistentes con las balanzas.
     await get_scale_session_manager().cerrar_todas()
     log.info("Balansoft-WS API detenida")
 
@@ -90,77 +84,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=API_VERSION,
-    summary="API REST de estación de pesaje industrial para camiones (multi-empresa).",
-    description=(
-        "API REST de estación de pesaje industrial para camiones "
-        "(multi-empresa). Autenticación JWT, boletos con máquina de estados "
-        "PENDIENTE/CERRADO/MODIFICADO/ANULADO, kardex numérico (10 INGRESO / "
-        "60 DESPACHO), auditoría, licencias (SGLB) y HAL de balanza para "
-        "lectura de peso en vivo (serial/TCP).\n\n"
-        "**Esquema de autenticación:** `Authorization: Bearer <access_token>` "
-        "(JWT HS256). El refresco se realiza con `POST /api/v1/auth/refresh-token`.\n\n"
-        "**Trazabilidad:** REQ-NF-ARQ-001 (multi-empresa), REQ-NF-ARQ-002 "
-        "(máquina de estados del boleto), REQ-NF-ARQ-003 (kardex numérico), "
-        "REQ-NF-ARQ-004 (estabilidad 3 s / HAL), REQ-NF-ARQ-007 (roles "
-        "ADMIN/SUPERVISOR/OPERADOR), REQ-NF-SEG-001 (auditoría), "
-        "REQ-NF-ARQ-010 (timestamps UTC)."
-    ),
-    openapi_tags=[
-        {
-            "name": "Health",
-            "description": "Estado y versión de la API.",
-        },
-        {
-            "name": "Authentication",
-            "description": "Registro, login, refresh/logout, JWT y administración de licencias de la empresa.",
-        },
-        {
-            "name": "Weighing",
-            "description": "Boletos de pesaje (entrada/salida/cierre/anulación), pendientes y lectura de peso en vivo vía HAL (REQ-NF-ARQ-004).",
-        },
-        {
-            "name": "Catalogo",
-            "description": "Sincronización combinada de catálogos para operación offline.",
-        },
-        {
-            "name": "Flota",
-            "description": "Camiones y remolques.",
-        },
-        {
-            "name": "Inventario",
-            "description": "Productos, almacenes y balanzas.",
-        },
-        {
-            "name": "Directorio",
-            "description": "Transportes, conductores y terceros (clientes/proveedores).",
-        },
-        {
-            "name": "Reports",
-            "description": "Reportes diarios/mensuales/kardex y avanzados (transportista, tercero, rango de peso, comparativo mensual).",
-        },
-        {
-            "name": "Sync",
-            "description": "Sincronización offline-first entre estaciones y servidor.",
-        },
-        {
-            "name": "Archivos",
-            "description": "Subida/descarga de archivos adjuntos (fotos de pesajes).",
-        },
-        {
-            "name": "Auditoria",
-            "description": "Consulta del registro de auditoría funcional (REQ-NF-SEG-001): acción, entidad, usuario, IP y timestamp UTC.",
-        },
-    ],
-    contact={
-        "name": "Equipo BALANSOFT",
-        "url": "https://balansoft.local",
-    },
-    docs_url="/docs" if settings.api_docs_enabled else None,
-    redoc_url="/redoc" if settings.api_docs_enabled else None,
     lifespan=lifespan,
 )
 
-# --- Middleware (orden: último añadido = más externo) ------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
@@ -174,12 +100,10 @@ if settings.rate_limit_enabled:
 if settings.metrics_enabled:
     app.add_middleware(MetricsMiddleware)
 
+# Registro de routers SIN prefijo global
 for router in ROUTERS:
     app.include_router(router)
 
-# Exception handlers globales de BD (Fase 1 SQL Server): 503 de esquema
-# pendiente / sin conexión solo cuando el motor es SQL Server; en PostgreSQL
-# se re-lanzan los errores y el 500 de siempre queda intacto.
 registrar_manejadores_bd(app)
 
 os.makedirs(settings.media_dir, exist_ok=True)
@@ -192,9 +116,6 @@ async def health() -> dict:
         "status": "healthy",
         "version": API_VERSION,
         "timestamp": datetime.now(UTC).isoformat(),
-        # Diagnóstico para el instalador/soporte: timeout efectivo del central
-        # (CENTRAL_TIMEOUT) sin leer el .env. Clave nueva; las existentes
-        # no cambian.
         "central": {
             "timeout_s": settings.central_timeout,
             "max_intentos": _MAX_INTENTOS_CENTRAL,

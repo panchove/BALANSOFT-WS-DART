@@ -24,9 +24,11 @@ class IndicadorSerialHAL(IndicadorHAL):
 
     def __init__(self, puerto: str, baudrate: int = 9600, timeout: float = 1.0, trama_formato: str = "st_gs"):
         self.puerto = puerto or ""
-        self.baudrate = int(baudrate or 9600)
+        # CORRECCIÓN PYREFLY: Quitamos el int() innecesario en la línea 27
+        self.baudrate = baudrate or 9600 
         self.timeout = float(timeout or 1.0)
         self.trama_formato = trama_formato
+        self._ser = None
 
     @classmethod
     def _lock_for(cls, puerto: str) -> threading.Lock:
@@ -65,26 +67,101 @@ class IndicadorSerialHAL(IndicadorHAL):
             return False
         if self.puerto.startswith("/") and not os.path.exists(self.puerto):
             return False
+        
+        print(f"[HAL] Intentando escribir en {self.puerto} el peso {peso_kg}")
+        
         lock = self._lock_for(self.puerto)
         with lock:
             try:
-                with serial.Serial(self.puerto, self.baudrate, timeout=self.timeout) as ser:
-                    data = self._formatear_trama(peso_kg, trama).encode("ascii", errors="ignore")
-                    ser.write(data)
-                    try:
-                        ser.flush()
-                    except Exception:
-                        pass
+                if self._ser is None or not self._ser.is_open:
+                    self._ser = serial.Serial()
+                    self._ser.port = self.puerto
+                    self._ser.baudrate = self.baudrate
+                    self._ser.timeout = self.timeout
+                    self._ser.dsrdtr = False
+                    self._ser.rtscts = False
+                    self._ser.open()
+                    self._ser.dtr = False
+                    self._ser.rts = False
+                    print(f"[HAL] Puerto {self.puerto} abierto")
+
+                data = self._formatear_trama(peso_kg, trama).encode("ascii", errors="ignore")
+                self._ser.write(data)
+                self._ser.flush()
+                print(f"[HAL] Enviado con éxito: {data}")
                 return True
             except Exception as exc:
+                print(f"[HAL] ERROR al escribir: {exc}")
                 log.debug("indicador serial write fallo %s: %s", self.puerto, exc)
+                try:
+                    if self._ser and self._ser.is_open:
+                        self._ser.close()
+                except Exception:
+                    pass
+                self._ser = None
                 return False
+
+    async def probar_conexion(self) -> dict:
+        """
+        Envía un peso de prueba (0.00) y espera unos milisegundos a ver si
+        el dispositivo responde (ej. la ESP32 devuelve "OK").
+        """
+        try:
+            import serial
+        except ImportError:
+            return {"conectado": False, "detalle": "pyserial no instalado"}
+
+        if not self.puerto:
+            return {"conectado": False, "detalle": "Puerto no configurado"}
+
+        # Ejecutamos en un hilo para no bloquear el event loop de FastAPI
+        return await asyncio.to_thread(self._probar_locked)
+
+    def _probar_locked(self) -> dict:
+        import serial
+
+        lock = self._lock_for(self.puerto)
+        with lock:
+            try:
+                # Usamos un bloque with para que se cierre automáticamente al terminar
+                with serial.Serial() as ser:
+                    ser.port = self.puerto
+                    ser.baudrate = self.baudrate
+                    ser.timeout = 1.5 # Damos 1.5s de margen para que la ESP32 responda
+                    ser.dsrdtr = False
+                    ser.rtscts = False
+                    ser.open()
+                    ser.dtr = False
+                    ser.rts = False
+                    
+                    # Enviamos un peso de prueba
+                    ser.write(b"000.00\n")
+                    ser.flush()
+                    
+                    # Leemos lo que responda el dispositivo
+                    respuesta = ser.readline().decode('ascii', errors='ignore').strip()
+                    
+                    if respuesta:
+                        return {
+                            "conectado": True, 
+                            "recibido": respuesta,
+                            "detalle": "Dispositivo respondió correctamente"
+                        }
+                    else:
+                        return {
+                            "conectado": True, 
+                            "recibido": "(sin respuesta)",
+                            "detalle": "Puerto abierto, pero no hubo eco"
+                        }
+            except Exception as exc:
+                return {"conectado": False, "detalle": str(exc)}
 
 
 class IndicadorHttpHAL(IndicadorHAL):
     def __init__(self, ip: str, puerto: int = 80, ruta: str = "/api/peso", usar_https: bool = False, timeout: float = 2.0):
         self.ip = ip or "127.0.0.1"
-        self.puerto = int(puerto or 80)
+        # CORRECCIÓN PYREFLY: Quitamos el int() innecesario en la línea 107
+        self.puerto = puerto or 80
         self.ruta = ruta or "/api/peso"
         scheme = "https" if usar_https else "http"
         if (scheme == "http" and self.puerto == 80) or (scheme == "https" and self.puerto == 443):

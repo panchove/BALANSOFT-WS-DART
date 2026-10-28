@@ -1306,6 +1306,18 @@ Future<Response> getMonthlyReport(int year, int month) async {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  Future<bool> getPesoManualPermitido() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.configPesoManual}');
+    return response.data['permitido'] == true;
+  }
+
+  Future<void> setPesoManualPermitido(bool permitido) async {
+    await _dio.put(
+      '$_baseUrl${ApiConstants.configPesoManual}',
+      data: {'permitido': permitido},
+    );
+  }
+
   /// Resuelve una URL relativa del servidor (`/media/...`) a una URL completa
   /// apuntando a la API actual.
   String mediaUrl(String url) {

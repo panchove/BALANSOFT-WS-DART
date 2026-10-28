@@ -300,6 +300,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   bool _hayBascula = false;
   bool _haySemaforoActivo = false;
   bool _pesoManualCambiadoPorUsuario = false;
+  bool _pesoManualPermitido = true;
 
   UnidadMedida? _medida;
   int _medidaSeed = 0;
@@ -359,6 +360,43 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   String _almacenTexto = '';
   String _balanzaTexto = '';
   String _terceroTexto = '';
+
+  /// Lista ordenada de índices de los campos que deben recibir el foco
+  /// con las flechas. Solo incluye:
+  /// - Datos del Pesaje (Camión, Remolque, Transporte, etc.)
+  /// - Datos Adicionales (solo si estamos en modo salida)
+  /// - Observaciones
+  List<int> _camposNavegables() {
+    final lista = <int>[
+      _idxCamion,
+      if (_remolque) _idxRemolque,
+      _idxTransporte,
+      _idxConductor,
+      _idxProducto,
+      _idxAlmacen,
+      _idxBalanza,
+      _idxTipoTercero,
+      _idxTercero,
+    ];
+
+    // Datos Adicionales solo si estamos en modo salida
+    if (_boletoSalida != null) {
+      lista.addAll([
+        _idxDocumento,
+        _idxGuiaSunagro,
+        _idxMedida,
+        _idxUnidades,
+        _idxDensidad,
+        _idxFlete,
+        _idxCostoFlete,
+      ]);
+    }
+
+    // Observaciones siempre al final
+    lista.add(_idxObservaciones);
+
+    return lista;
+  }
 
   final Map<String, List<Object>> _nuevos = {};
   String? _numeroBoleto;
@@ -466,6 +504,13 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   Future<void> _cargarPermisosYEstado() async {
     final user = await di.sl<LocalStorage>().getCachedUser();
+
+    // 🆕 Leer el flag ANTES de calcular _esPesoManual
+    bool permitido = true;
+    try {
+      permitido = await di.sl<ApiClient>().getPesoManualPermitido();
+    } catch (_) {}
+
     bool hayBascula = false;
     List<Scale> balanzas = const [];
     bool haySemaforoActivo = false;
@@ -494,16 +539,35 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     }
     if (!mounted) return;
     setState(() {
+      _pesoManualPermitido = permitido;   // 🆕
       _puedePesoManual = user?.rol == 'ADMIN' || user?.rol == 'SUPERVISOR';
       _hayBascula = hayBascula;
       _haySemaforoActivo = haySemaforoActivo;
       if (!_pesoManualCambiadoPorUsuario) {
-        _esPesoManual = !hayBascula;
+        // 🆕 Editable si NO hay báscula O si el admin permitió peso manual
+        _esPesoManual = !hayBascula || permitido;
       }
       _balanzasDisponibles = balanzas;
       _aplicarBalanzaPorDefecto(modoSalida: _boletoSalida != null);
     });
     unawaited(_cargarConfigFotosPlaca());
+  }
+
+  Future<void> _cargarPesoManualPermitido() async {
+    try {
+      final permitido = await di.sl<ApiClient>().getPesoManualPermitido();
+      if (mounted) {
+        setState(() {
+          _pesoManualPermitido = permitido;
+          // 🆕 Si el admin permite peso manual, desbloquear la edición del campo
+          if (permitido && !_pesoManualCambiadoPorUsuario) {
+            _esPesoManual = true;
+          }
+        });
+      }
+    } catch (_) {
+      // default true
+    }
   }
 
   Future<void> _cargarConfigFotosPlaca() async {
@@ -588,11 +652,15 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     final key = event.logicalKey;
     if (_alertaAbierta || _hayDialogAbierto()) return false;
 
+    if (key == LogicalKeyboardKey.f1) { _limpiarFormulario(); return true; }
+    if (key == LogicalKeyboardKey.f1) { _limpiarFormulario(); return true; }      // 🆕 F1
     if (key == LogicalKeyboardKey.f2) { _registrarEntrada(); return true; }
     if (key == LogicalKeyboardKey.f3) { _capturarPeso(); return true; }
     if (key == LogicalKeyboardKey.f4) { _onSave(); return true; }
     if (key == LogicalKeyboardKey.f5) { _abrirSelectorImpresion(); return true; }
+    if (key == LogicalKeyboardKey.f7) { _abrirBusquedaPesajes(); return true; }
     if (key == LogicalKeyboardKey.f6) { _abrirSelectorSalida(); return true; }
+    if (key == LogicalKeyboardKey.f7) { _abrirBusquedaPesajes(); return true; }   // 🆕 F7
     if (key == LogicalKeyboardKey.escape) {
       if (_hayDialogAbierto()) return false;
       _salirConConfirmacion(); return true;
@@ -611,9 +679,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   }
 
   bool _hayDialogAbierto() {
-    final ctx = FocusManager.instance.primaryFocus?.context;
-    if (ctx == null) return false;
-    return ModalRoute.of(ctx) is PopupRoute;
+    final ruta = ModalRoute.of(context);
+    if (ruta == null) return false;
+    return !ruta.isCurrent;
   }
 
   Future<void> _salirConConfirmacion() async {
@@ -674,33 +742,61 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   ];
 
   KeyEventResult _manejarFlechas(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
-    final delta = switch (event.logicalKey) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final delta = switch (key) {
+      LogicalKeyboardKey.arrowDown => 1,
+      LogicalKeyboardKey.arrowUp => -1,
       LogicalKeyboardKey.arrowRight => 1,
       LogicalKeyboardKey.arrowLeft => -1,
       _ => 0,
     };
+
     if (delta == 0) return KeyEventResult.ignored;
+
     final idx = _focos.indexWhere((f) => f?.hasFocus == true);
-    if (idx < 0 || !_confirmados[idx]) return KeyEventResult.ignored;
+    if (idx < 0) return KeyEventResult.ignored;
+
+    final navegables = _camposNavegables();
+    if (!navegables.contains(idx)) return KeyEventResult.ignored;
+
+    // Si el campo no está confirmado, permitir escribir pero NO mover foco.
+    // Si está confirmado, mover.
+    if (!_confirmados[idx]) return KeyEventResult.ignored;
+
     _moverFocoDesde(idx, delta);
     return KeyEventResult.handled;
   }
 
   void _moverFocoDesde(int actual, int delta) {
-    final visibles = [for (final i in _ordenEfectivo()) if (_focos[i] != null) i];
-    final pos = visibles.indexOf(actual);
-    if (pos < 0) return;
-    final nuevo = (pos + delta).clamp(0, visibles.length - 1);
-    if (nuevo != pos) _focos[visibles[nuevo]]?.requestFocus();
+    final navegables = _camposNavegables();
+    final idxActual = navegables.indexOf(actual);
+    if (idxActual < 0) return;
+
+    final nuevoIdx = (idxActual + delta).clamp(0, navegables.length - 1);
+    if (nuevoIdx == idxActual) return;
+
+    final siguienteCampo = navegables[nuevoIdx];
+    _focos[siguienteCampo]?.requestFocus();
   }
 
   void _avanzarAlSiguienteCampo(int actual) {
-    final visibles = [for (final i in _ordenEfectivo()) if (_focos[i] != null) i];
-    final pos = visibles.indexOf(actual);
-    if (pos < 0) return;
-    if (pos >= visibles.length - 1) { FocusScope.of(context).unfocus(); return; }
-    _focos[visibles[pos + 1]]?.requestFocus();
+    final navegables = _camposNavegables();
+    final idxActual = navegables.indexOf(actual);
+    if (idxActual < 0) {
+      // Si el campo actual no es navegable, no hacer nada
+      return;
+    }
+
+    if (idxActual >= navegables.length - 1) {
+      // Si es el último, quitar el foco
+      FocusScope.of(context).unfocus();
+      return;
+    }
+
+    final siguienteCampo = navegables[idxActual + 1];
+    _focos[siguienteCampo]?.requestFocus();
   }
 
   void _registrarNuevo(String tipo, Object item) => setState(() => (_nuevos[tipo] ??= []).add(item));
@@ -738,7 +834,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     if (_alertaAbierta || _guardandoPesaje) return;
     final modoSalida = _boletoSalida != null;
 
-    if (!_hayBascula && _esPesoManual) {
+    if (_esPesoManual) {
       final valor = double.tryParse(_pesoActivoTexto(modoSalida: modoSalida)) ?? 0;
       if (valor <= 0) {
         _avisoSimple('weighing_capture_cabina_first'.tr(), SwsColors.warning);
@@ -966,7 +1062,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   bool _validarCapturaRealizada() {
     if (_objetivoPeso == _ObjetivoPeso.fijado) return true;
-    if (!_hayBascula && _esPesoManual) {
+    if (_esPesoManual) {
       final valor = double.tryParse(_pesoActivoTexto(modoSalida: _boletoSalida != null)) ?? 0;
       if (valor > 0) return true;
     }
@@ -1231,7 +1327,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _terceroTexto = '';
       _remolque = false;
       if (!_pesoManualCambiadoPorUsuario) {
-        _esPesoManual = !_hayBascula;
+        _esPesoManual = !_hayBascula || _pesoManualPermitido;   // 🆕
       }
       _aplicarBalanzaPorDefecto(modoSalida: false);
       _balanzaTexto = _balanzaSeleccionada?.etiqueta ?? '';
@@ -1286,7 +1382,20 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   Future<void> _onSave() async {
     if (_alertaAbierta || _guardandoPesaje) return;
-    if (!(_formKey.currentState?.validate() ?? false)) {
+
+    if (!_hayBascula && !_pesoManualPermitido) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        'Peso manual deshabilitado por el administrador. '
+        'Conecte una báscula para continuar.',
+      ),
+      backgroundColor: SwsColors.danger,
+      duration: const Duration(seconds: 4),
+    ));
+    return;
+  }
+
+  if (!(_formKey.currentState?.validate() ?? false)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('weighing_min_fields_required'.tr()), backgroundColor: SwsColors.warning));
       return;
@@ -1307,6 +1416,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       _guardar();
       return;
     }
+
+    
 
     if (!_validarPesoRemolqueObligatorio()) return;
     if (!_validarCapturaRealizada()) return;
@@ -1605,10 +1716,17 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           child: SingleChildScrollView(
             controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-            child: Form(
-              key: _formKey,
-              child: Focus(
-                onKeyEvent: _manejarFlechas,
+            child: FocusScope(
+              onKeyEvent: (node, event) {
+                // El FocusScope captura las teclas antes que los hijos.
+                if (event is KeyDownEvent) {
+                  final result = _manejarFlechas(node, event);
+                  if (result == KeyEventResult.handled) return result;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Form(
+                key: _formKey,
                 child: isWide
                     ? _buildThreeColumnLayout(context, data, trailers, terceros)
                     : _buildSingleColumnLayout(context, data, trailers, terceros),
@@ -1634,9 +1752,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
             children: [
               _SectionCard(title: 'LECTURA DE PESO', icon: Icons.monitor_weight,
                 children: _buildLecturaSection(context)),
-              const SizedBox(height: 16),
-              _SectionCard(title: 'OBSERVACIONES', icon: Icons.notes,
-                children: _buildObservacionesSection()),
             ],
           ),
         ),
@@ -1653,6 +1768,9 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
                 _SectionCard(title: 'DATOS ADICIONALES (SALIDA)', icon: Icons.description,
                   children: _buildAdicionalesSection(context)),
               ],
+              const SizedBox(height: 16),
+              _SectionCard(title: 'OBSERVACIONES', icon: Icons.notes,
+                children: _buildObservacionesSection()), // ← AGREGAR AQUÍ
             ],
           ),
         ),
@@ -1988,6 +2106,7 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
 
   Widget _buildIndicadorSemaforo() {
     final coloresLuces = [Colors.red, Colors.amber, Colors.green, Colors.blue, Colors.purple, Colors.orange];
+    final nombresLuces = ['Rojo', 'Amarillo', 'Verde', 'Azul', 'Morado', 'Naranja'];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -1997,28 +2116,56 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           final colorBase = coloresLuces[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: Container(
-              width: 16, height: 16,
-              decoration: BoxDecoration(
-                color: configurada ? colorBase : Colors.grey.shade700,
-                shape: BoxShape.circle,
-                border: Border.all(color: configurada ? Colors.white24 : Colors.transparent, width: 1),
-                boxShadow: configurada ? [BoxShadow(color: colorBase.withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 1)] : []),
-              child: configurada ? null : Center(child: Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle))),
+            child: Tooltip(
+              message: 'Encender ${nombresLuces[index]}',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => unawaited(_comandoSemaforoManual({
+                  'color': nombresLuces[index].toLowerCase(),
+                  'action': 'on',
+                })),
+                child: Container(
+                  width: 20, height: 20,
+                  decoration: BoxDecoration(
+                    color: configurada ? colorBase : colorBase.withValues(alpha: 0.25),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: configurada ? Colors.white24 : colorBase.withValues(alpha: 0.6),
+                      width: 1.5,
+                    ),
+                    boxShadow: configurada
+                        ? [BoxShadow(color: colorBase.withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 1)]
+                        : [],
+                  ),
+                  child: const Icon(Icons.touch_app, size: 10, color: Colors.white54),
+                ),
+              ),
             ),
           );
         }),
         const SizedBox(width: 12),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: _speakerConfigurado ? SwsColors.blue100 : Colors.transparent,
-            shape: BoxShape.circle,
-            border: Border.all(color: _speakerConfigurado ? SwsColors.primary : Colors.grey.shade700, width: 1.5)),
-          child: Icon(Icons.volume_up, size: 16,
-            color: _speakerConfigurado ? SwsColors.primary : Colors.grey.shade600.withValues(alpha: 0.5)),
+        // Botón del zumbador (sigue siendo clickeable).
+        Tooltip(
+          message: 'Activar zumbador',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => unawaited(_comandoSemaforoManual({'zumbador': 'on'})),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _speakerConfigurado ? SwsColors.blue100 : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _speakerConfigurado ? SwsColors.primary : Colors.grey.shade700,
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(Icons.volume_up, size: 16,
+                color: _speakerConfigurado
+                    ? SwsColors.primary
+                    : Colors.grey.shade600.withValues(alpha: 0.5)),
+            ),
+          ),
         ),
       ]),
     );
@@ -2041,14 +2188,37 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       else
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(color: SwsColors.warning.withValues(alpha: 0.08),
+          decoration: BoxDecoration(
+            color: _pesoManualPermitido
+                ? SwsColors.warning.withValues(alpha: 0.08)
+                : SwsColors.danger.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: SwsColors.warning.withValues(alpha: 0.25))),
+            border: Border.all(
+              color: _pesoManualPermitido
+                  ? SwsColors.warning.withValues(alpha: 0.25)
+                  : SwsColors.danger.withValues(alpha: 0.35),
+            ),
+          ),
           child: Row(children: [
-            const Icon(Icons.edit_note, size: 18, color: SwsColors.warning),
+            Icon(
+              _pesoManualPermitido ? Icons.edit_note : Icons.block,
+              size: 18,
+              color: _pesoManualPermitido ? SwsColors.warning : SwsColors.danger,
+            ),
             const SizedBox(width: 8),
-            Expanded(child: Text('weighing_manual_weight_no_scale'.tr(),
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+            Expanded(
+              child: Text(
+                _pesoManualPermitido
+                    ? 'weighing_manual_weight_no_scale'.tr()
+                    : 'Peso manual deshabilitado por el administrador. '
+                      'Conecte una báscula para poder guardar.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: _pesoManualPermitido ? null : SwsColors.danger,
+                ),
+              ),
+            ),
           ]),
         ),
       const SizedBox(height: 12),
@@ -2133,21 +2303,13 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
       ],
       const SizedBox(height: 10),
       _CapturarPesoButton(
-        key: const Key('capturar_peso_button'), onTap: _capturarPeso,
-        etiqueta: _etiquetaCapturarPeso, pendiente: _objetivoPeso != _ObjetivoPeso.fijado),
-      if (_puedePesoManual && _hayBascula) ...[
-        const SizedBox(height: 6),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero, dense: true,
-          title: Text('weighing_manual_record'.tr(), style: const TextStyle(fontSize: 12.5)),
-          subtitle: Text('weighing_supervisor_admin_only'.tr(), style: const TextStyle(fontSize: 11)),
-          value: _esPesoManual, activeThumbColor: Theme.of(context).colorScheme.primary,
-          onChanged: (v) => setState(() {
-            _esPesoManual = v;
-            _pesoManualCambiadoPorUsuario = true;
-          }),
-        ),
-      ],
+        key: const Key('capturar_peso_button'),
+        onTap: (_hayBascula || _pesoManualPermitido) ? _capturarPeso : null,
+        etiqueta: _etiquetaCapturarPeso,
+        pendiente: _objetivoPeso != _ObjetivoPeso.fijado,
+        habilitado: _hayBascula || _pesoManualPermitido,   // 🆕
+      ),
+        
       const SizedBox(height: 8),
       _WeightTable(
         pesoEntrada: double.tryParse(_pesoEntradaCtrl.text) ?? 0,
@@ -2470,44 +2632,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
           fotos: _fotosCamion,
           onChanged: (f) => setState(() => _fotosCamion = f),
         ),
-        const SizedBox(height: 16),
-        _SectionCard(
-          title: 'CONTROL MANUAL DE SEMÁFORO',
-          icon: Icons.traffic,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => unawaited(_comandoSemaforoManual({'color': 'rojo', 'action': 'on'})),
-                  icon: const Icon(Icons.circle, color: Colors.red, size: 14),
-                  label: const Text('LED Rojo'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => unawaited(_comandoSemaforoManual({'color': 'verde', 'action': 'on'})),
-                  icon: const Icon(Icons.circle, color: Colors.green, size: 14),
-                  label: const Text('LED Verde'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => unawaited(_comandoSemaforoManual({'color': 'amarillo', 'action': 'on'})),
-                  icon: const Icon(Icons.circle, color: Colors.amber, size: 14),
-                  label: const Text('LED Amarillo'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => unawaited(_comandoSemaforoManual({'all': 'off'})),
-                  icon: const Icon(Icons.power_settings_new),
-                  label: const Text('Apagar todo'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => unawaited(_comandoSemaforoManual({'zumbador': 'on'})),
-                  icon: const Icon(Icons.volume_up),
-                  label: const Text('Zumbador'),
-                ),
-              ],
-            ),
-          ],
-        ),
       ],
     ];
   }
@@ -2627,37 +2751,62 @@ class _QuickActionBar extends StatelessWidget {
 }
 
 class _CapturarPesoButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final String etiqueta;
   final bool pendiente;
+  final bool habilitado;
 
-  const _CapturarPesoButton({super.key, required this.onTap,
-    required this.etiqueta, this.pendiente = false});
+  const _CapturarPesoButton({
+    super.key,
+    required this.onTap,
+    required this.etiqueta,
+    this.pendiente = false,
+    this.habilitado = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       child: FilledButton(
-        onPressed: onTap,
+        onPressed: habilitado ? onTap : null,
         style: FilledButton.styleFrom(
-          backgroundColor: pendiente ? SwsColors.accent : SwsColors.success,
+          backgroundColor: !habilitado
+              ? SwsColors.gray400
+              : (pendiente ? SwsColors.accent : SwsColors.success),
           minimumSize: const Size.fromHeight(46),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.play_circle_outline, size: 22),
-          const SizedBox(width: 8),
-          Flexible(child: Text(etiqueta, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(4)),
-            child: const Text('F3', style: TextStyle(fontSize: 10,
-              fontFamily: 'monospace', fontWeight: FontWeight.w700, color: Colors.white)),
+          Icon(
+            habilitado ? Icons.play_circle_outline : Icons.block,
+            size: 22,
           ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              habilitado ? etiqueta : 'Peso manual deshabilitado',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (habilitado) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('F3',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  )),
+            ),
+          ],
         ]),
       ),
     );

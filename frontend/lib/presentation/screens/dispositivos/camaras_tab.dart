@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
+import '../../widgets/camara_preview.dart';
 
 class CamarasConfigTab extends StatefulWidget {
   const CamarasConfigTab({super.key});
@@ -32,7 +33,8 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
     try {
       final resp = await _api.getList(ApiConstants.camaras);
       final data = resp.data as List? ?? [];
-      _items = data.map((e) => Camara.fromJson(e as Map<String, dynamic>)).toList();
+      _items =
+          data.map((e) => Camara.fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {
       _items = [];
     }
@@ -44,7 +46,11 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CamaraDetailSheet(camara: c, onGuardado: _cargar),
+      builder: (_) => _CamaraDetailSheet(
+        camara: c,
+        todasLasCamaras: _items,
+        onGuardado: _cargar,
+      ),
     );
   }
 
@@ -70,7 +76,8 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
                     hintText: context.tr('buscar'),
                     prefixIcon: const Icon(Icons.search),
                     isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                   onChanged: (v) => setState(() => _filtro = v),
                 ),
@@ -92,9 +99,11 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.videocam_outlined, size: 48, color: Colors.grey.shade400),
+                          Icon(Icons.videocam_outlined,
+                              size: 48, color: Colors.grey.shade400),
                           const SizedBox(height: 12),
-                          Text(context.tr('Sin cámaras configuradas'), style: TextStyle(color: Colors.grey.shade600)),
+                          Text(context.tr('Sin cámaras configuradas'),
+                              style: TextStyle(color: Colors.grey.shade600)),
                         ],
                       ),
                     )
@@ -104,16 +113,24 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
                       itemBuilder: (context, i) {
                         final item = filtrados[i];
                         String conn = item.esLocal ? 'USB / Local' : 'IP / HTTP';
-                        if (!item.esLocal && item.urlSnapshot.isNotEmpty) conn = 'IP - ${item.urlSnapshot}';
+                        if (!item.esLocal && item.urlSnapshot.isNotEmpty) {
+                          conn = 'IP - ${item.urlSnapshot}';
+                        }
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: item.activo ? SwsColors.primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.12),
-                              child: Icon(Icons.videocam_outlined, color: item.activo ? SwsColors.primary : Colors.grey),
+                              backgroundColor: item.activo
+                                  ? SwsColors.primary.withValues(alpha: 0.1)
+                                  : Colors.grey.withValues(alpha: 0.12),
+                              child: Icon(Icons.videocam_outlined,
+                                  color: item.activo
+                                      ? SwsColors.primary
+                                      : Colors.grey),
                             ),
                             title: Text(item.descripcion),
-                            subtitle: Text('Conexión: $conn • Ubicación: ${item.ubicacionLegible}'),
+                            subtitle: Text(
+                                'Conexión: $conn • Ubicación: ${item.ubicacionLegible}'),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => _abrirDetalle(item),
                           ),
@@ -127,8 +144,14 @@ class _CamarasConfigTabState extends State<CamarasConfigTab> {
 }
 
 class _CamaraDetailSheet extends StatefulWidget {
-  const _CamaraDetailSheet({required this.camara, required this.onGuardado});
+  const _CamaraDetailSheet({
+    required this.camara,
+    required this.todasLasCamaras,
+    required this.onGuardado,
+  });
+
   final Camara camara;
+  final List<Camara> todasLasCamaras;
   final VoidCallback onGuardado;
 
   @override
@@ -138,25 +161,20 @@ class _CamaraDetailSheet extends StatefulWidget {
 class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
   final _api = di.sl<ApiClient>();
 
-  late String _origen = widget.camara.origen; // ip | local
   late String _ubicacion = widget.camara.ubicacion; // entrada | salida | ambos
-  late final TextEditingController _urlCtrl = TextEditingController(text: widget.camara.urlSnapshot);
-  late final TextEditingController _dispCtrl = TextEditingController(text: widget.camara.dispositivo ?? '');
-  late final TextEditingController _usuarioCtrl = TextEditingController(text: widget.camara.usuario ?? '');
-  late final TextEditingController _passCtrl = TextEditingController();
-
+  late bool _activo = widget.camara.activo;
   bool _guardando = false;
-  bool _probando = false;
   String? _error;
-  String? _info;
 
-  @override
-  void dispose() {
-    _urlCtrl.dispose();
-    _dispCtrl.dispose();
-    _usuarioCtrl.dispose();
-    _passCtrl.dispose();
-    super.dispose();
+  /// Otra cámara ACTIVA (distinta de esta) con la misma ubicación exclusiva
+  /// (`entrada` o `salida`). `ambos` no conflicúa: puede servir a los dos.
+  Camara? get _conflicto {
+    if (_ubicacion == 'ambos') return null;
+    for (final c in widget.todasLasCamaras) {
+      if (c.id == widget.camara.id || !c.activo) continue;
+      if (c.ubicacion == _ubicacion) return c;
+    }
+    return null;
   }
 
   String _detalleError(Object e) {
@@ -167,48 +185,38 @@ class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
     return 'No se pudo completar la acción.';
   }
 
+  /// Guarda la configuración de uso (ubicación/activo). La conexión
+  /// (origen/URL/dispositivo) es la identidad de la cámara y se reenvía con
+  /// sus valores originales: no se modifica aquí.
   Future<void> _guardar() async {
-    if (_origen == 'ip') {
-      if (_urlCtrl.text.trim().isEmpty) {
-        setState(() => _error = 'Indique la URL de snapshot (IP/HTTP).');
-        return;
-      }
-    } else {
-      if (_dispCtrl.text.trim().isEmpty) {
-        setState(() => _error = 'Indique el dispositivo USB/Local (/dev/video0 o similar).');
-        return;
-      }
-    }
-
     setState(() {
       _guardando = true;
       _error = null;
-      _info = null;
     });
-
     try {
+      final c = widget.camara;
       final body = <String, dynamic>{
-        'descripcion': widget.camara.descripcion,
-        'codigo': widget.camara.codigo,
-        'marca': widget.camara.marca,
-        'modelo': widget.camara.modelo,
-        'activo': widget.camara.activo,
-        'is_simulada': widget.camara.isSimulada,
-        'origen': _origen,
-        'url_snapshot': _origen == 'ip' ? _urlCtrl.text.trim() : '',
-        'dispositivo': _origen == 'local' ? _dispCtrl.text.trim() : null,
-        'usuario': _usuarioCtrl.text.trim().isEmpty ? null : _usuarioCtrl.text.trim(),
+        'descripcion': c.descripcion,
+        'codigo': c.codigo,
+        'marca': c.marca,
+        'modelo': c.modelo,
+        'activo': _activo,
+        'is_simulada': c.isSimulada,
+        'origen': c.origen,
+        'url_snapshot': c.urlSnapshot,
+        'dispositivo': c.dispositivo,
+        'usuario': c.usuario,
         'ubicacion': _ubicacion,
       };
-      if (_passCtrl.text.trim().isNotEmpty) {
-        body['password'] = _passCtrl.text.trim();
-      }
-      await _api.updateItem(ApiConstants.camara(widget.camara.id), body);
+      await _api.updateItem(ApiConstants.camara(c.id), body);
       if (!mounted) return;
       widget.onGuardado();
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('connection_config_saved')), backgroundColor: SwsColors.success),
+        SnackBar(
+          content: Text(context.tr('connection_config_saved')),
+          backgroundColor: SwsColors.success,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -218,31 +226,20 @@ class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
     }
   }
 
-  Future<void> _probar() async {
-    setState(() {
-      _probando = true;
-      _error = null;
-      _info = null;
-    });
-    try {
-      await _api.probarCamara(widget.camara.id);
-      if (!mounted) return;
-      setState(() => _info = 'Prueba enviada. Verifique la previsualización/resultado.');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = _detalleError(e));
-    } finally {
-      if (mounted) setState(() => _probando = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context).size;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final c = widget.camara;
+    final conflicto = _conflicto;
+
     return Container(
-      height: media.height * 0.9,
-      decoration: BoxDecoration(color: colorScheme.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+      height: media.height * 0.92,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       child: Column(
         children: [
           Padding(
@@ -251,8 +248,16 @@ class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
               children: [
                 Icon(Icons.videocam_outlined, color: colorScheme.primary),
                 const SizedBox(width: 10),
-                Expanded(child: Text(widget.camara.descripcion, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: colorScheme.onSurface))),
-                IconButton(onPressed: () => Navigator.of(context).pop(), icon: Icon(Icons.close, color: colorScheme.onSurface)),
+                Expanded(
+                  child: Text(c.descripcion,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface)),
+                ),
+                IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close, color: colorScheme.onSurface)),
               ],
             ),
           ),
@@ -263,50 +268,134 @@ class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Tipo de conexión', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'ip', label: Text('IP / HTTP'), icon: Icon(Icons.wifi)),
-                      ButtonSegment(value: 'local', label: Text('USB / Local'), icon: Icon(Icons.usb)),
-                    ],
-                    selected: {_origen},
-                    onSelectionChanged: (s) => setState(() => _origen = s.first),
+                  // ─── Conexión: identidad del dispositivo (NO editable) ──
+                  const Text('Conexión (identidad del dispositivo)',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'La cámara se identifica por su origen/URL/dispositivo. '
+                    'Si aparece con esa entrada es porque así fue detectada; '
+                    'no se modifica aquí. Para cambiarla, elimínela y vuelva a '
+                    'detectarla.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
-                  const SizedBox(height: 18),
-                  if (_origen == 'ip') ...[
-                    TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'URL Snapshot', hintText: 'http://192.168.1.50/snapshot.jpg')),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: TextField(controller: _usuarioCtrl, decoration: const InputDecoration(labelText: 'Usuario (opcional)'))),
-                        const SizedBox(width: 12),
-                        Expanded(child: TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Contraseña (opcional)'))),
-                      ],
+                  const SizedBox(height: 10),
+                  _campoLectura(
+                    context,
+                    etiqueta: 'Origen',
+                    valor: c.esLocal ? 'USB / Local' : 'IP / HTTP',
+                    icono: c.esLocal ? Icons.usb : Icons.wifi,
+                  ),
+                  const SizedBox(height: 10),
+                  if (c.esLocal)
+                    _campoLectura(
+                      context,
+                      etiqueta: 'Dispositivo',
+                      valor: c.dispositivo ?? '—',
+                      icono: Icons.videocam,
+                    )
+                  else
+                    _campoLectura(
+                      context,
+                      etiqueta: 'URL snapshot',
+                      valor: c.urlSnapshot.isNotEmpty ? c.urlSnapshot : '—',
+                      icono: Icons.link,
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Soporta: IP, HTTP, Serie/PS2 según firmware del fabricante.', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                  ] else ...[
-                    TextField(controller: _dispCtrl, decoration: const InputDecoration(labelText: 'Dispositivo', hintText: '/dev/video0, /dev/video2')),
-                    const SizedBox(height: 12),
-                    const Text('Captura local vía ffmpeg/v4l2 (USB/integrada).', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                  ],
                   const SizedBox(height: 18),
-                  const Text('Momento de captura', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  // ─── Vista previa EN VIVO (video) ────────────────────────
+                  const Text('Vista previa en vivo',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Si la cámara recibe señal verás la imagen moverse aquí. '
+                    'El video se detiene al cerrar este panel.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  CamaraPreview(
+                    key: ValueKey('preview_${c.id}'),
+                    camaraId: c.id,
+                    height: 220,
+                    activo: true,
+                    fps: 5,
+                  ),
+                  const Divider(height: 28),
+                  // ─── Momento de captura (editable) ──────────────────────
+                  const Text('Momento de captura',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Cuándo se toma la foto de la placa. Puede usar una cámara '
+                    'para ambas, o una por acceso.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                   const SizedBox(height: 10),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'entrada', label: Text('Entrada')),
-                      ButtonSegment(value: 'salida', label: Text('Salida')),
-                      ButtonSegment(value: 'ambos', label: Text('Ambos')),
+                      ButtonSegment(
+                          value: 'entrada',
+                          label: Text('Entrada'),
+                          icon: Icon(Icons.login)),
+                      ButtonSegment(
+                          value: 'salida',
+                          label: Text('Salida'),
+                          icon: Icon(Icons.logout)),
+                      ButtonSegment(
+                          value: 'ambos',
+                          label: Text('Ambos'),
+                          icon: Icon(Icons.swap_horiz)),
                     ],
                     selected: {_ubicacion},
-                    onSelectionChanged: (s) => setState(() => _ubicacion = s.first),
+                    onSelectionChanged: (s) =>
+                        setState(() => _ubicacion = s.first),
                   ),
-                  const SizedBox(height: 18),
-                  OutlinedButton.icon(onPressed: _probando ? null : _probar, icon: const Icon(Icons.radar_outlined), label: const Text('Probar conexión / Snapshot')),
-                  if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: Colors.red))],
-                  if (_info != null) ...[const SizedBox(height: 12), Text(_info!, style: const TextStyle(color: SwsColors.success))],
+                  if (conflicto != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: SwsColors.warning.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: SwsColors.warning.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              color: SwsColors.warning, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Atención: "${conflicto.descripcion}" ya está '
+                              'asignada a $_ubicacion. Revisa que no se solapen '
+                              'las capturas.',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.black87),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Cámara activa'),
+                      subtitle:
+                          const Text('Desactívala para que no se use en pesajes.'),
+                      value: _activo,
+                      onChanged: (v) => setState(() => _activo = v),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                  ],
                 ],
               ),
             ),
@@ -316,13 +405,58 @@ class _CamaraDetailSheetState extends State<_CamaraDetailSheet> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Expanded(child: OutlinedButton(onPressed: _guardando ? null : () => Navigator.of(context).pop(), child: Text(context.tr('cancelar')))),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _guardando ? null : () => Navigator.of(context).pop(),
+                    child: Text(context.tr('cancelar')),
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: FilledButton(onPressed: _guardando ? null : _guardar, child: _guardando ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(context.tr('guardar')))),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _guardando ? null : _guardar,
+                    child: _guardando
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : Text(context.tr('guardar')),
+                  ),
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _campoLectura(
+    BuildContext context, {
+    required String etiqueta,
+    required String valor,
+    required IconData icono,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        prefixIcon: Icon(icono),
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        suffixIcon: Tooltip(
+          message: 'No editable: identifica al dispositivo',
+          child: Icon(Icons.lock_outline, size: 16, color: scheme.outline),
+        ),
+      ),
+      child: Text(
+        valor,
+        style: TextStyle(
+          fontSize: 16,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
       ),
     );
   }

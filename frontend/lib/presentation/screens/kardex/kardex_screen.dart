@@ -69,10 +69,10 @@ class _KardexScreenState extends State<KardexScreen> {
     try {
       final conceptos = await di
           .sl<ApiClient>()
-          .getList(ApiConstants.conceptosKardex, query: {'activo': true});
+          .getList(ApiConstants.conceptosKardex, queryParameters: {'activo': true});
       if (!mounted) return;
       setState(() {
-        _conceptosKardex = conceptos
+        _conceptosKardex = conceptos.data
             .where((c) => c['activo'] != false)
             .map((c) => Map<String, dynamic>.from(c))
             .toList()
@@ -207,7 +207,7 @@ class _KardexScreenState extends State<KardexScreen> {
   }
 
   Widget _origenChip(KardexMovimiento m) {
-    final origen = m.origen;
+    final origen = m.origen ?? 'Sistema';
     final (Color bg, Color fg) = switch (origen) {
       'Báscula' => (
           SwsColors.info.withValues(alpha: 0.15),

@@ -137,12 +137,12 @@ class _BarreraDetailSheet extends StatefulWidget {
 class _BarreraDetailSheetState extends State<_BarreraDetailSheet> {
   final _api = di.sl<ApiClient>();
 
-  late String _protocolo = widget.barrera.protocolo;
+  late final String _protocolo = widget.barrera.protocolo;
   late String _ubicacion = widget.barrera.ubicacion ?? 'ambos';
   late final TextEditingController _ipCtrl = TextEditingController(text: widget.barrera.ipAddress ?? '');
   late final TextEditingController _puertoCtrl = TextEditingController(text: widget.barrera.puertoTcp?.toString() ?? '8082');
   late final TextEditingController _comCtrl = TextEditingController(text: widget.barrera.puertoCom ?? '');
-  late int _baudrate = widget.barrera.baudrate;
+  late final int _baudrate = widget.barrera.baudrate;
   late int _tiempo = widget.barrera.tiempoEsperaSegundos;
   late bool _auto = widget.barrera.controlAutomatico;
 
@@ -165,6 +165,36 @@ class _BarreraDetailSheetState extends State<_BarreraDetailSheet> {
       if (data is Map && data['detail'] != null) return '${data['detail']}';
     }
     return 'No se pudo completar la acción.';
+  }
+
+  /// Campo de SOLO LECTURA: muestra el canal de conexión (identidad del
+  /// dispositivo) sin permitir edición.
+  Widget _campoLectura(
+    BuildContext context, {
+    required String etiqueta,
+    required String valor,
+    required IconData icono,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        prefixIcon: Icon(icono),
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        suffixIcon: Tooltip(
+          message: 'No editable: identifica al dispositivo',
+          child: Icon(Icons.lock_outline, size: 16, color: scheme.outline),
+        ),
+      ),
+      child: Text(
+        valor,
+        style: TextStyle(
+          fontSize: 16,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+      ),
+    );
   }
 
   Future<void> _guardar() async {
@@ -258,34 +288,24 @@ class _BarreraDetailSheetState extends State<_BarreraDetailSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Tipo de conexión', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'http', label: Text('HTTP'), icon: Icon(Icons.wifi)),
-                      ButtonSegment(value: 'serial', label: Text('USB / Serie'), icon: Icon(Icons.usb)),
-                    ],
-                    selected: {_protocolo},
-                    onSelectionChanged: (s) => setState(() => _protocolo = s.first),
+                  // ─── Conexión: identidad del dispositivo (NO editable) ──
+                  const Text('Conexión (identidad del dispositivo)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'El canal identifica a la barrera. Si aparece con esa entrada es porque así fue detectada y no se modifica aquí. Para cambiarla, elimínela y vuelva a detectarla.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 10),
+                  _campoLectura(context, etiqueta: 'Protocolo', valor: _protocolo == 'http' ? 'HTTP / Red' : 'USB / Serie', icono: _protocolo == 'http' ? Icons.wifi : Icons.usb),
+                  const SizedBox(height: 10),
                   if (_protocolo == 'http') ...[
-                    Row(
-                      children: [
-                        Expanded(flex: 3, child: TextField(controller: _ipCtrl, decoration: const InputDecoration(labelText: 'IP'))),
-                        const SizedBox(width: 12),
-                        Expanded(flex: 2, child: TextField(controller: _puertoCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Puerto'))),
-                      ],
-                    ),
+                    _campoLectura(context, etiqueta: 'Dirección IP', valor: widget.barrera.ipAddress ?? '—', icono: Icons.language),
+                    const SizedBox(height: 10),
+                    _campoLectura(context, etiqueta: 'Puerto', valor: '${widget.barrera.puertoTcp ?? 8080}', icono: Icons.router_outlined),
                   ] else ...[
-                    TextField(controller: _comCtrl, decoration: const InputDecoration(labelText: 'Puerto', hintText: '/dev/ttyUSB0 o COM3')),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<int>(
-                      initialValue: _baudrate,
-                      decoration: const InputDecoration(labelText: 'Baudrate'),
-                      items: const [DropdownMenuItem(value: 9600, child: Text('9600')), DropdownMenuItem(value: 19200, child: Text('19200')), DropdownMenuItem(value: 38400, child: Text('38400')), DropdownMenuItem(value: 57600, child: Text('57600')), DropdownMenuItem(value: 115200, child: Text('115200'))],
-                      onChanged: (v) => setState(() => _baudrate = v ?? 9600),
-                    ),
+                    _campoLectura(context, etiqueta: 'Puerto', valor: widget.barrera.puertoCom ?? '—', icono: Icons.usb),
+                    const SizedBox(height: 10),
+                    _campoLectura(context, etiqueta: 'Velocidad (baudrate)', valor: '$_baudrate', icono: Icons.speed),
                   ],
                   const SizedBox(height: 18),
                   const Text('Ubicación / Acceso', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
@@ -300,7 +320,10 @@ class _BarreraDetailSheetState extends State<_BarreraDetailSheet> {
                     onSelectionChanged: (s) => setState(() => _ubicacion = s.first),
                   ),
                   const SizedBox(height: 18),
-                  SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Control automático'), subtitle: const Text('Abrir/cerrar según flujo de pesaje'), value: _auto, onChanged: (v) => setState(() => _auto = v)),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Control automático'), subtitle: const Text('Abrir/cerrar según flujo de pesaje'), value: _auto, onChanged: (v) => setState(() => _auto = v)),
+                  ),
                   const SizedBox(height: 10),
                   TextField(
                     keyboardType: TextInputType.number,
