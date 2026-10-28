@@ -43,6 +43,10 @@ class AppConfig {
   /// Sincronización automática por timer (Ajustes → Sincronización).
   static bool syncAutoEnabled = true;
 
+  /// Preferencia de unidad de peso en la estación (predeterminado: true = kilos).
+  /// Se persiste en SharedPreferences y se lee al init().
+  static bool unidadPesoKg = true;
+
   // ── Configuración de estación (config.json del instalador) ───────────────
   /// Rol funcional decidido por el instalador (`SERVIDOR` o `OPERADOR`).
   /// `null` = sin config válida (la app no debe operar).
