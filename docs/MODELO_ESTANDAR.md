@@ -17,13 +17,13 @@
 
 #### 1. Catálogos (Datos Maestros)
 
-| Módulo                 | Descripción / Reglas                                                             |
-|------------------------|----------------------------------------------------------------------------------|
-| **Clientes**           | Registro de entidades receptoras. Clasificación: `C` (Cliente) / `A` (Ambos).    |
-| **Proveedores**        | Registro de entidades proveedoras. Clasificación: `P` (Proveedor) / `A` (Ambos). |
-| **Flota y Transporte** | Registro de **Camiones**, **Conductores** y **Empresas de Transporte**.          |
-| **Inventario Base**    | Registro de **Categorías**, **Productos** y **Almacenes**.                       |
-| **Kardex**             | Configuración de **Conceptos de Movimiento** para el control de inventario.      |
+| Módulo | Descripción / Reglas |
+| --- | --- |
+| **Clientes** | Registro de entidades receptoras. Clasificación: `C` (Cliente) / `A` (Ambos). |
+| **Proveedores** | Registro de entidades proveedoras. Clasificación: `P` (Proveedor) / `A` (Ambos). |
+| **Flota y Transporte** | Registro de **Camiones**, **Conductores** y **Empresas de Transporte**. |
+| **Inventario Base** | Registro de **Categorías**, **Productos** y **Almacenes**. |
+| **Kardex** | Configuración de **Conceptos de Movimiento** (`conceptos_kardex`, IDs 0-99) para el control de inventario. Ver §"Kardex: conceptos fijos vs configurables". |
 
 > **Estructura de Unidad Tractora:**
 > * **Configuración estándar:** Chuto + Trailer (+ Remolque opcional).
@@ -86,6 +86,45 @@
 
 * **Soporte Técnico.**
 * **Información del Sistema (HBN / Acerca de).**
+
+---
+
+## Kardex: conceptos fijos vs configurables
+
+El catálogo `conceptos_kardex` (migración 031) asigna un **nombre** a cada ID de
+movimiento de inventario. Los IDs son fijos y su signo es derivado del rango.
+
+| ID | Concepto | Fijo/Sistema | Generado por |
+|----|----------|--------------|--------------|
+| `00` | Saldo inicial | ✅ Sistema | Manual (una vez por producto/almacén) |
+| `01`-`09` | Configurables positivos | ❌ ADMIN | Ajuste manual |
+| `10` | Ingreso por báscula | ✅ Sistema | Automático al cerrar boleto con PNT ≥ 0 |
+| `11`-`49` | Configurables positivos | ❌ ADMIN | Ajuste manual |
+| `50`-`59` | Configurables negativos | ❌ ADMIN | Ajuste manual |
+| `60` | Despacho por báscula | ✅ Sistema | Automático al cerrar boleto con PNT < 0 |
+| `61`-`99` | Configurables negativos | ❌ ADMIN | Ajuste manual |
+
+**Regla de oro:** el ID define el signo, no al revés.
+
+- `01`-`49` → suma al inventario (signo `positivo`).
+- `50`-`99` → resta del inventario (signo `negativo`).
+- `00` → punto de partida del cálculo (signo `inicial`), no genera movimiento.
+
+**Semántica de los del sistema:**
+
+- `10` (ingreso) y `60` (despacho) los escribe el sistema al cerrar un boleto de
+  pesaje; **no se pueden usar en un ajuste manual** (`422`).
+- Al anular un boleto `CERRADO` se registra el movimiento **inverso** (`10` ↔
+  `60`) sin borrar el historial.
+
+**Ajuste manual:** siempre con `id_concepto` **no-sistema** (`01`-`49` o
+`50`-`99`) y una cantidad del **mismo signo**. El backend rechaza con `422` un
+concepto positivo con cantidad negativa (y viceversa) y con `404` un concepto
+que no exista en la empresa del token.
+
+**Consultas:** `/reports/kardex/detalle` devuelve por fila `concepto_nombre`,
+`concepto_signo`, `concepto_es_sistema` y `origen`
+(`Báscula` para 10/60, `Sistema` para 00, `Manual` para el resto).
 
 ---
 

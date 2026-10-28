@@ -12,10 +12,10 @@
 
 BALANSOFT-WS es un sistema de pesaje industrial para camiones con arquitectura **cliente-servidor**. La decisión arquitectónica fundamental es la **separación de la base de datos en dos instancias**:
 
-| Base de Datos                                  | Responsabilidad                                                                                      | Tecnología     |
-|------------------------------------------------|------------------------------------------------------------------------------------------------------|----------------|
-| **`balansoft_ws`** (servidor)                  | Cuenta, licencia, credenciales globales, dispositivos, sesiones, sincronización, panel del proveedor | PostgreSQL 15+ |
-| **`balansoft_ws_local`** (máquina del cliente) | Todo lo operativo: usuarios locales, flota, inventario, boletos, kardex, auditoría, configuración    | PostgreSQL 15+ |
+| Base de Datos | Responsabilidad | Tecnología |
+|---------------|-----------------|------------|
+| **`balansoft_ws`** (servidor) | Cuenta, licencia, credenciales globales, dispositivos, sesiones, sincronización, panel del proveedor | PostgreSQL 15+ |
+| **`balansoft_ws_local`** (máquina del cliente) | Todo lo operativo: usuarios locales, flota, inventario, boletos, kardex, auditoría, configuración | PostgreSQL 15+ |
 
 **Regla fundamental:** Una máquina local = una empresa = una cuenta.
 
@@ -61,32 +61,32 @@ if settings.app_role == "local":
 
 ### 2.1 Responsabilidades por API (objetivo)
 
-| Endpoint                                  | API Server | API Local  |
-|-------------------------------------------|:----------:|:----------:|
-| `POST /auth/register`                     |     ✅      |     ❌      |
-| `POST /auth/login` (primer login, online) |     ✅      |     ❌      |
-| `POST /auth/login-local` (offline)        |     ❌      |     ✅      |
-| `POST /auth/refresh-token`                |     ✅      |     ✅      |
-| `POST /licencias/validar`                 |     ✅      |     ❌      |
-| `GET /licencias/snapshot`                 |     ✅      | ✅ (caché)  |
-| `POST /sync/push`                         | ✅ (recibe) | ✅ (envía)  |
-| `GET /sync/pull`                          | ✅ (envía)  | ✅ (recibe) |
-| `POST /weighing/*`                        |     ❌      |     ✅      |
-| `GET /catalogo/*`                         |     ❌      |     ✅      |
-| `GET /reports/*`                          |     ❌      |     ✅      |
-| `POST /panel/*` (proveedor)               |     ✅      |     ❌      |
-| `GET /health`                             |     ✅      |     ✅      |
+| Endpoint | API Server | API Local |
+|----------|:----------:|:---------:|
+| `POST /auth/register` | ✅ | ❌ |
+| `POST /auth/login` (primer login, online) | ✅ | ❌ |
+| `POST /auth/login-local` (offline) | ❌ | ✅ |
+| `POST /auth/refresh-token` | ✅ | ✅ |
+| `POST /licencias/validar` | ✅ | ❌ |
+| `GET /licencias/snapshot` | ✅ | ✅ (caché) |
+| `POST /sync/push` | ✅ (recibe) | ✅ (envía) |
+| `GET /sync/pull` | ✅ (envía) | ✅ (recibe) |
+| `POST /weighing/*` | ❌ | ✅ |
+| `GET /catalogo/*` | ❌ | ✅ |
+| `GET /reports/*` | ❌ | ✅ |
+| `POST /panel/*` (proveedor) | ✅ | ❌ |
+| `GET /health` | ✅ | ✅ |
 
 ---
 
 ## 3. Estados de la Transacción (Boleto)
 
-| Estado         | Descripción                          | Reportes                                     |
-|----------------|--------------------------------------|----------------------------------------------|
-| **PENDIENTE**  | Entrada registrada, esperando salida | Cuenta en "En Tránsito"                      |
-| **CERRADO**    | Entrada + salida completas           | Cuenta en Ingreso/Despacho                   |
-| **MODIFICADO** | Boleto CERRADO/PENDIENTE editado     | Cuenta según su estado base                  |
-| **ANULADO**    | Cancelado (requiere auditoría)       | **NO** cuenta en reportes, solo en auditoría |
+| Estado | Descripción | Reportes |
+|--------|-------------|----------|
+| **PENDIENTE** | Entrada registrada, esperando salida | Cuenta en "En Tránsito" |
+| **CERRADO** | Entrada + salida completas | Cuenta en Ingreso/Despacho |
+| **MODIFICADO** | Boleto CERRADO/PENDIENTE editado | Cuenta según su estado base |
+| **ANULADO** | Cancelado (requiere auditoría) | **NO** cuenta en reportes, solo en auditoría |
 
 **Regla crítica:** *El peso registrado por la báscula nunca puede ser editado.* Los únicos campos modificables en estado `MODIFICADO` son: `documento`, `flete`, `costo_flete`, `observaciones`, `peso_neto_declarado` (PND).
 
@@ -96,25 +96,25 @@ if settings.app_role == "local":
 
 ## 4. Roles de Usuario
 
-| Rol          | Permisos                                                                                     |
-|--------------|----------------------------------------------------------------------------------------------|
-| **ADMIN**    | Todo: catálogos, pesaje, modificar/anular, crear usuarios, configurar balanzas, ver licencia |
-| **AUDITOR**  | Consultas, reportes, auditoría, modificar/anular. **No** crea usuarios ni configura          |
-| **OPERADOR** | Pesaje entrada/salida, consulta básica de vehículos (absorbe el antiguo rol `TRABAJADOR`)    |
+| Rol | Permisos |
+|-----|----------|
+| **ADMIN** | Todo: catálogos, pesaje, modificar/anular, crear usuarios, configurar balanzas, ver licencia |
+| **AUDITOR** | Consultas, reportes, auditoría, modificar/anular. **No** crea usuarios ni configura |
+| **OPERADOR** | Pesaje entrada/salida, consulta básica de vehículos (absorbe el antiguo rol `TRABAJADOR`) |
 
 **Matriz de permisos por endpoint:**
 
-| Endpoint                             | ADMIN | AUDITOR |  OPERADOR   |
-|--------------------------------------|:-----:|:-------:|:-----------:|
-| `POST /weighing/create`              |   ✅   |    ❌    |      ✅      |
-| `POST /weighing/close`               |   ✅   |    ❌    |      ✅      |
-| `PUT /weighing/{boleto}/anular`      |   ✅   |    ✅    |      ❌      |
-| `PUT /weighing/{boleto}` (modificar) |   ✅   |    ✅    |      ❌      |
-| `GET /catalogo/*`                    |   ✅   |    ✅    | ✅ (lectura) |
-| `POST/PUT/DELETE /catalogo/*`        |   ✅   |    ❌    |      ❌      |
-| `GET /reports/*`                     |   ✅   |    ✅    |      ❌      |
-| `POST /panel/*` (proveedor)          |   ❌   |    ❌    |      ❌      |
-| `GET /licencias/snapshot`            |   ✅   |    ✅    |      ❌      |
+| Endpoint | ADMIN | AUDITOR | OPERADOR |
+|----------|:-----:|:-------:|:--------:|
+| `POST /weighing/create` | ✅ | ❌ | ✅ |
+| `POST /weighing/close` | ✅ | ❌ | ✅ |
+| `PUT /weighing/{boleto}/anular` | ✅ | ✅ | ❌ |
+| `PUT /weighing/{boleto}` (modificar) | ✅ | ✅ | ❌ |
+| `GET /catalogo/*` | ✅ | ✅ | ✅ (lectura) |
+| `POST/PUT/DELETE /catalogo/*` | ✅ | ❌ | ❌ |
+| `GET /reports/*` | ✅ | ✅ | ❌ |
+| `POST /panel/*` (proveedor) | ❌ | ❌ | ❌ |
+| `GET /licencias/snapshot` | ✅ | ✅ | ❌ |
 
 ---
 
@@ -122,18 +122,18 @@ if settings.app_role == "local":
 
 ### 5.1 Fórmulas (MODEL.md)
 
-| Sigla   | Descripción                           | Fórmula           |
-|---------|---------------------------------------|-------------------|
-| **PEC** | Peso entrada camión (chuto + trailer) | dato              |
-| **PER** | Peso entrada remolque (opcional)      | dato              |
-| **PTE** | Peso total entrada                    | `PEC + PER`       |
-| **PSC** | Peso salida camión                    | dato              |
-| **PSR** | Peso salida remolque                  | dato              |
-| **PTS** | Peso total salida                     | `PSC + PSR`       |
-| **PNT** | Peso neto total                       | `PTE − PTS`       |
-| **PND** | Peso neto declarado (guía)            | dato              |
-| **PDF** | Peso diferencia                       | `PNT − PND`       |
-| **PDV** | Porcentaje desviación                 | `PDF / PND × 100` |
+| Sigla | Descripción | Fórmula |
+|-------|-------------|---------|
+| **PEC** | Peso entrada camión (chuto + trailer) | dato |
+| **PER** | Peso entrada remolque (opcional) | dato |
+| **PTE** | Peso total entrada | `PEC + PER` |
+| **PSC** | Peso salida camión | dato |
+| **PSR** | Peso salida remolque | dato |
+| **PTS** | Peso total salida | `PSC + PSR` |
+| **PNT** | Peso neto total | `PTE − PTS` |
+| **PND** | Peso neto declarado (guía) | dato |
+| **PDF** | Peso diferencia | `PNT − PND` |
+| **PDV** | Porcentaje desviación | `PDF / PND × 100` |
 
 ### 5.2 Tolerancia Comercial
 
@@ -141,15 +141,15 @@ Configurada en `productos.tolerancia` (porcentaje). Si `PDV` excede la toleranci
 
 ### 5.3 Kardex (MODEL.md)
 
-| ID     | Descripción              | Signo |
-|--------|--------------------------|-------|
-| 00     | Saldo Inicial            | —     |
-| 01-09  | Definible por usuario    | +     |
-| **10** | **Ingreso por Báscula**  | **+** |
-| 11-49  | Definible por usuario    | +     |
-| 50-59  | Definible por usuario    | −     |
+| ID | Descripción | Signo |
+|----|-------------|-------|
+| 00 | Saldo Inicial | — |
+| 01-09 | Definible por usuario | + |
+| **10** | **Ingreso por Báscula** | **+** |
+| 11-49 | Definible por usuario | + |
+| 50-59 | Definible por usuario | − |
 | **60** | **Despacho por Báscula** | **−** |
-| 61-99  | Definible por usuario    | −     |
+| 61-99 | Definible por usuario | − |
 
 **Determinación:** `PNT > 0` → Ingreso (ID 10); `PNT < 0` → Despacho (ID 60); `PNT = 0` → sin movimiento.
 
@@ -157,7 +157,15 @@ Configurada en `productos.tolerancia` (porcentaje). Si `PDV` excede la toleranci
 
 **Saldo:** `SALDO FINAL = SALDO INICIAL + Σ(positivos) − Σ(negativos)` filtrado a fecha de corte.
 
-> El catálogo editable de conceptos (`conceptos_kardex`) está **pendiente de implementar**; hoy los IDs 10/60 son constantes del sistema.
+> El catálogo editable de conceptos (`conceptos_kardex`, migración **031**) está
+> **implementado**: tabla `conceptos_kardex` con clave primaria compuesta
+> `(id_empresa, id_concepto)`, IDs `0`-`99`, coherencia ID↔signo por `CHECK`
+> (`0`=inicial, `1`-`49`=positivo, `50`-`99`=negativo) y **seed automático de
+> 0/10/60 por empresa** al aplicar la migración. Los IDs `10`/`60` siguen siendo
+> constantes del sistema, pero ahora **también son filas del catálogo**
+> (`es_sistema = TRUE`), de modo que el kardex puede mostrarles nombre.
+> CRUD en `/api/v1/conceptos-kardex`; detalle del kardex con JOIN al catálogo
+> (`concepto_nombre`, `concepto_signo`, `concepto_es_sistema`, `origen`).
 
 ---
 
@@ -165,49 +173,51 @@ Configurada en `productos.tolerancia` (porcentaje). Si `PDV` excede la toleranci
 
 Los archivos **autoridad** del esquema son:
 
-| Archivo                           | Base                                                      | Tablas |
-|-----------------------------------|-----------------------------------------------------------|--------|
-| `backend/balansoft-ws-server.sql` | `balansoft_ws` (producción) / `balansoft_ws_server` (dev) | 10     |
-| `backend/balansoft-ws-local.sql`  | `balansoft_ws_local`                                      | 26     |
+| Archivo | Base | Tablas |
+|---------|------|--------|
+| `backend/balansoft-ws-server.sql` | `balansoft_ws` (producción) / `balansoft_ws_server` (dev) | 10 |
+| `backend/balansoft-ws-local.sql` | `balansoft_ws_local` | 26 |
 
 Ambos son **idempotentes** (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`), en una transacción, y usan `gen_random_uuid()` (pgcrypto). No usan Alembic: los cambios futuros van como migraciones `backend/migrations/*.sql` hacia adelante.
 
 ### 6.1 `balansoft_ws` — servidor (cuenta y licencia, NO datos operativos)
 
-| Tabla                   | Propósito                                                                          |
-|-------------------------|------------------------------------------------------------------------------------|
-| `cuentas`               | Empresas registradas por el proveedor (riff_nit único, email_admin único)          |
-| `licencias`             | Licencias por cuenta (tier DEMO/MONOPUESTA/CENTRAL, status, expira, `hardware_id`) |
-| `dispositivos`          | Equipos autorizados por cuenta (`hardware_id` único)                               |
-| `credenciales`          | Credenciales globales de login (email + hash, `rol_global`)                        |
-| `sesiones`              | Tokens/sesiones JWT emitidos por el servidor                                       |
-| `sync_sesiones`         | Sesiones de sincronización orquestadas desde el servidor                           |
-| `sync_cola`             | Cola de pendientes recibida de los equipos locales                                 |
-| `auditoria_servidor`    | Eventos de cuenta/licencia/sync (login, activaciones…)                             |
-| `password_reset_tokens` | Recuperación de contraseña global                                                  |
-| `proveedores_usuarios`  | Usuarios del panel del proveedor (SUPERADMIN/SOPORTE/VENTAS)                       |
+| Tabla | Propósito |
+|-------|-----------|
+| `cuentas` | Empresas registradas por el proveedor (riff_nit único, email_admin único) |
+| `licencias` | Licencias por cuenta (tier DEMO/MONOPUESTA/CENTRAL, status, expira, `hardware_id`) |
+| `dispositivos` | Equipos autorizados por cuenta (`hardware_id` único) |
+| `credenciales` | Credenciales globales de login (email + hash, `rol_global`) |
+| `sesiones` | Tokens/sesiones JWT emitidos por el servidor |
+| `sync_sesiones` | Sesiones de sincronización orquestadas desde el servidor |
+| `sync_cola` | Cola de pendientes recibida de los equipos locales |
+| `auditoria_servidor` | Eventos de cuenta/licencia/sync (login, activaciones…) |
+| `password_reset_tokens` | Recuperación de contraseña global |
+| `proveedores_usuarios` | Usuarios del panel del proveedor (SUPERADMIN/SOPORTE/VENTAS) |
 
 No guarda boletos, kardex ni catálogos: esos viven solo en la máquina local.
 
 ### 6.2 `balansoft_ws_local` — máquina del cliente (todo lo operativo)
 
-| Tabla                                                  | Propósito                                                                                                                                                                                                |
-|--------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `identidad_local`                                      | Vínculo con la cuenta (1 fila): `id_cuenta`, licencia cacheada, `modo_offline`                                                                                                                           |
-| `empresas`                                             | Espejo local de la cuenta (1:1, provee `id_empresa` para FKs)                                                                                                                                            |
-| `usuarios`                                             | Usuarios operativos con rol local (ADMIN/OPERADOR/AUDITOR)                                                                                                                                               |
-| `transportes`                                          | Empresas de transporte                                                                                                                                                                                   |
-| `marcas` / `modelos_camion` / `camiones` / `remolques` | Flota y transporte                                                                                                                                                                                       |
-| `conductores` / `terceros`                             | Directorio (conductores PK = cédula; terceros con `tipo` C/P)                                                                                                                                            |
-| `productos` / `almacenes` / `balanzas`                 | Inventario y dispositivos de pesaje (HAL serial/TCP)                                                                                                                                                     |
-| `boletos_pesaje`                                       | Transaccional principal (entrada/salida, cálculos MODEL.md, `estado_boleto`)                                                                                                                             |
-| `imagenes_pesaje`                                      | Fotos de entrada/salida                                                                                                                                                                                  |
-| `kardex`                                               | Movimientos (10/60), saldo a fecha de corte                                                                                                                                                              |
-| `sync_queue` / `sync_logs`                             | Cola local de sincronización hacia el servidor                                                                                                                                                           |
-| `auditoria` / `logs_sistema`                           | Auditoría operativa y logs                                                                                                                                                                               |
-| `configuraciones` / `parametros_sistema`               | Configuración local                                                                                                                                                                                      |
-| `recordatorios` / `notificaciones`                     | Avisos de la estación: recordatorios programados por el ADMIN y la bandeja de avisos (idempotente por `dedup_key`). La llena el programador residente del backend (`app/core/notification_scheduler.py`) |
-| `llaves_activacion`                                    | Llaves de activación de **un solo uso** que el ADMIN emite para autorizar una estación OPERADOR (código guardado como SHA-256, `codigo_preview` de 6 caracteres). Ver §13.7                              |
+| Tabla | Propósito |
+|-------|-----------|
+| `identidad_local` | Vínculo con la cuenta (1 fila): `id_cuenta`, licencia cacheada, `modo_offline` |
+| `empresas` | Espejo local de la cuenta (1:1, provee `id_empresa` para FKs) |
+| `usuarios` | Usuarios operativos con rol local (ADMIN/OPERADOR/AUDITOR) |
+| `transportes` | Empresas de transporte |
+| `marcas` / `modelos_camion` / `camiones` / `remolques` | Flota y transporte |
+| `conductores` / `terceros` | Directorio (conductores PK = cédula; terceros con `tipo` C/P) |
+| `productos` / `almacenes` / `balanzas` | Inventario y dispositivos de pesaje (HAL serial/TCP) |
+| `boletos_pesaje` | Transaccional principal (entrada/salida, cálculos MODEL.md, `estado_boleto`) |
+| `imagenes_pesaje` | Fotos de entrada/salida |
+| `kardex` | Movimientos de inventario. `id_movimiento` = ID del concepto (`0`/`10`/`60` del sistema o `01`-`49`/`50`-`99` configurados); saldo a fecha de corte |
+| `conceptos_kardex` | Catálogo de conceptos de movimiento (**migración 031**). Clave primaria compuesta `(id_empresa, id_concepto)`, IDs `0`-`99`, `signo` derivado del rango por `CHECK`, `es_sistema` para 0/10/60. **Seed automático de 0/10/60 por empresa** al aplicar la migración; CRUD en `/api/v1/conceptos-kardex` |
+| `conceptos_inventario` | Catálogo de motivos (migración 029). **Ya no lo usan los ajustes manuales** (sustituido por `conceptos_kardex`); se mantiene por compatibilidad |
+| `sync_queue` / `sync_logs` | Cola local de sincronización hacia el servidor |
+| `auditoria` / `logs_sistema` | Auditoría operativa y logs |
+| `configuraciones` / `parametros_sistema` | Configuración local |
+| `recordatorios` / `notificaciones` | Avisos de la estación: recordatorios programados por el ADMIN y la bandeja de avisos (idempotente por `dedup_key`). La llena el programador residente del backend (`app/core/notification_scheduler.py`) |
+| `llaves_activacion` | Llaves de activación de **un solo uso** que el ADMIN emite para autorizar una estación OPERADOR (código guardado como SHA-256, `codigo_preview` de 6 caracteres). Ver §13.7 |
 
 #### Avisos nativos del SO (app Flutter cerrada)
 
@@ -218,16 +228,16 @@ El programador residente del backend local (`app/core/notification_scheduler.py`
 - **Windows**: toast vía PowerShell; con icono usa la plantilla `ToastGeneric` + `<image placement="appLogoOverride">` (la antigua `ToastText02` no admite logo). El texto va por nodos DOM (`CreateTextNode`), nunca interpolado en el XML.
 - **Bundles**: el icono viaja dentro del binario one-file (`WServer.spec` → `assets/balansoft-ws.png`), por lo que **una estación con un WServer anterior al subsistema de notificaciones no avisa ni aplica la migración `023`**: hay que recompilar (`./scripts/build_wserver.sh`) y redistribuir.
 
-> **Tablas del esquema local (34, verificadas contra el DDL: `balansoft-ws-local.sql` + `migrations/*.sql`):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `categorias`, `almacenes`, `conceptos_inventario`, `balanzas`, `indicadores`, `semaforos`, `camaras`, `boletos_pesaje`, `boletos_ediciones`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `permisos_acceso`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`, `llaves_activacion`, `password_reset_tokens`.
+> **Tablas del esquema local (34, verificadas contra el DDL: `balansoft-ws-local.sql` + `migrations/*.sql`):** `identidad_local`, `empresas`, `usuarios`, `transportes`, `marcas`, `modelos_camion`, `camiones`, `remolques`, `conductores`, `terceros`, `productos`, `categorias`, `almacenes`, `conceptos_inventario`, `conceptos_kardex`, `balanzas`, `indicadores`, `semaforos`, `camaras`, `barreras`, `boletos_pesaje`, `boletos_ediciones`, `imagenes_pesaje`, `kardex`, `series_numeracion`, `permisos_acceso`, `sync_queue`, `sync_logs`, `auditoria`, `logs_sistema`, `configuraciones`, `parametros_sistema`, `recordatorios`, `notificaciones`, `llaves_activacion`, `password_reset_tokens`.
 
 ### 6.3 Columnas reservadas (sin semántica definida — no usar)
 
 #### `boletos_pesaje.multi_despacho_recepcion`
 
-| Atributo | Valor                                                                   |
-|----------|-------------------------------------------------------------------------|
-| DDL      | `backend/balansoft-ws-local.sql:300` — `BOOLEAN NOT NULL DEFAULT FALSE` |
-| Estado   | **RESERVADA / INERTE**                                                  |
+| Atributo | Valor |
+|----------|-------|
+| DDL | `backend/balansoft-ws-local.sql:300` — `BOOLEAN NOT NULL DEFAULT FALSE` |
+| Estado | **RESERVADA / INERTE** |
 
 Esta columna **no implementa ninguna funcionalidad**. Está en el esquema desde el commit inicial y hoy es un número muerto:
 
@@ -245,7 +255,7 @@ Esta columna **no implementa ninguna funcionalidad**. Está en el esquema desde 
 
 **Consecuencia para el análisis de rendimiento:** ningún reporte, endpoint o métrica puede degradarse por esta columna. No la incluyas en hipótesis de performance futuras.
 
-> **Diferencia con la versión anterior del doc:** se añadieron índices nuevos (`idx_dispositivos_cuenta`, `idx_sesiones_credencial`, `uq_modelos_empresa_nombre`, `idx_camiones_*`, `idx_auditoria_*`, etc.) y se eliminó la tabla `conceptos_kardex` del schema local (queda pendiente como catálogo editable futuro). Síguen los campos legacy de `boletos_pesaje` (`peso_bruto`, `peso_tara`, `litros`, `unidades`, etc.) para compatibilidad.
+> **Diferencia con la versión anterior del doc:** se añadieron índices nuevos (`idx_dispositivos_cuenta`, `idx_sesiones_credencial`, `uq_modelos_empresa_nombre`, `idx_camiones_*`, `idx_auditoria_*`, etc.) y se **restauró** la tabla `conceptos_kardex` en el schema local (migración **031**): catálogo editable de IDs de movimiento con `(id_empresa, id_concepto)` como clave primaria, coherencia ID↔signo por `CHECK` y seed de `0`/`10`/`60` por empresa. Síguen los campos legacy de `boletos_pesaje` (`peso_bruto`, `peso_tara`, `litros`, `unidades`, etc.) para compatibilidad.
 
 ---
 
@@ -352,12 +362,12 @@ App Flutter arranca
 
 ### 8.3 Modo Offline
 
-| Condición                  | Comportamiento                                   |
-|----------------------------|--------------------------------------------------|
-| Sin internet, JWT válido   | Opera normalmente contra API local               |
+| Condición | Comportamiento |
+|-----------|----------------|
+| Sin internet, JWT válido | Opera normalmente contra API local |
 | Sin internet, JWT expirado | Permite login local con `usuarios.password_hash` |
-| Sin internet por > N días  | `modo_offline = TRUE`, advertencia visual        |
-| Sin internet por > M días  | Bloqueo de operaciones nuevas (solo consulta)    |
+| Sin internet por > N días | `modo_offline = TRUE`, advertencia visual |
+| Sin internet por > M días | Bloqueo de operaciones nuevas (solo consulta) |
 
 **Configuración:**
 ```ini
@@ -371,82 +381,82 @@ OFFLINE_GRACE_DAYS=7
 
 ### 9.1 Backend (FastAPI)
 
-| Módulo         | Estado | Notas                                                                   |
-|----------------|:------:|-------------------------------------------------------------------------|
-| Auth (JWT)     |   ✅    | Login, register, refresh, forgot/reset password (contra `balansoft_ws`) |
-| Pesaje         |   ✅    | create, close, anular, update, pendientes, list                         |
-| Catálogos      |   ✅    | CRUD de flota, inventario, directorio                                   |
-| Kardex         |   ✅    | Movimientos 10/60, saldo a fecha de corte                               |
-| Sincronización |   ✅    | push/pull/status, catálogo sync                                         |
-| Reportes       |   ✅    | daily, monthly, vehicle, kardex, avanzados                              |
-| Exportación    |   ✅    | Excel, PDF de kardex                                                    |
-| Tickets PDF    |   ✅    | ReportLab, marca de agua ANULADO                                        |
-| Auditoría      |   ✅    | Middleware + `auditoria` + `logs_sistema`                               |
-| Health check   |   ✅    | `GET /api/v1/health`                                                    |
-| Licencias LM   |   ✅    | Ed25519, caché offline, tiers                                           |
-| Fotos          |   ✅    | Multipart upload, visualización                                         |
-| Peso en vivo   |   ✅    | HAL serial/TCP, `/weighing/scale/{id}/live`                             |
-| Dispositivos   |   ✅    | Configuración y prueba de básculas                                      |
+| Módulo | Estado | Notas |
+|--------|:------:|-------|
+| Auth (JWT) | ✅ | Login, register, refresh, forgot/reset password (contra `balansoft_ws`) |
+| Pesaje | ✅ | create, close, anular, update, pendientes, list |
+| Catálogos | ✅ | CRUD de flota, inventario, directorio |
+| Kardex | ✅ | Movimientos 10/60, saldo a fecha de corte |
+| Sincronización | ✅ | push/pull/status, catálogo sync |
+| Reportes | ✅ | daily, monthly, vehicle, kardex, avanzados |
+| Exportación | ✅ | Excel, PDF de kardex |
+| Tickets PDF | ✅ | ReportLab, marca de agua ANULADO |
+| Auditoría | ✅ | Middleware + `auditoria` + `logs_sistema` |
+| Health check | ✅ | `GET /api/v1/health` |
+| Licencias LM | ✅ | Ed25519, caché offline, tiers |
+| Fotos | ✅ | Multipart upload, visualización |
+| Peso en vivo | ✅ | HAL serial/TCP, `/weighing/scale/{id}/live` |
+| Dispositivos | ✅ | Configuración y prueba de básculas |
 
 ### 9.2 Frontend (Flutter)
 
-| Módulo            | Estado | Notas                                                                        |
-|-------------------|:------:|------------------------------------------------------------------------------|
-| Login             |   ✅    | Email + password, hardware info                                              |
-| Registro          |   ✅    | Alta de empresa + admin                                                      |
-| Dashboard         |   ✅    | KPIs, badge de salud, últimos pesajes                                        |
-| Pesajes           |   ✅    | Lista, detalle, formulario, cierre                                           |
-| Catálogos         |   ✅    | CRUD genérico declarativo (Clientes/Proveedores unificados con filtro C/P/A) |
-| Reportes          |   ✅    | Diario, mensual, export Excel                                                |
-| Kardex            |   ✅    | Filtros, saldo acumulado, export                                             |
-| Configuración     |   ✅    | Perfil, báscula, archivos, tema                                              |
-| Sidebar           |   ✅    | Plegable, atajos NAV.md, Backspace para volver                               |
-| Offline-first     |   ✅    | sqflite + cola de sync                                                       |
-| Modo kiosk        |   ✅    | window_manager                                                               |
-| Tema claro/oscuro |   ✅    | ThemeController persistido                                                   |
+| Módulo | Estado | Notas |
+|--------|:------:|-------|
+| Login | ✅ | Email + password, hardware info |
+| Registro | ✅ | Alta de empresa + admin |
+| Dashboard | ✅ | KPIs, badge de salud, últimos pesajes |
+| Pesajes | ✅ | Lista, detalle, formulario, cierre |
+| Catálogos | ✅ | CRUD genérico declarativo (Clientes/Proveedores unificados con filtro C/P/A) |
+| Reportes | ✅ | Diario, mensual, export Excel |
+| Kardex | ✅ | Filtros, saldo acumulado, export |
+| Configuración | ✅ | Perfil, báscula, archivos, tema |
+| Sidebar | ✅ | Plegable, atajos NAV.md, Backspace para volver |
+| Offline-first | ✅ | sqflite + cola de sync |
+| Modo kiosk | ✅ | window_manager |
+| Tema claro/oscuro | ✅ | ThemeController persistido |
 
 ### 9.3 Brechas Pendientes para la Arquitectura de Dos BDs
 
-| Brecha                                                 |  Prioridad  | Acción requerida                                                                                                                                                                                                                                       |
-|--------------------------------------------------------|:-----------:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Schemas split (server/local)                           | ✅ **Hecho** | `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql`                                                                                                                                                                                   |
-| Variable `APP_ROLE` en config                          | ✅ **Hecho** | `config.py` (`local`/`server`) + `.env.example` (+ `SERVER_API_URL`, `SERVER_DATABASE_URL`)                                                                                                                                                            |
-| Routers condicionales en `main.py`                     | ✅ **Hecho** | `SERVER_ROUTERS`/`API_ROUTERS` según `APP_ROLE`                                                                                                                                                                                                        |
-| Endpoint `/auth/login-local`                           | ✅ **Hecho** | Login offline sin LM; token con marca `offline: true`                                                                                                                                                                                                  |
-| API del servidor (cuenta/licencia)                     | ✅ **Hecho** | `app/api/v1/endpoints/servidor.py`: register, login, refresh, licencias, panel, sync/server                                                                                                                                                            |
-| Modelo SQLAlchemy del schema servidor                  | ✅ **Hecho** | `app/models_server.py` (ServerBase, 10 tablas, metadata independiente)                                                                                                                                                                                 |
-| Motor de DB del servidor                               | ✅ **Hecho** | `server_async_engine` + `get_server_db` en `database.py`                                                                                                                                                                                               |
-| Tests del servidor                                     | ✅ **Hecho** | `tests/test_api_server.py` (6 tests sobre `balansoft_ws_server_test`)                                                                                                                                                                                  |
-| Tabla `identidad_local`                                | ✅ **Hecho** | Modelo `IdentidadLocal` (singleton `id=true`) + `GET/PUT /api/v1/identity` (PUT solo ADMIN) + tile "Identidad de la estación" en Ajustes y guardado best-effort tras login                                                                             |
+| Brecha | Prioridad | Acción requerida |
+|--------|:---------:|------------------|
+| Schemas split (server/local) | ✅ **Hecho** | `backend/balansoft-ws-server.sql` y `backend/balansoft-ws-local.sql` |
+| Variable `APP_ROLE` en config | ✅ **Hecho** | `config.py` (`local`/`server`) + `.env.example` (+ `SERVER_API_URL`, `SERVER_DATABASE_URL`) |
+| Routers condicionales en `main.py` | ✅ **Hecho** | `SERVER_ROUTERS`/`API_ROUTERS` según `APP_ROLE` |
+| Endpoint `/auth/login-local` | ✅ **Hecho** | Login offline sin LM; token con marca `offline: true` |
+| API del servidor (cuenta/licencia) | ✅ **Hecho** | `app/api/v1/endpoints/servidor.py`: register, login, refresh, licencias, panel, sync/server |
+| Modelo SQLAlchemy del schema servidor | ✅ **Hecho** | `app/models_server.py` (ServerBase, 10 tablas, metadata independiente) |
+| Motor de DB del servidor | ✅ **Hecho** | `server_async_engine` + `get_server_db` en `database.py` |
+| Tests del servidor | ✅ **Hecho** | `tests/test_api_server.py` (6 tests sobre `balansoft_ws_server_test`) |
+| Tabla `identidad_local` | ✅ **Hecho** | Modelo `IdentidadLocal` (singleton `id=true`) + `GET/PUT /api/v1/identity` (PUT solo ADMIN) + tile "Identidad de la estación" en Ajustes y guardado best-effort tras login |
 | Sincronización de usuarios local → credenciales global | ✅ **Hecho** | CRUD `/api/v1/usuarios` encola `sync_queue` (entidad `usuario`); `GET/POST /api/v1/sync/usuarios/pendientes\|entregados`; server `POST /api/v1/sync/users` (upsert/desactivar por `id_cuenta`); orquestador best-effort en `AuthRepository` tras login |
-| Validación de tolerancia comercial                     | ✅ **Hecho** | `_aplicar_tolerancia` en `WeighingService.close` (LogSistema WARN + auditoría) → `WeighingOut.advertencia_tolerancia`                                                                                                                                  |
-| Tabla/Catálogo `conceptos_kardex`                      |  **Baja**   | Catálogo editable de IDs de movimiento                                                                                                                                                                                                                 |
-| Documentación de migración                             |  **Media**  | Script para clientes existentes single-DB                                                                                                                                                                                                              |
+| Validación de tolerancia comercial | ✅ **Hecho** | `_aplicar_tolerancia` en `WeighingService.close` (LogSistema WARN + auditoría) → `WeighingOut.advertencia_tolerancia` |
+| Tabla/Catálogo `conceptos_kardex` | ✅ **Hecho** | Migración **031** + CRUD `/api/v1/conceptos-kardex` + seed de 0/10/60 por empresa + JOIN en `/reports/kardex/detalle` (migración `.mssql.sql` y schema canónico PG/T-SQL) |
+| Documentación de migración | **Media** | Script para clientes existentes single-DB |
 
 ### 9.4 Backend y frontend añadidos en esta iteración
 
-| Pieza                                                                                   | Dónde                                                               | Estado |
-|-----------------------------------------------------------------------------------------|---------------------------------------------------------------------|:------:|
-| `POST /api/v1/auth/register` (server)                                                   | `servidor.py`                                                       |   ✅    |
-| `POST /api/v1/auth/login` (server, sin LM)                                              | `servidor.py`                                                       |   ✅    |
-| `POST /api/v1/auth/refresh-token` (server)                                              | `servidor.py`                                                       |   ✅    |
-| `GET/POST /api/v1/licencias` (server)                                                   | `servidor.py`                                                       |   ✅    |
-| `POST /api/v1/panel/login` + `GET /api/v1/panel/cuentas`                                | `servidor.py`                                                       |   ✅    |
-| `POST /api/v1/sync/server` (recepción de lotes)                                         | `servidor.py`                                                       |   ✅    |
-| `POST /api/v1/auth/login-local` (local, offline)                                        | `auth.py`                                                           |   ✅    |
-| Fallback offline en frontend (login-local)                                              | `AuthRepository`                                                    |   ✅    |
-| URL del servidor configurable (frontend)                                                | `AppConfig.serverApiUrl`                                            |   ✅    |
-| Pantalla `Conexiones` (setup inicial + ajustes)                                         | `connections_screen.dart`                                           |   ✅    |
-| `GET/PUT /api/v1/identity` (identidad de estación)                                      | `identity.py`                                                       |   ✅    |
-| CRUD `/api/v1/usuarios` + cola `sync_queue`                                             | `usuarios.py`                                                       |   ✅    |
-| `GET/POST /api/v1/sync/usuarios/pendientes\|entregados`                                 | `sync.py`                                                           |   ✅    |
-| `POST /api/v1/sync/users` (credenciales globales)                                       | `servidor.py`                                                       |   ✅    |
-| Orquestador de usuarios + identidad tras login (best-effort)                            | `AuthRepository._sincronizarIdentidadYUsuarios`                     |   ✅    |
-| Gestión de usuarios en Ajustes (solo ADMIN)                                             | `usuarios_screen.dart`                                              |   ✅    |
-| Indicador "Sin red" en dashboard                                                        | `dashboard_screen.dart`                                             |   ✅    |
-| Advertencia de tolerancia comercial en cierre                                           | `weighing_service.py` + `pesajes.py`                                |   ✅    |
-| `POST /api/v1/panel/verificar-licencia` + `GET/PUT /api/v1/panel/cuentas/{id}` (server) | `servidor.py` + `schemas_server.py`                                 |   ✅    |
-| Tests backend (identidad, usuarios, tolerancia, sync/server)                            | `tests/test_identity_usuarios_tolerancia.py` + `test_api_server.py` |   ✅    |
+| Pieza | Dónde | Estado |
+|-------|-------|:------:|
+| `POST /api/v1/auth/register` (server) | `servidor.py` | ✅ |
+| `POST /api/v1/auth/login` (server, sin LM) | `servidor.py` | ✅ |
+| `POST /api/v1/auth/refresh-token` (server) | `servidor.py` | ✅ |
+| `GET/POST /api/v1/licencias` (server) | `servidor.py` | ✅ |
+| `POST /api/v1/panel/login` + `GET /api/v1/panel/cuentas` | `servidor.py` | ✅ |
+| `POST /api/v1/sync/server` (recepción de lotes) | `servidor.py` | ✅ |
+| `POST /api/v1/auth/login-local` (local, offline) | `auth.py` | ✅ |
+| Fallback offline en frontend (login-local) | `AuthRepository` | ✅ |
+| URL del servidor configurable (frontend) | `AppConfig.serverApiUrl` | ✅ |
+| Pantalla `Conexiones` (setup inicial + ajustes) | `connections_screen.dart` | ✅ |
+| `GET/PUT /api/v1/identity` (identidad de estación) | `identity.py` | ✅ |
+| CRUD `/api/v1/usuarios` + cola `sync_queue` | `usuarios.py` | ✅ |
+| `GET/POST /api/v1/sync/usuarios/pendientes\|entregados` | `sync.py` | ✅ |
+| `POST /api/v1/sync/users` (credenciales globales) | `servidor.py` | ✅ |
+| Orquestador de usuarios + identidad tras login (best-effort) | `AuthRepository._sincronizarIdentidadYUsuarios` | ✅ |
+| Gestión de usuarios en Ajustes (solo ADMIN) | `usuarios_screen.dart` | ✅ |
+| Indicador "Sin red" en dashboard | `dashboard_screen.dart` | ✅ |
+| Advertencia de tolerancia comercial en cierre | `weighing_service.py` + `pesajes.py` | ✅ |
+| `POST /api/v1/panel/verificar-licencia` + `GET/PUT /api/v1/panel/cuentas/{id}` (server) | `servidor.py` + `schemas_server.py` | ✅ |
+| Tests backend (identidad, usuarios, tolerancia, sync/server) | `tests/test_identity_usuarios_tolerancia.py` + `test_api_server.py` | ✅ |
 
 ### 9.5 Panel administrativo (BALASOFT-UI)
 
@@ -505,17 +515,17 @@ Python ni de clonar el repo (los fuentes quedan compilados embebidos).
 
 **Piezas:**
 
-| Pieza                                             | Dónde                                             | Estado |
-|---------------------------------------------------|---------------------------------------------------|:------:|
-| Entrada WServer (bootstrap BD + uvicorn)          | `backend/wserver.py`                              |   ✅    |
-| Plantilla de configuración del cliente            | `backend/.env.plantilla`                          |   ✅    |
-| Spec PyInstaller one-file                         | `backend/WServer.spec`                            |   ✅    |
-| Script de build (salida `dist/WServer/WServer`)   | `backend/scripts/build_wserver.sh`                |   ✅    |
-| Vaciado total de BDs (local + server)             | `backend/scripts/reset_db.sh`                     |   ✅    |
-| Orquestador WServer (lanzar/esperar health)       | `frontend/lib/core/services/wserver_manager.dart` |   ✅    |
-| Asegurado de WServer en el login (solo SERVIDOR)  | `frontend/lib/main.dart` + `login_screen.dart`    |   ✅    |
-| Conexiones (URL de la API, editable y comprobada) | `frontend/.../connections_screen.dart`            |   ✅    |
-| Config de estación (`config.json`)                | `frontend/lib/core/config/station_config.dart`    |   ✅    |
+| Pieza | Dónde | Estado |
+|-------|-------|:------:|
+| Entrada WServer (bootstrap BD + uvicorn) | `backend/wserver.py` | ✅ |
+| Plantilla de configuración del cliente | `backend/.env.plantilla` | ✅ |
+| Spec PyInstaller one-file | `backend/WServer.spec` | ✅ |
+| Script de build (salida `dist/WServer/WServer`) | `backend/scripts/build_wserver.sh` | ✅ |
+| Vaciado total de BDs (local + server) | `backend/scripts/reset_db.sh` | ✅ |
+| Orquestador WServer (lanzar/esperar health) | `frontend/lib/core/services/wserver_manager.dart` | ✅ |
+| Asegurado de WServer en el login (solo SERVIDOR) | `frontend/lib/main.dart` + `login_screen.dart` | ✅ |
+| Conexiones (URL de la API, editable y comprobada) | `frontend/.../connections_screen.dart` | ✅ |
+| Config de estación (`config.json`) | `frontend/lib/core/config/station_config.dart` | ✅ |
 
 **Construir el binario:** `cd backend && uv run pyinstaller WServer.spec --noconfirm`
 (o `./scripts/build_wserver.sh`). Probarlo: `WSERVER_HOME=/tmp/demo dist/WServer/WServer`.
@@ -658,11 +668,11 @@ CORS_ORIGINS=["http://localhost:8003"]
 
 Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa** desde la v2.4: `.env.plantilla` va con `API_DOCS_ENABLED=true`, de modo que toda instalación nueva expone:
 
-| Ruta            | Qué es                                          | Recomendado               |
-|-----------------|-------------------------------------------------|---------------------------|
-| `/docs`         | Swagger UI (interactivo)                        | Sí, para integradores     |
-| `/redoc`        | Redoc (referencia legible, **objetivo de H14**) | Sí, para integradores     |
-| `/openapi.json` | Esquema OpenAPI completo (82 rutas)             | Sí, es la fuente de ambos |
+| Ruta | Qué es | Recomendado |
+|------|--------|-------------|
+| `/docs` | Swagger UI (interactivo) | Sí, para integradores |
+| `/redoc` | Redoc (referencia legible, **objetivo de H14**) | Sí, para integradores |
+| `/openapi.json` | Esquema OpenAPI completo (82 rutas) | Sí, es la fuente de ambos |
 
 **Decisión de seguridad (2026-10-02):** antes de esta versión la plantilla traía `API_DOCS_ENABLED=false` con intención de no exponer la superficie, pero **esa configuración no protegía nada**: `openapi_url` es independiente de la bandera, así que `/openapi.json` seguía publicando el esquema completo de las 82 rutas. Se pagaba la ausencia de documentación sin obtener seguridad. Por eso se optó por **habilitar la documentación y tratar la exposición de forma explícita** en lugar de ocultarla.
 
@@ -676,16 +686,16 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 **Decisión:** el motor se decide **únicamente por el prefijo de `DATABASE_URL`** (`backend/app/core/db_engine.py`); **no hay variables de entorno nuevas**. `DATABASE_URL_SYNC` debe apuntar al mismo motor; si está vacía o incoherente se **deriva en memoria** con `PREFIJO_SYNC` (precedencia a `DATABASE_URL`) y se avisa por log. `Settings.db_engine` (`"postgresql"` | `"sqlserver"`) expone el resultado y `_coherencia_motores` aborta el arranque ante un prefijo desconocido.
 
-| Prefijo de `DATABASE_URL`                                          | Motor        | Prefijo de `DATABASE_URL_SYNC` |
-|--------------------------------------------------------------------|--------------|--------------------------------|
-| `postgresql+asyncpg://`, `postgresql://`, `postgresql+psycopg2://` | `postgresql` | `postgresql+psycopg2://`       |
-| `mssql+aioodbc://`, `mssql+pyodbc://`, `mssql://`                  | `sqlserver`  | `mssql+pyodbc://`              |
+| Prefijo de `DATABASE_URL` | Motor | Prefijo de `DATABASE_URL_SYNC` |
+|---|---|---|
+| `postgresql+asyncpg://`, `postgresql://`, `postgresql+psycopg2://` | `postgresql` | `postgresql+psycopg2://` |
+| `mssql+aioodbc://`, `mssql+pyodbc://`, `mssql://` | `sqlserver` | `mssql+pyodbc://` |
 
 **Instalación del extra (solo estaciones SQL Server):** `uv sync --extra sqlserver` (añade `aioodbc`/`pyodbc` al lock) y el sistema debe tener el *Microsoft ODBC Driver 18 for SQL Server*. Sin drivers la app **sigue arrancando**: los engines son perezosos y el error indica el comando exacto. El `WServer.spec` empaqueta `pyodbc`/`aioodbc` solo si están instalados en el entorno de build, así que los builds PG no cambian.
 
 **Qué hace la estación con `motor=sqlserver` (modo degradado):**
 
-- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (35 tablas = 32 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; 35 PK, 53 FK, 47 índices; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las 30 migraciones plegadas (`001.sql`…`030.sql`) → marca el caché en `aplicado`.
+- **El WServer aplica el DDL canónico de SQL Server (Fase 2)**: `backend/sqlserver/balansoft-ws-local.sql` (**37 tablas** = 34 canónicas + `password_reset_tokens`/`series_numeracion`/`schema_migrations`; **37 PK, 55 FK**; sin `GO`; guards `IF OBJECT_ID` idempotentes; columnas indexadas `NVARCHAR(≤255)` — regla de 900 bytes; lote transaccional). `asegurar_db` en mssql: crea la BD en `master` con `IF DB_ID(N'…') IS NULL CREATE DATABASE [nombre]` (si no hay permisos, avisa sin tumbar el arranque) → aplica el T-SQL → siembra `schema_migrations` con las **33 migraciones plegadas** (`001.sql`…`032_barreras.sql`; la versión registrada es el **nombre del archivo**, así que dos migraciones pueden compartir prefijo numérico sin colisionar) → marca el caché en `aplicado`.
 - **`GET /api/v1/entorno`** añade la clave `"motor"`; la clave `"postgres"` **no se renombra** (contrato con la app Flutter) y su SQL por motor sale de `sql_conteo_tablas()`.
 - **Esquema ausente o servidor caído → HTTP 503, no 500**: `manejador_error_bd` clasifica el error (`42S02`/«invalid object name» → `codigo=esquema_mssql_pendiente`; SQLSTATE `08*` → `codigo=sqlserver_sin_conexion`) y cualquier otro error sube tal cual (500, idéntico al de hoy en PG). Antes de cada consulta `asegurar_esquema_listo` consulta `sys.tables`/`pg_tables` con caché (60 s mientras esté `pendiente`); **si esa consulta falla, la caché vuelve a su valor inicial antes de propagar**, para que un corte no deje un `pendiente` caduco (LOW-001).
 - **Sin drivers ODBC el WServer arranca igual (Opción B)**: `database._registrar_drivers_faltantes` **no lanza** — siembra el flag global `drivers_faltantes()` en `db_engine` y deja los engines en `None` (bind nominal, nunca usado porque el gate lanza antes). Cualquier endpoint de BD responde 503 con **`codigo=sqlserver_sin_drivers`** y el mensaje accionable (`MENSAJE_SIN_DRIVERS`: «uv sync --extra sqlserver» + «Microsoft ODBC Driver 18 for SQL Server»); `/api/v1/health` sigue en 200 para que la app Flutter pueda mostrar el aviso (el instalador no da rojo en el paso 8 por un extra cancelado). El flag se limpia con `reiniciar_estado_esquema()` (reinicio de la guardia).
@@ -703,23 +713,23 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 ## 12. Documentos Relacionados
 
-| Documento                         |         Estado         | Descripción                                                                                                                                    |
-|-----------------------------------|:----------------------:|------------------------------------------------------------------------------------------------------------------------------------------------|
-| `MANEJO_DB.md`                    |   **Este documento**   | Arquitectura de dos BDs, setup de desarrollo, login, modelo de cuenta/dispositivos (§13), estado y plan                                        |
-| `I18N_Y_ONBOARDING.md`            |        Vigente         | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/operador) y preferencias persistidas                                        |
-| `BALANZAS_SOPORTADAS.md`          |        Vigente         | Matriz de compatibilidad de indicadores reales (Yaohua, Torrey, Keli, Rice Lake, Syneria/Ichiban, Excel) y configuración recomendada por marca |
-| `backend/balansoft-ws-server.sql` |        Vigente         | Schema canónico del servidor (10 tablas)                                                                                                       |
-| `backend/balansoft-ws-local.sql`  |        Vigente         | Schema canónico local (29 tablas)                                                                                                              |
-| `SEMAFORO.md`                     |        Vigente         | Ciclo del semáforo de pesaje y su integración (canales, comandos, fases/luces y vigilante del backend)                                         |
-| `ARCH.md`                         | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE`                                                                                                             |
-| `PRD.md`                          | Requiere actualización | 1 empresa/máquina; licencia fuera de BD local                                                                                                  |
-| `IMPLEMENTADO.md`                 | Requiere actualización | Tablas por rol; endpoints condicionales                                                                                                        |
-| `DEPLOY.md`                       | Requiere actualización | Dos despliegues; `setup_db_server/local`                                                                                                       |
-| `RESUMEN-API-LICENCIAS.md`        | Requiere actualización | Licencia en `balansoft_ws.cuentas`                                                                                                             |
-| `MODEL.md`                        |        Vigente         | Reglas de negocio, cálculos, kardex                                                                                                            |
-| `MODELO_ESTANDAR.md`              |        Vigente         | Roles, navegación, reglas de inmutabilidad                                                                                                     |
-| `NAV.md`                          |        Vigente         | Mapa de navegación y atajos                                                                                                                    |
-| `UI-UX.md`                        | Requiere actualización | Integrar navegación de `NAV.md`                                                                                                                |
+| Documento | Estado | Descripción |
+|-----------|:------:|-------------|
+| `MANEJO_DB.md` | **Este documento** | Arquitectura de dos BDs, setup de desarrollo, login, modelo de cuenta/dispositivos (§13), estado y plan |
+| `I18N_Y_ONBOARDING.md` | Vigente | Idiomas es/en/pt, onboarding de primera instalación (modo servidor/operador) y preferencias persistidas |
+| `BALANZAS_SOPORTADAS.md` | Vigente | Matriz de compatibilidad de indicadores reales (Yaohua, Torrey, Keli, Rice Lake, Syneria/Ichiban, Excel) y configuración recomendada por marca |
+| `backend/balansoft-ws-server.sql` | Vigente | Schema canónico del servidor (10 tablas) |
+| `backend/balansoft-ws-local.sql` | Vigente | Schema canónico local (29 tablas) |
+| `SEMAFORO.md` | Vigente | Ciclo del semáforo de pesaje y su integración (canales, comandos, fases/luces y vigilante del backend) |
+| `ARCH.md` | Requiere actualización | Añadir dos PostgreSQL + `APP_ROLE` |
+| `PRD.md` | Requiere actualización | 1 empresa/máquina; licencia fuera de BD local |
+| `IMPLEMENTADO.md` | Requiere actualización | Tablas por rol; endpoints condicionales |
+| `DEPLOY.md` | Requiere actualización | Dos despliegues; `setup_db_server/local` |
+| `RESUMEN-API-LICENCIAS.md` | Requiere actualización | Licencia en `balansoft_ws.cuentas` |
+| `MODEL.md` | Vigente | Reglas de negocio, cálculos, kardex |
+| `MODELO_ESTANDAR.md` | Vigente | Roles, navegación, reglas de inmutabilidad |
+| `NAV.md` | Vigente | Mapa de navegación y atajos |
+| `UI-UX.md` | Requiere actualización | Integrar navegación de `NAV.md` |
 
 ---
 
@@ -730,13 +740,13 @@ Controlada por `API_DOCS_ENABLED`. **Las estaciones (WServer) la tienen activa**
 
 ### 13.1 Regla del titular
 
-| Concepto         | Dónde vive                                               | Quién lo asigna                            |
-|------------------|----------------------------------------------------------|--------------------------------------------|
-| Cuenta           | `balansoft_ws_server.cuentas`                            | Panel del proveedor                        |
-| Licencia         | `balansoft_ws_server.licencias` (`hardware_id`)          | Panel / activación                         |
-| Dispositivo      | `balansoft_ws_server.dispositivos` (`rol`)               | Backend en cada login (ver 13.1)           |
-| Espejo local     | `balansoft_ws_local.identidad_local` (`rol_dispositivo`) | `POST /api/v1/auth/login-central`          |
-| Datos de empresa | `balansoft_ws_local.empresas`                            | Espejo del central + `PUT /api/v1/empresa` |
+| Concepto | Dónde vive | Quién lo asigna |
+|----------|-----------|-----------------|
+| Cuenta | `balansoft_ws_server.cuentas` | Panel del proveedor |
+| Licencia | `balansoft_ws_server.licencias` (`hardware_id`) | Panel / activación |
+| Dispositivo | `balansoft_ws_server.dispositivos` (`rol`) | Backend en cada login (ver 13.1) |
+| Espejo local | `balansoft_ws_local.identidad_local` (`rol_dispositivo`) | `POST /api/v1/auth/login-central` |
+| Datos de empresa | `balansoft_ws_local.empresas` | Espejo del central + `PUT /api/v1/empresa` |
 
 `POST /api/v1/auth/login` del rol `server` asigna el rol del dispositivo
 (`app/api/v1/endpoints/servidor.py::_dispositivo`), pero la fuente de verdad es
@@ -867,11 +877,11 @@ override de usuario del `config.json` **conservando el rol** (solo acepta si
 
 ### 13.4 Estado persistido
 
-| Fuente                     | Clave                                               | Significa                                             |
-|----------------------------|-----------------------------------------------------|-------------------------------------------------------|
-| `config.json` (instalador) | `api_base_url` + `rol`                              | URL de la API y rol de la estación (fuente de verdad) |
-| Preferencia (`AppConfig`)  | `onboarding_completado`                             | Wizard post-login sin pendientes                      |
-| Preferencia (`AppConfig`)  | `offline`, `wserver_autostart`, `sync_auto_enabled` | Estado operativo del dispositivo                      |
+| Fuente | Clave | Significa |
+|--------|-------|-----------|
+| `config.json` (instalador) | `api_base_url` + `rol` | URL de la API y rol de la estación (fuente de verdad) |
+| Preferencia (`AppConfig`) | `onboarding_completado` | Wizard post-login sin pendientes |
+| Preferencia (`AppConfig`) | `offline`, `wserver_autostart`, `sync_auto_enabled` | Estado operativo del dispositivo |
 
 Las banderas del wizard antiguo (`setup_preferencias_completado`, `modo_estacion`,
 `licencia_verificada`, `es_titular_licencia`, `empresa_setup_capturado`) se
@@ -882,10 +892,10 @@ Las banderas del wizard antiguo (`setup_preferencias_completado`, `modo_estacion
 El **servidor central** (`dispositivos`) lleva el estado de aprobación de cada
 equipo de la cuenta, además de su rol de dispositivo:
 
-| Columna      | Valores                                                     | Semántica                                                                                                               |
-|--------------|-------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `estado`     | `PENDIENTE` / `APROBADO` / `RECHAZADO` (default `APROBADO`) | Aprobación de la tutora. Las filas **antiguas** sin valor se leen como `APROBADO`.                                      |
-| `rol_sesion` | `ADMIN` / `OPERADOR` / `AUDITOR`, o `NULL`                  | Rol con el que opera la sesión del equipo (NULL hasta aprobar). El valor histórico `TRABAJADOR` se lee como `OPERADOR`. |
+| Columna | Valores | Semántica |
+|---------|---------|-----------|
+| `estado` | `PENDIENTE` / `APROBADO` / `RECHAZADO` (default `APROBADO`) | Aprobación de la tutora. Las filas **antiguas** sin valor se leen como `APROBADO`. |
+| `rol_sesion` | `ADMIN` / `OPERADOR` / `AUDITOR`, o `NULL` | Rol con el que opera la sesión del equipo (NULL hasta aprobar). El valor histórico `TRABAJADOR` se lee como `OPERADOR`. |
 
 - **Quién nace pendiente**: solo un equipo de licencia **`CENTRAL`** que **no**
   sea el titular; nace `PENDIENTE` (y `activo=false`, no consume cupo). El
@@ -911,9 +921,9 @@ La licencia del LM **no restringe funciones** en la estación: sus `features`
 (Básico/Premium) no bloquean ningún módulo. Lo único que el tier impone es el
 **límite de sesiones/equipos**:
 
-| Tier                                                   | Límite de sesiones local                                      |
-|--------------------------------------------------------|---------------------------------------------------------------|
-| `DEMO`                                                 | 3                                                             |
+| Tier | Límite de sesiones local |
+|------|--------------------------|
+| `DEMO` | 3 |
 | `MONOPUESTO` / `CENTRAL` (y los planes Básico/Premium) | Sin tope local: manda `licencias.max_sesiones` del LM/central |
 
 `limite_sesiones_por_tier()` (`app/services/llave_activacion_service.py`) es la
@@ -926,18 +936,18 @@ Una estación **OPERADOR** (cliente delgado) no se instala sin autorización
 explícita: el instalador exige una **llave de activación de un solo uso** que
 emite el ADMIN desde el servidor titular.
 
-| Aspecto                     | Regla                                                                                                                                                                                                                                                                                       |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Emisión                     | `POST /api/v1/activacion/llaves` — solo `ADMIN`; cuerpo `{id_usuario, expira_horas?}`. El código en claro se devuelve **una sola vez** (`BS-XXXX-XXXX-XXXX`), con `codigo_preview` (últimos 6) para reconocerlo en la lista.                                                                |
-| Vigencia                    | 7 días por defecto (`_EXPIRA_HORAS_DEFAULT`), entre 1 h y 90 días.                                                                                                                                                                                                                          |
-| Un solo uso **por usuario** | Emitir una llave nueva **revoca** la anterior del mismo usuario.                                                                                                                                                                                                                            |
-| Canje                       | `POST /api/v1/activacion/validar` — **sin autenticación** (lo llama el instalador antes de existir sesión); cuerpo `{codigo, hardware_id?}`.                                                                                                                                                |
-| Idempotencia                | La fila se lee con `FOR UPDATE`: dos instaladores con el mismo código no pueden consumirlo dos veces.                                                                                                                                                                                       |
-| Tenant                      | El `id_empresa` sale de la **propia llave**, nunca del cliente.                                                                                                                                                                                                                             |
-| Respuesta inválida          | `400` con `detail` («inválido o ya utilizado», «expiró», …): el instalador no deja continuar y **ese equipo no recibe cuenta**.                                                                                                                                                             |
-| Respuesta válida            | `200 {ok: true, usuario_email, empresa_nombre, mensaje}` (`ok` es un default del esquema, pero viaja en el cuerpo y el instalador lo **exige**: un `200` sin él —p. ej. un portal cautivo que devuelva HTML— **no** cuenta como canje). El instalador guarda el usuario autorizado y sigue. |
-| Aviso al dueño              | Al consumirse se escribe una `notificacion` (`tipo=activacion_equipo`, `dedup_key=llave_activacion:<id>`) con las sesiones usadas/disponibles.                                                                                                                                              |
-| Almacenamiento              | Solo el **SHA-256** del código (`codigo_hash`, índice único) y el `codigo_preview`; nunca el código en claro. Alfabeto sin `0/O` ni `1/I` (tecleo en estación).                                                                                                                             |
+| Aspecto | Regla |
+|---------|-------|
+| Emisión | `POST /api/v1/activacion/llaves` — solo `ADMIN`; cuerpo `{id_usuario, expira_horas?}`. El código en claro se devuelve **una sola vez** (`BS-XXXX-XXXX-XXXX`), con `codigo_preview` (últimos 6) para reconocerlo en la lista. |
+| Vigencia | 7 días por defecto (`_EXPIRA_HORAS_DEFAULT`), entre 1 h y 90 días. |
+| Un solo uso **por usuario** | Emitir una llave nueva **revoca** la anterior del mismo usuario. |
+| Canje | `POST /api/v1/activacion/validar` — **sin autenticación** (lo llama el instalador antes de existir sesión); cuerpo `{codigo, hardware_id?}`. |
+| Idempotencia | La fila se lee con `FOR UPDATE`: dos instaladores con el mismo código no pueden consumirlo dos veces. |
+| Tenant | El `id_empresa` sale de la **propia llave**, nunca del cliente. |
+| Respuesta inválida | `400` con `detail` («inválido o ya utilizado», «expiró», …): el instalador no deja continuar y **ese equipo no recibe cuenta**. |
+| Respuesta válida | `200 {ok: true, usuario_email, empresa_nombre, mensaje}` (`ok` es un default del esquema, pero viaja en el cuerpo y el instalador lo **exige**: un `200` sin él —p. ej. un portal cautivo que devuelva HTML— **no** cuenta como canje). El instalador guarda el usuario autorizado y sigue. |
+| Aviso al dueño | Al consumirse se escribe una `notificacion` (`tipo=activacion_equipo`, `dedup_key=llave_activacion:<id>`) con las sesiones usadas/disponibles. |
+| Almacenamiento | Solo el **SHA-256** del código (`codigo_hash`, índice único) y el `codigo_preview`; nunca el código en claro. Alfabeto sin `0/O` ni `1/I` (tecleo en estación). |
 
 En el instalador la llave se pide en el **paso 1c**, junto a la dirección del
 servidor titular: ese paso no deja avanzar hasta que la API responde **y** la
