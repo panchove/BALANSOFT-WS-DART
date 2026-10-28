@@ -21,7 +21,7 @@ MIGRACIONES_DIR = Path(__file__).resolve().parents[1] / "migrations"
 
 TABLAS_PG_Y_MSSQL = {
     "almacenes", "auditoria", "balanzas", "barreras", "boletos_pesaje", "boletos_ediciones",
-    "camiones", "camaras", "conceptos_inventario",
+    "camiones", "camaras", "conceptos_inventario", "conceptos_kardex",
     "categorias", "conductores", "configuraciones", "empresas",
     "identidad_local", "imagenes_pesaje", "indicadores", "kardex", "llaves_activacion",
     "logs_sistema", "marcas",
@@ -33,9 +33,13 @@ TABLAS_PG_Y_MSSQL = {
 TABLAS_SOLO_MSSQL = {"password_reset_tokens", "series_numeracion", "schema_migrations"}
 TABLAS_ESPERADAS_MSSQL = TABLAS_PG_Y_MSSQL | TABLAS_SOLO_MSSQL
 
-ESPERADAS_PK = 36
-ESPERADAS_FK = 54
-ESPERADAS_MIGRACIONES_PLEGADAS = 32
+ESPERADAS_PK = 37
+ESPERADAS_FK = 55
+# ``schema_migrations`` guarda el NOMBRE del archivo como versión, así que dos
+# archivos pueden compartir prefijo numérico sin colisionar (caso real: migran
+# 031_camaras_marca_modelo y 031_conceptos_kardex). Lo que se exige es que la
+# numeración 001..032 no tenga huecos, no que los prefijos sean únicos.
+ESPERADAS_MIGRACIONES_PLEGADAS = 33
 MAX_NVARCHAR_INDEXADA = 255
 
 
@@ -225,7 +229,7 @@ def test_paridad_tablas_pg_vs_mssql():
 
 
 def test_migraciones_plegadas_documentadas():
-    """Las 30 migraciones 001-030 existen como archivo (las pliega el WServer).
+    """Las migraciones 001-032 existen como archivo (las pliega el WServer).
 
     ``wserver._sembrar_migraciones_sqlserver`` itera las migraciones del disco
     (``_archivos_migracion``); si el directorio real no tuviera esos 30
@@ -238,8 +242,11 @@ def test_migraciones_plegadas_documentadas():
         f"se esperaban {ESPERADAS_MIGRACIONES_PLEGADAS} migraciones plegadas, "
         f"hay {len(archivos)} aplicables en {MIGRACIONES_DIR}"
     )
-    # Numeración contigua 001..030 (sin huecos) para que la siembra sea determinista.
-    for i in range(1, ESPERADAS_MIGRACIONES_PLEGADAS + 1):
+    # Numeración contigua 001..maximo (sin huecos) para que la siembra sea determinista.
+    # El prefijo máximo se deriva del disco: puede haber varias migraciones con el
+    # mismo prefijo (la versión registrada es el nombre del archivo, no el número).
+    maximo = max(int(p[:3]) for p in archivos)
+    for i in range(1, maximo + 1):
         assert any(p.startswith(f"{i:03d}_") for p in archivos), f"falta la migración {i:03d}_*.sql"
 
 

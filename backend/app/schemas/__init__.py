@@ -7,7 +7,15 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 # ---------------------------------------------------------------------------
 # Autenticación
@@ -665,6 +673,53 @@ class ConceptoInventarioCreate(BaseModel):
     activo: bool = True
 
 
+class ConceptoKardexOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_concepto: int
+    id_empresa: uuid.UUID
+    nombre: str
+    descripcion: str | None = None
+    signo: str
+    es_sistema: bool = False
+    activo: bool = True
+    aplica_a: str = "AMBOS"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ConceptoKardexCreate(BaseModel):
+    id_concepto: int = Field(..., ge=0, le=99)
+    nombre: str = Field(..., min_length=2)
+    descripcion: str | None = None
+    signo: str = Field(..., pattern="^(inicial|positivo|negativo)$")
+    es_sistema: bool = False
+    activo: bool = True
+    aplica_a: str = Field(default="AMBOS", pattern="^(INGRESO|DESPACHO|AJUSTE|AMBOS)$")
+
+    @model_validator(mode="after")
+    def validar_coherencia(self):
+        if self.id_concepto == 0 and self.signo != "inicial":
+            raise ValueError("El concepto 0 debe tener signo 'inicial'")
+        if 1 <= self.id_concepto <= 49 and self.signo != "positivo":
+            raise ValueError("Los conceptos 1-49 deben tener signo 'positivo'")
+        if 50 <= self.id_concepto <= 99 and self.signo != "negativo":
+            raise ValueError("Los conceptos 50-99 deben tener signo 'negativo'")
+        return self
+
+
+class ConceptoKardexUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=2)
+    descripcion: str | None = None
+    activo: bool | None = None
+    aplica_a: str | None = Field(default=None, pattern="^(INGRESO|DESPACHO|AJUSTE|AMBOS)$")
+
+    # Se acepta para poder **rechazar** el cambio de forma explícita: el signo
+    # es derivado del ID (regla de oro del kardex) y nunca se modifica. Sin este
+    # campo el cliente mandaría el signo y recibiría un 200 engañoso.
+    signo: str | None = Field(default=None, pattern="^(inicial|positivo|negativo)$")
+
+
 # ---------------------------------------------------------------------------
 # Barreras de tránsito (control de acceso) — migración 032
 # ---------------------------------------------------------------------------
@@ -1288,35 +1343,14 @@ class SerieNumeracionOut(BaseModel):
 
 
 class AjusteInventarioCreate(BaseModel):
-    """Movimiento de ajuste manual de inventario (kardex).
+    """Movimiento de ajuste manual de inventario (kardex)."""
 
-    Tipos de movimiento (MODEL.md §kardex):
-      - ``10`` = INGRESO por ajuste (positivo, incrementa saldo)
-      - ``60`` = DESPACHO por ajuste (negativo, reduce saldo)
-
-    Solo se aceptan productos con ``es_kardex=true`` y almacenes
-    de la misma empresa.
-
-    El motivo del ajuste se elige de ``conceptos_inventario`` mediante
-    ``id_concepto``; el nombre del concepto se copia a ``documento`` para
-    conservar el histórico. ``documento`` sigue aceptándose para clientes
-    antiguos (compatibilidad), pero la UI nueva manda ``id_concepto``.
-    """
-
-    id_movimiento: Literal[10, 60] = Field(
-        ..., description="10 = INGRESO / 60 = DESPACHO"
-    )
     id_producto: uuid.UUID
     id_almacen: uuid.UUID
-    valor_kg: Decimal = Field(..., gt=0, description="Peso ajustado en kilogramos")
-    id_concepto: uuid.UUID | None = Field(
-        None, description="Concepto del movimiento (catálogo conceptos_inventario)"
-    )
-    documento: str | None = Field(
-        None,
-        max_length=100,
-        description="Texto libre (legado). Si se omite y hay id_concepto, se usa el nombre del concepto.",
-    )
+    id_concepto: int = Field(..., ge=1, le=99)
+    cantidad: Decimal = Field(..., description="Cantidad con signo según concepto")
+    motivo: str = Field(..., min_length=10, max_length=200)
+    documento: str | None = Field(None, max_length=100)
     fecha_documento: datetime | None = None
 
 

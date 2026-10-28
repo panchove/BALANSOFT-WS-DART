@@ -53,10 +53,19 @@ class _FakeRepo implements IWeighingRepository {
     DateTime? dateTo,
     String? vehicleId,
     String? estado,
+    int? kardexMov,
   }) async {
     if (error != null) throw error!;
     return [_weighing()];
   }
+
+  @override
+  Future<Map<String, dynamic>> resumenMovimiento(
+    int kardexMov, {
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async =>
+      {'kardex_mov': kardexMov, 'total_boletos': 0, 'total_kg': 0.0};
 
   @override
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data) async => _weighing();

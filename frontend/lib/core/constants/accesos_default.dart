@@ -1,15 +1,20 @@
+// lib/constants/accesos_default.dart
 import 'package:flutter/material.dart';
 
 /// Matriz de Seguridad y Accesos por defecto (espejo de
-/// `backend/app/core/seguridad_matrix.py`). El backend es autoridad: si hay una
-/// sobrescritura perseguida, el repositorio la usa; aquí vive el fallback para
-/// modo offline / primera carga.
+/// `backend/app/core/seguridad_matrix.py`).
 ///
 /// Acceso: `ver` | `editar` | `ninguno`.
+///
+/// IMPORTANTE: `indiceDe()` debe devolver EXACTAMENTE el mismo índice que
+/// `MenuConfig.arbolPorDefecto` y que `HomeShell._pages`. Si no, el menú
+/// navega a la pantalla equivocada (o a ninguna).
 class AccesosDefault {
+  AccesosDefault._();
+
   static const List<String> roles = ['ADMIN', 'OPERADOR', 'AUDITOR'];
 
-  /// Clave de módulo → (título).
+  // ── Catálogo de módulos (clave → título) ─────────────────────────────
   static const Map<String, String> modulos = {
     'inicio': 'Inicio',
     'terceros': 'Terceros',
@@ -41,7 +46,7 @@ class AccesosDefault {
     'configuracion': 'Configuración General',
     'ajustes_inventario': 'Ajustes de Inventario',
     'auditoria': 'Auditoría del Sistema',
-    'conceptos_inventario': 'Conceptos de Inventario',
+    'conceptos_inventario': 'Conceptos Kardex',
     'roles': 'Roles',
     'reportes_diarios': 'Reportes Diarios',
     'reportes_mensuales': 'Reportes Mensuales',
@@ -90,13 +95,15 @@ class AccesosDefault {
     };
   }
 
-  /// Ruta del módulo en el sidebar (último nodo hoja visible = índice).
+  /// Índice de página en `HomeShell._pages`.
+  ///
+  /// **Debe coincidir EXACTAMENTE con `HomeShell._pages` y con
+  /// `HomeShell._claveAIndice`.** Si no, el menú navega a la pantalla
+  /// equivocada (síntoma: "pulso Roles y me lleva a Básculas").
   static int indiceDe(String modulo) {
     return switch (modulo) {
       'inicio' => 0,
       'terceros' => 1,
-      'clientes' => 18,
-      'proveedores' => 19,
       'usuarios' => 2,
       'camiones' => 3,
       'conductores' => 4,
@@ -108,29 +115,31 @@ class AccesosDefault {
       'entradas' => 10,
       'salidas' => 11,
       'reportes' => 12,
+      'reportes_diarios' => 12,
+      'reportes_mensuales' => 12,
+      'reportes_personalizado' => 12,
       'dispositivos' => 13,
-      'dispositivos_basculas' => 13,
-      'dispositivos_indicadores' => 27,
-      'dispositivos_semaforos' => 28,
-      'dispositivos_barreras' => 31,
-      'dispositivos_camaras' => 29,
-      'dispositivos_impresoras' => 30,
       'seguridad' => 14,
       'documentos_empresa' => 15,
       'configuracion' => 16,
       'diseno_ticket' => 17,
-      'ingresos' => 20,
-      'despachos' => 21,
-      'conceptos_inventario' => 22,
-      'roles' => 23,
-      'reportes_diarios' => 24,
-      'reportes_mensuales' => 25,
-      'reportes_personalizado' => 26,
+      'clientes' => 18,
+      'proveedores' => 19,
+      'roles' => 20,
+      'ingresos' => 21,
+      'despachos' => 22,
+      'conceptos_inventario' => 29,
+      'dispositivos_basculas' => 23,
+      'dispositivos_indicadores' => 24,
+      'dispositivos_semaforos' => 25,
+      'dispositivos_camaras' => 26,
+      'dispositivos_barreras' => 27,
+      'dispositivos_impresoras' => 28,
       _ => -1,
     };
   }
 
-  /// Matriz por defecto: rol → módulo → acceso.
+  // ── Matriz de seguridad (sin cambios) ────────────────────────────────
   static const Map<String, Map<String, String>> _matriz = {
     'ADMIN': {
       'inicio': 'editar', 'terceros': 'editar', 'usuarios': 'editar',
@@ -141,8 +150,8 @@ class AccesosDefault {
       'ingresos': 'editar', 'despachos': 'editar',
       'reportes': 'editar', 'dispositivos': 'editar', 'seguridad': 'editar',
       'dispositivos_basculas': 'editar', 'dispositivos_indicadores': 'editar',
-      'dispositivos_semaforos': 'editar', 'dispositivos_barreras': 'editar', 'dispositivos_camaras': 'editar',
-      'dispositivos_impresoras': 'editar',
+      'dispositivos_semaforos': 'editar', 'dispositivos_barreras': 'editar',
+      'dispositivos_camaras': 'editar', 'dispositivos_impresoras': 'editar',
       'documentos_empresa': 'editar', 'diseno_ticket': 'editar',
       'configuracion': 'editar', 'ajustes_inventario': 'editar',
       'auditoria': 'editar', 'conceptos_inventario': 'editar',
@@ -159,8 +168,8 @@ class AccesosDefault {
       'ingresos': 'ver', 'despachos': 'ver',
       'reportes': 'editar', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
       'dispositivos_basculas': 'ninguno', 'dispositivos_indicadores': 'ninguno',
-      'dispositivos_semaforos': 'ninguno', 'dispositivos_barreras': 'ver', 'dispositivos_camaras': 'ninguno',
-      'dispositivos_impresoras': 'ninguno',
+      'dispositivos_semaforos': 'ninguno', 'dispositivos_barreras': 'ver',
+      'dispositivos_camaras': 'ninguno', 'dispositivos_impresoras': 'ninguno',
       'documentos_empresa': 'ninguno', 'diseno_ticket': 'editar',
       'configuracion': 'ninguno', 'ajustes_inventario': 'editar',
       'auditoria': 'ninguno', 'conceptos_inventario': 'editar',
@@ -177,8 +186,8 @@ class AccesosDefault {
       'ingresos': 'ver', 'despachos': 'ver',
       'reportes': 'editar', 'dispositivos': 'ninguno', 'seguridad': 'ninguno',
       'dispositivos_basculas': 'ninguno', 'dispositivos_indicadores': 'ninguno',
-      'dispositivos_semaforos': 'ninguno', 'dispositivos_barreras': 'ver', 'dispositivos_camaras': 'ninguno',
-      'dispositivos_impresoras': 'ninguno',
+      'dispositivos_semaforos': 'ninguno', 'dispositivos_barreras': 'ver',
+      'dispositivos_camaras': 'ninguno', 'dispositivos_impresoras': 'ninguno',
       'documentos_empresa': 'ver', 'diseno_ticket': 'ver',
       'configuracion': 'ninguno', 'ajustes_inventario': 'ninguno',
       'auditoria': 'ver', 'conceptos_inventario': 'ver',
@@ -188,16 +197,13 @@ class AccesosDefault {
     },
   };
 
-  /// Acceso por defecto de `rol` al `modulo`. Si el módulo no existe en la
-  /// clave (usuario heredado sin set), devuelve `ninguno` para no exponerlo.
+  /// Acceso por defecto de `rol` al `modulo`.
   static String acceso(String rol, String modulo) {
     return _matriz[rol]?[modulo] ?? 'ninguno';
   }
 
   /// Roles que pueden ver el módulo (acceso distinto de `ninguno`).
   static Set<String> rolesQueVen(String modulo) {
-    return roles
-        .where((r) => acceso(r, modulo) != 'ninguno')
-        .toSet();
+    return roles.where((r) => acceso(r, modulo) != 'ninguno').toSet();
   }
 }

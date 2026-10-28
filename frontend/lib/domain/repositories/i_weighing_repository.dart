@@ -32,6 +32,15 @@ abstract class IWeighingRepository {
     DateTime? dateTo,
     String? vehicleId,
     String? estado,
+    int? kardexMov,
+  });
+
+  /// Resumen (KPI) de una segmentación de kardex sobre el filtro completo:
+  /// `{"kardex_mov", "total_boletos", "total_kg"}`.
+  Future<Map<String, dynamic>> resumenMovimiento(
+    int kardexMov, {
+    DateTime? dateFrom,
+    DateTime? dateTo,
   });
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data);
   /// Historial de ediciones del boleto (más reciente primero).

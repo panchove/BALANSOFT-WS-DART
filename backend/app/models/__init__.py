@@ -651,8 +651,8 @@ class VinculoBalanzaIndicador(Base):
     __tablename__ = "vinculos_balanza_indicador"
     __table_args__ = (
         UniqueConstraint("id_bascula", name="uq_vinculo_bascula"),
-        UniqueConstraint("id_indicador", name="uq_vinculo_indicador"),
         Index("ix_vinculos_empresa", "id_empresa"),
+        Index("ix_vinculos_indicador", "id_indicador"),
     )
 
     id_vinculo: Mapped[uuid.UUID] = mapped_column(
@@ -708,6 +708,33 @@ class ConceptoInventario(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
+    )
+
+
+class ConceptoKardex(Base):
+    """Catálogo de conceptos para movimientos de Kardex (IDs 0-99)."""
+
+    __tablename__ = "conceptos_kardex"
+    __table_args__ = (
+        Index("idx_conceptos_kardex_empresa", "id_empresa"),
+        Index("idx_conceptos_kardex_signo", "signo"),
+    )
+
+    id_concepto: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_empresa: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("empresas.id_empresa"), primary_key=True
+    )
+    nombre: Mapped[str] = mapped_column(String(100))
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signo: Mapped[str] = mapped_column(String(8))
+    es_sistema: Mapped[bool] = mapped_column(Boolean, default=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    aplica_a: Mapped[str] = mapped_column(String(20), default="AMBOS")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=lambda: _now_utc()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=lambda: _now_utc(), onupdate=lambda: _now_utc()
     )
 
 

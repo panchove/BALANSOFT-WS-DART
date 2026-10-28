@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/focus_search_bus.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../data/repositories/catalog_repository.dart';
+import '../../../domain/repositories/i_weighing_repository.dart';
 import '../../../domain/entities/weighing.dart';
 import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
@@ -54,6 +55,8 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
   /// Marca si hay una petición de lista en curso (o encolada en el bloc):
   /// evita auto-disparos repetidos cuando el listado aún no tiene datos.
   bool _solicitandoCarga = false;
+  /// Suma de peso neto de la segmentación (KPI de Ingresos/Despachos).
+  double _totalKg = 0;
 
   bool get _soloSalidas => widget.estadoInicial == 'CERRADO';
 
@@ -66,12 +69,37 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
     if (pendiente != null) _placaCtrl.text = pendiente;
     _loadCatalogs();
     _recargarLista();
+    if (_esSegmentado) _cargarKpi();
   }
 
   void _recargarLista() {
     if (!mounted) return;
     _solicitandoCarga = true;
-    context.read<WeighingBloc>().add(const ListWeighingsEvent());
+    context.read<WeighingBloc>().add(ListWeighingsEvent(kardexMov: _kardexMovFiltro));
+  }
+
+  /// Movimiento de kardex que segmenta este listado (`null` = sin filtro).
+  int? get _kardexMovFiltro => switch (widget.tipoMovimiento) {
+        TipoMovimientoListado.ingreso => 10,
+        TipoMovimientoListado.despacho => 60,
+        TipoMovimientoListado.todos => null,
+      };
+
+  bool get _esSegmentado => _kardexMovFiltro != null;
+
+  /// KPI de la segmentación (Total ingresado / Total despachado) sobre el
+  /// filtro completo, no sobre la página visible.
+  Future<void> _cargarKpi() async {
+    final mov = _kardexMovFiltro;
+    if (mov == null) return;
+    try {
+      final resumen =
+          await di.sl<IWeighingRepository>().resumenMovimiento(mov);
+      if (!mounted) return;
+      setState(() => _totalKg = (resumen['total_kg'] as num?)?.toDouble() ?? 0);
+    } catch (_) {
+      // Sin KPI la lista sigue siendo utilizable.
+    }
   }
 
   @override
@@ -157,6 +185,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: _buildFilters(esOperador),
           ),
+          if (_esSegmentado) _kpiSegmentacion(context),
           Expanded(
             child: BlocListener<WeighingBloc, WeighingState>(
               listenWhen: (_, s) =>
@@ -169,6 +198,7 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
                   if (!identical(_items, s.weighings)) {
                     setState(() => _items = s.weighings);
                   }
+                  if (_esSegmentado) _cargarKpi();
                 } else if (s is WeighingError) {
                   _solicitandoCarga = false;
                 } else if (s is WeighingSyncComplete && _items == null) {
@@ -281,6 +311,56 @@ class _WeighingListScreenState extends State<WeighingListScreen> with RouteAware
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// KPI de la segmentación activa (Ingresos / Despachos).
+  ///
+  /// El valor viene del servidor (suma sobre el filtro completo); en offline se
+  /// calcula con lo persistido localmente. Usa `NumberUtils` para el formato
+  /// de kilos con el separador configurado.
+  Widget _kpiSegmentacion(BuildContext context) {
+    final esIngreso = widget.tipoMovimiento == TipoMovimientoListado.ingreso;
+    final color = esIngreso ? SwsColors.success : SwsColors.danger;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Card(
+        color: color.withValues(alpha: 0.12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(
+                esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
+                color: color,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      esIngreso ? 'kpi_total_ingresado'.tr() : 'kpi_total_despachado'.tr(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      NumberUtils.formatKg(_totalKg),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

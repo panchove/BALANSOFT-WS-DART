@@ -240,23 +240,53 @@ Cada opción del menú resuelve su destino de forma estable (por clave → índi
 | **17** | Diseño de Ticket | `diseno_ticket` | `presentation/screens/settings/ticket_design_screen.dart` |
 | **18** | Clientes | `clientes` | `catalog/catalog_crud_screen.dart` *(terceros con `tipo` CLIENTE)* |
 | **19** | Proveedores | `proveedores` | `catalog/catalog_crud_screen.dart` *(terceros con `tipo` PROVEEDOR)* |
-| **20** | Ingresos | `ingresos` | `weighing/weighing_list_screen.dart` *(movimiento kardex 10)* |
-| **21** | Despachos | `despachos` | `weighing/weighing_list_screen.dart` *(movimiento kardex 60)* |
-| **22** | Conceptos de Inventario | `conceptos_inventario` | `catalog/catalog_crud_screen.dart` *(catálogo `conceptos_inventario`, migración 029)* |
-| **23** | Roles | `roles` | `presentation/screens/roles/roles_screen.dart` *(informativo; enlaza a la matriz de accesos)* |
-| **24** | Reportes Diarios | `reportes_diarios` | `presentation/screens/reports/reports_screen.dart` *(`ReportPreset.diarios` = hoy)* |
-| **25** | Reportes Mensuales | `reportes_mensuales` | `reports/reports_screen.dart` *(`ReportPreset.mensuales` = mes en curso)* |
-| **26** | Reporte Personalizado | `reportes_personalizado` | `reports/reports_screen.dart` *(`ReportPreset.personalizado` = rango libre)* |
-| **27** | Indicadores | `dispositivos_indicadores` | `presentation/screens/dispositivos/indicadores_screen.dart` *(vista propia; búsqueda + filtros)* |
-| **28** | Semáforos | `dispositivos_semaforos` | `presentation/screens/dispositivos/semaforos_screen.dart` *(vista propia; búsqueda + filtros)* |
-| **29** | Cámaras | `dispositivos_camaras` | `presentation/screens/dispositivos/camaras_screen.dart` *(vista propia; búsqueda + filtros por `origen`; «Detectar» cámaras locales/USB con badge `IP`/`LOCAL`)* |
-| **30** | Impresoras | `dispositivos_impresoras` | `presentation/screens/dispositivos/impresoras_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **20** | Roles | `roles` | `presentation/screens/roles/roles_screen.dart` *(informativo; enlaza a la matriz de accesos)* |
+| **21** | Ingresos | `ingresos` | `presentation/screens/weighing/weighing_list_screen.dart` *(movimiento kardex 10, `kardex_mov=10`)* |
+| **22** | Despachos | `despachos` | `presentation/screens/weighing/weighing_list_screen.dart` *(movimiento kardex 60, `kardex_mov=60`)* |
+| **23** | Básculas | `dispositivos_basculas` | `presentation/screens/dispositivos/basculas_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **24** | Indicadores | `dispositivos_indicadores` | `presentation/screens/dispositivos/indicadores_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **25** | Semáforos | `dispositivos_semaforos` | `presentation/screens/dispositivos/semaforos_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **26** | Cámaras | `dispositivos_camaras` | `presentation/screens/dispositivos/camaras_screen.dart` *(vista propia; búsqueda + filtros por `origen`; «Detectar» cámaras locales/USB con badge `IP`/`LOCAL`)* |
+| **27** | Barreras | `dispositivos_barreras` | `presentation/screens/dispositivos/barreras_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **28** | Impresoras | `dispositivos_impresoras` | `presentation/screens/dispositivos/impresoras_screen.dart` *(vista propia; búsqueda + filtros)* |
+| **29** | Conceptos Kardex | `conceptos_inventario` | `presentation/screens/inventario/conceptos_kardex_screen.dart` *(catálogo `conceptos_kardex`, migración 031 — ver sección propia más abajo)* |
+
+> **Nota sobre la clave 29:** la clave de menú sigue siendo `conceptos_inventario`
+> por compatibilidad con los `menu.json` ya instalados, pero la pantalla y el
+> backend apuntan al catálogo **`conceptos_kardex`** (migración 031). El catálogo
+> antiguo `conceptos_inventario` (migración 029) sigue existiendo en la API para
+> no romper clientes, pero **ya no lo usan los ajustes manuales**.
 
 > **Clientes / Proveedores** son la **misma tabla `terceros`** filtrada por
 > `tipo` (`AppCatalogos.clienteResource` / `proveedorResource`). **Ingresos /
 > Despachos** son la **misma lista de pesajes** segmentada por el asiento de
-> kardex del boleto (`WeighingListScreen.tipoMovimiento`), expuesto por
-> `WeighingOut.kardex_mov`.
+> kardex del boleto (`WeighingListScreen.tipoMovimiento`), que ahora se filtra
+> **en el servidor** con `GET /weighing/list?kardex_mov=10|60`; el KPI
+> «Total ingresado / Total despachado» viene de `GET /weighing/resumen`.
+
+### Conceptos Kardex (migración 031)
+
+Catálogo de **IDs 0-99** que da nombre a los movimientos de inventario. Reglas:
+
+| Rango | Signo | Quién lo define |
+| :--- | :--- | :--- |
+| `00` | inicial | **Sistema** (saldo inicial, no genera movimiento) |
+| `01`–`49` | positivo | ADMIN (ajustes manuales) |
+| `10` | positivo | **Sistema** (ingreso por báscula, al cerrar boleto con PNT ≥ 0) |
+| `50`–`59` | negativo | ADMIN (ajustes manuales) |
+| `60` | negativo | **Sistema** (despacho por báscula, al cerrar boleto con PNT < 0) |
+| `61`–`99` | negativo | ADMIN (ajustes manuales) |
+
+- La pantalla **solo ofrece IDs huecos** y deriva el signo del rango: el ID
+  define el signo, nunca al revés.
+- Los conceptos del sistema (0/10/60) **no se pueden borrar** (`409`) ni cambiar
+  de signo (`422`); sí se pueden renombrar.
+- Un concepto con movimientos **no se borra**: se ofrece **desactivar**.
+- `GET /reports/kardex/detalle` devuelve `concepto_nombre`, `concepto_signo`,
+  `concepto_es_sistema` y `origen` (`Báscula` / `Manual` / `Sistema`).
+- El ajuste manual (`POST /inventario/ajustes`) exige `id_concepto` no-sistema y
+  una cantidad del **mismo signo**; el movimiento queda con
+  `id_movimiento = id_concepto` y auditado con el motivo.
 
 ### Hojas‑acción (`accion` → `go:*` resuelto por `home_shell.ejecutarAccion`)
 

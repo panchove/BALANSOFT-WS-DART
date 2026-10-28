@@ -1033,4 +1033,53 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ux_boletos_ediciones_syn
     CREATE UNIQUE INDEX [ux_boletos_ediciones_sync_op] ON [dbo].[boletos_ediciones] ([sync_operation_id]) WHERE [sync_operation_id] IS NOT NULL;
 END
 
+-- 031_conceptos_kardex: catálogo de conceptos de movimiento (IDs 0-99).
+-- 0/10/60 son del sistema (no editables); 01-49 positivos y 50-99 negativos
+-- los configura el ADMIN para ajustes manuales.
+IF OBJECT_ID(N'dbo.conceptos_kardex', N'U') IS NULL BEGIN
+    CREATE TABLE [dbo].[conceptos_kardex] (
+        [id_empresa] UNIQUEIDENTIFIER NOT NULL,
+        [id_concepto] INT NOT NULL,
+        [nombre] NVARCHAR(100) NOT NULL,
+        [descripcion] NVARCHAR(MAX) NULL,
+        [signo] NVARCHAR(8) NOT NULL,
+        [es_sistema] BIT DEFAULT 0 NOT NULL,
+        [activo] BIT DEFAULT 1 NOT NULL,
+        [aplica_a] NVARCHAR(20) DEFAULT N'AMBOS' NOT NULL,
+        [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
+        CONSTRAINT [pk_conceptos_kardex] PRIMARY KEY (id_empresa, id_concepto),
+        CONSTRAINT [chk_ck_rango] CHECK (id_concepto BETWEEN 0 AND 99),
+        CONSTRAINT [chk_ck_signo] CHECK (signo IN (N'inicial', N'positivo', N'negativo')),
+        CONSTRAINT [chk_ck_aplica_a] CHECK (aplica_a IN (N'INGRESO', N'DESPACHO', N'AJUSTE', N'AMBOS')),
+        CONSTRAINT [chk_ck_coherencia] CHECK (
+            (id_concepto = 0 AND signo = N'inicial') OR
+            (id_concepto BETWEEN 1 AND 49 AND signo = N'positivo') OR
+            (id_concepto BETWEEN 50 AND 99 AND signo = N'negativo')
+        )
+    );
+END
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'conceptos_kardex_id_empresa_fkey' ) BEGIN
+    ALTER TABLE [dbo].[conceptos_kardex] ADD CONSTRAINT [conceptos_kardex_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_conceptos_kardex_empresa' ) BEGIN
+    CREATE INDEX [idx_conceptos_kardex_empresa] ON [dbo].[conceptos_kardex] (id_empresa);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'idx_conceptos_kardex_signo' ) BEGIN
+    CREATE INDEX [idx_conceptos_kardex_signo] ON [dbo].[conceptos_kardex] (signo);
+END
+-- Seed de conceptos del sistema por empresa (idempotente)
+IF NOT EXISTS (SELECT 1 FROM [dbo].[conceptos_kardex] WHERE [id_concepto] = 0) BEGIN
+    INSERT INTO [dbo].[conceptos_kardex] ([id_empresa], [id_concepto], [nombre], [descripcion], [signo], [es_sistema], [activo], [aplica_a])
+    SELECT [id_empresa], 0, N'Saldo inicial', N'Saldo inicial del inventario', N'inicial', 1, 1, N'AMBOS' FROM [dbo].[empresas];
+END
+IF NOT EXISTS (SELECT 1 FROM [dbo].[conceptos_kardex] WHERE [id_concepto] = 10) BEGIN
+    INSERT INTO [dbo].[conceptos_kardex] ([id_empresa], [id_concepto], [nombre], [descripcion], [signo], [es_sistema], [activo], [aplica_a])
+    SELECT [id_empresa], 10, N'Ingreso por báscula', N'Ingreso generado por boleto de pesaje', N'positivo', 1, 1, N'INGRESO' FROM [dbo].[empresas];
+END
+IF NOT EXISTS (SELECT 1 FROM [dbo].[conceptos_kardex] WHERE [id_concepto] = 60) BEGIN
+    INSERT INTO [dbo].[conceptos_kardex] ([id_empresa], [id_concepto], [nombre], [descripcion], [signo], [es_sistema], [activo], [aplica_a])
+    SELECT [id_empresa], 60, N'Despacho por báscula', N'Despacho generado por boleto de pesaje', N'negativo', 1, 1, N'DESPACHO' FROM [dbo].[empresas];
+END
+
 COMMIT;

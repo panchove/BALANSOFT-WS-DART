@@ -35,6 +35,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
 
   late final Map<String, TextEditingController> _ctrls = {};
   final Map<String, String> _dropdownVals = {};
+  final Map<String, bool> _boolVals = {};
   final Map<String, List<PhotoCaptured>> _fotos = {};
   final Map<String, FocusNode> _focusNodes = {};
   Map<String, List<Map<String, dynamic>>> _referencias = const {};
@@ -59,9 +60,19 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
     super.initState();
     final inicial = widget.inicial ?? const <String, dynamic>{};
     for (final campo in widget.recurso.campos) {
+      if (campo.tipo == CatalogFieldType.booleano) {
+        final v = inicial[campo.key];
+        _boolVals[campo.key] = v == true || v == 'true' || v == 1;
+        continue;
+      }
       _ctrls[campo.key] =
           TextEditingController(text: _toText(campo, inicial[campo.key]));
       if (_esCampoTexto(campo)) _focusNodes[campo.key] = FocusNode();
+      if (campo.tipo == CatalogFieldType.booleano) {
+        final v = inicial[campo.key];
+        _boolVals[campo.key] = v == true || v == 'true' || v == 1;
+        continue;
+      }
       if (campo.tipo == CatalogFieldType.dropdown) {
         final v = inicial[campo.key];
         if (v != null && '$v'.isNotEmpty) {
@@ -153,6 +164,10 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
         }
         continue;
       }
+      if (campo.tipo == CatalogFieldType.booleano) {
+        body[campo.key] = _boolVals[campo.key] ?? false;
+        continue;
+      }
       final texto = _ctrls[campo.key]!.text.trim();
       if (texto.isEmpty) {
         if (campo.requerido) {
@@ -187,6 +202,12 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
         case CatalogFieldType.dropdown:
           body[campo.key] = texto;
         case CatalogFieldType.foto:
+          continue;
+        case CatalogFieldType.booleano:
+          body[campo.key] = _boolVals[campo.key] ?? false;
+          continue;
+        case CatalogFieldType.booleano:
+          body[campo.key] = _boolVals[campo.key] ?? false;
           continue;
       }
     }
@@ -332,6 +353,16 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
         urlInicial: _esNuevo ? null : (widget.inicial?[campo.key] as String?),
         fotos: _fotos[campo.key] ?? const <PhotoCaptured>[],
         onChanged: (f) => setState(() => _fotos[campo.key] = f),
+      );
+    }
+    if (campo.tipo == CatalogFieldType.booleano) {
+      return SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        secondary: Icon(campo.icono),
+        title: Text(campo.label),
+        subtitle: campo.hint != null ? Text(campo.hint!) : null,
+        value: _boolVals[campo.key] ?? false,
+        onChanged: (v) => setState(() => _boolVals[campo.key] = v),
       );
     }
     if (campo.tipo == CatalogFieldType.dropdown) {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../../../core/i18n/translations.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/conceptos_kardex_rules.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../data/datasources/remote/api_client.dart';
 import '../../../domain/entities/catalogs.dart';
@@ -111,47 +113,50 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
                   ),
                   const SizedBox(height: 10),
                   if (isWide)
-                    DataTable(
-                      columns: [
-                        DataColumn(label: Text('warehouse'.tr())),
-                        DataColumn(label: Text('code'.tr())),
-                        DataColumn(label: Text('location'.tr())),
-                        DataColumn(label: Text('cap_ton'.tr()), numeric: true),
-                        DataColumn(label: Text('stock_ton'.tr()), numeric: true),
-                      ],
-                      rows: [
-                        for (final w in _almacenes)
-                          DataRow(cells: [
-                            DataCell(Text(w.nombre)),
-                            DataCell(Text(w.codigo ?? '—')),
-                            DataCell(Text(w.ubicacion ?? '—')),
-                            DataCell(Text(
-                                w.capacidadMaxTon?.toStringAsFixed(2) ?? '—')),
-                            DataCell(Text(
-                                w.stockActualTon.toStringAsFixed(2))),
-                          ]),
-                      ],
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                        columns: [
+                          DataColumn(label: Text('warehouse'.tr())),
+                          DataColumn(label: Text('code'.tr())),
+                          DataColumn(label: Text('location'.tr())),
+                          DataColumn(label: Text('cap_ton'.tr()), numeric: true),
+                          DataColumn(label: Text('stock_ton'.tr()), numeric: true),
+                        ],
+                        rows: [
+                          for (final w in _almacenes)
+                            DataRow(cells: [
+                              DataCell(Text(w.nombre)),
+                              DataCell(Text(w.codigo ?? '—')),
+                              DataCell(Text(w.ubicacion ?? '—')),
+                              DataCell(Text(
+                                  w.capacidadMaxTon?.toStringAsFixed(2) ?? '—')),
+                              DataCell(Text(
+                                  w.stockActualTon.toStringAsFixed(2))),
+                            ]),
+                        ],
+                      ),
                     )
-                  else
-                    ..._almacenes.map(
-                      (w) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.warehouse_outlined,
-                              color: SwsColors.primary),
-                          title: Text(w.nombre),
-                          subtitle: Text([
-                            if (w.codigo != null) w.codigo!,
-                            if (w.ubicacion != null) w.ubicacion!,
-                          ].join(' · ')),
-                          trailing: Text(
-                            '${w.stockActualTon.toStringAsFixed(2)} t',
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
+                    else
+                      ..._almacenes.map(
+                        (w) => Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: const Icon(Icons.warehouse_outlined,
+                                color: SwsColors.primary),
+                            title: Text(w.nombre),
+                            subtitle: Text([
+                              if (w.codigo != null) w.codigo!,
+                              if (w.ubicacion != null) w.ubicacion!,
+                            ].join(' · ')),
+                            trailing: Text(
+                              '${w.stockActualTon.toStringAsFixed(2)} t',
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
                         ),
                       ),
-                    ),
                   const SizedBox(height: 20),
                 ],
 
@@ -230,9 +235,11 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
   int _tipoMovimiento = 10; // 10 = INGRESO, 60 = DESPACHO
   bool _guardando = false;
 
-  // Conceptos de inventario (motivo del movimiento, migración 029).
+  // Conceptos de Kardex (catálogo conceptos_kardex, migración 031).
+  // Los conceptos del sistema (0/10/60) NO se ofrecen: los genera el sistema.
   List<Map<String, dynamic>> _conceptos = [];
-  String? _conceptoId;
+  int? _conceptoId;
+  String? _conceptoSigno;
 
   @override
   void initState() {
@@ -242,10 +249,15 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
 
   Future<void> _cargarConceptos() async {
     try {
-      final conceptos = await di.sl<ApiClient>().listarConceptosInventario();
+      final response = await di.sl<ApiClient>().getList(ApiConstants.conceptosKardex);
+      final conceptos = (response.data as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
       if (!mounted) return;
       setState(() {
-        _conceptos = conceptos.where((c) => c['activo'] != false).toList();
+        _conceptos = conceptos
+            .where((c) => c['es_sistema'] != true && c['activo'] != false)
+            .toList();
       });
     } catch (_) {
       // Sin conceptos el formulario sigue exigiendo elegir uno; el backend
@@ -253,13 +265,10 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     }
   }
 
-  /// Conceptos aplicables al tipo de movimiento seleccionado.
+  /// Conceptos cuyo signo acompaña al tipo de movimiento seleccionado.
   List<Map<String, dynamic>> get _conceptosDelTipo {
-    final tipo = _tipoMovimiento == 10 ? 'ingreso' : 'despacho';
-    return _conceptos.where((c) {
-      final t = c['tipo_movimiento'];
-      return t == null || t == tipo || t == 'ambos' || t == 'ajuste';
-    }).toList();
+    final esperado = _tipoMovimiento == 10 ? 'positivo' : 'negativo';
+    return conceptosKardexParaAjuste(_conceptos, esperado);
   }
 
   @override
@@ -282,7 +291,32 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     if (_conceptoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Selecciona un concepto de inventario'),
+          content: Text('Selecciona un concepto de kardex'),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+      return;
+    }
+    final valor = double.parse(_pesoCtrl.text.replaceAll(',', '.'));
+    // El signo de la cantidad debe acompañar al signo del concepto: el backend
+    // lo rechaza con 422, pero se avisa antes de gastar la llamada.
+    if (_conceptoSigno == 'positivo' && valor <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El concepto es positivo; la cantidad debe ser mayor que cero',
+          ),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+      return;
+    }
+    if (_conceptoSigno == 'negativo' && valor >= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El concepto es negativo; la cantidad debe ser menor que cero',
+          ),
           backgroundColor: SwsColors.danger,
         ),
       );
@@ -292,13 +326,14 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     setState(() => _guardando = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final cantidad = _conceptoSigno == 'negativo' ? -valor : valor;
       await di.sl<ApiClient>().crearAjusteInventario(
-            idMovimiento: _tipoMovimiento,
-            idProducto: _producto!.id,
-            idAlmacen: _almacen!.id,
-            valorKg: double.parse(_pesoCtrl.text.replaceAll(',', '.')),
-            idConcepto: _conceptoId,
-          );
+        idConcepto: _conceptoId!,
+        idProducto: _producto!.id,
+        idAlmacen: _almacen!.id,
+        cantidad: cantidad,
+        motivo: 'Ajuste manual de inventario',
+      );
 
       final tipo = _tipoMovimiento == 10 ? 'INGRESO' : 'DESPACHO';
       messenger.showSnackBar(
@@ -317,6 +352,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
         _almacen = null;
         _tipoMovimiento = 10;
         _conceptoId = null;
+        _conceptoSigno = null;
       });
       widget.onAjusteRegistrado();
     } catch (e) {
@@ -347,10 +383,12 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
                 children: [
                   const Icon(Icons.tune, color: SwsColors.primary),
                   const SizedBox(width: 8),
-                  Text(
-                    'register_inventory_adjust'.tr(),
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700),
+                  Expanded(
+                    child: Text(
+                      'register_inventory_adjust'.tr(),
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
                   ),
                   const Spacer(),
                   Chip(
@@ -370,24 +408,34 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
               ),
               const Divider(height: 24),
 
-              // Tipo de movimiento
+              // Tipo de movimiento: al cambiar se descarta el concepto
+              // elegido, porque el signo del concepto debe acompañar al tipo.
               Row(
                 children: [
-                  Text('movement_type'.tr(),
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('movement_type'.tr(),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                   ChoiceChip(
                     label: Text('ingreso'.tr()),
                     selected: _tipoMovimiento == 10,
                     selectedColor: SwsColors.success.withValues(alpha: 0.18),
-                    onSelected: (_) => setState(() => _tipoMovimiento = 10),
+                    onSelected: (_) => setState(() {
+                      _tipoMovimiento = 10;
+                      _conceptoId = null;
+                      _conceptoSigno = null;
+                    }),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
                     label: Text('despacho'.tr()),
                     selected: _tipoMovimiento == 60,
                     selectedColor: SwsColors.danger.withValues(alpha: 0.18),
-                    onSelected: (_) => setState(() => _tipoMovimiento = 60),
+                    onSelected: (_) => setState(() {
+                      _tipoMovimiento = 60;
+                      _conceptoId = null;
+                      _conceptoSigno = null;
+                    }),
                   ),
                 ],
               ),
@@ -410,13 +458,55 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
               ],
               const SizedBox(height: 12),
 
-              // Peso
+              // Concepto del movimiento (catálogo conceptos_kardex, migración
+              // 031). El signo del concepto elegido fija el signo de la
+              // cantidad: no se admite una cantidad del signo contrario.
+              DropdownButtonFormField<int>(
+                // ignore: deprecated_member_use
+                value: _conceptoId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Concepto de kardex *',
+                  prefixIcon: Icon(Icons.rule_folder_outlined),
+                ),
+                hint: const Text('Selecciona el motivo del movimiento'),
+                items: _conceptosDelTipo
+                    .map(
+                      (c) => DropdownMenuItem<int>(
+                        value: c['id_concepto'] is int
+                            ? c['id_concepto'] as int
+                            : int.tryParse('${c['id_concepto']}'),
+                        child: Text('${c['id_concepto']} - ${c['nombre'] ?? ''}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  setState(() {
+                    _conceptoId = v;
+                    _conceptoSigno = v == null
+                        ? null
+                        : _conceptos
+                            .firstWhere(
+                              (c) => c['id_concepto'] == v,
+                              orElse: () => <String, dynamic>{},
+                            )['signo']
+                            ?.toString();
+                  });
+                },
+                validator: (v) => v == null ? 'Selecciona un concepto' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Cantidad: el prefijo muestra el signo que impone el concepto.
               TextFormField(
                 controller: _pesoCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Peso a ajustar (kg) *',
+                decoration: InputDecoration(
+                  labelText: 'Cantidad a ajustar *',
                   hintText: 'Ej.: 1500.00',
-                  prefixIcon: Icon(Icons.scale_outlined),
+                  prefixIcon: const Icon(Icons.scale_outlined),
+                  prefixText: _conceptoSigno == 'negativo'
+                      ? '- '
+                      : (_conceptoSigno == 'positivo' ? '+ ' : null),
                 ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
@@ -425,34 +515,12 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
                 ],
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Campo requerido';
-                  final val =
-                      double.tryParse(v.replaceAll(',', '.'));
-                  if (val == null || val <= 0) return 'Debe ser > 0';
+                  final val = double.tryParse(v.replaceAll(',', '.'));
+                  if (val == null || val <= 0) {
+                    return 'Debe ser mayor que cero';
+                  }
                   return null;
                 },
-              ),
-              const SizedBox(height: 12),
-
-              // Concepto del movimiento (catálogo conceptos_inventario)
-              DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use
-                value: _conceptoId,
-                decoration: const InputDecoration(
-                  labelText: 'Concepto de inventario *',
-                  prefixIcon: Icon(Icons.rule_folder_outlined),
-                ),
-                hint: const Text('Selecciona el motivo del movimiento'),
-                items: _conceptosDelTipo
-                    .map(
-                      (c) => DropdownMenuItem<String>(
-                        value: '${c['id_concepto']}',
-                        child: Text('${c['nombre'] ?? ''}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _conceptoId = v),
-                validator: (v) =>
-                    v == null ? 'Selecciona un concepto' : null,
               ),
               const SizedBox(height: 16),
 
@@ -497,6 +565,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     return DropdownButtonFormField<Product>(
       // ignore: deprecated_member_use
       value: _producto,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Producto *',
         prefixIcon: Icon(Icons.inventory_2_outlined),
@@ -514,6 +583,7 @@ class _FormularioAjusteState extends State<_FormularioAjuste> {
     return DropdownButtonFormField<Warehouse>(
       // ignore: deprecated_member_use
       value: _almacen,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Almacén *',
         prefixIcon: Icon(Icons.warehouse_outlined),

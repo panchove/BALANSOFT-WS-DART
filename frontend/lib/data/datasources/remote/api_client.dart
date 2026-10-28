@@ -462,6 +462,13 @@ class ApiClient {
     return response;
   }
 
+  Future<Response> resumenMovimiento({Map<String, dynamic>? params}) async {
+    return _dio.get(
+      '$_baseUrl${ApiConstants.weighingResumen}',
+      queryParameters: params,
+    );
+  }
+
   Future<Response> listPendientes() async {
     final response =
         await _dio.get('$_baseUrl${ApiConstants.weighingPendientes}');
@@ -1054,6 +1061,11 @@ Future<Response> getMonthlyReport(int year, int month) async {
     await _dio.delete('$_baseUrl${ApiConstants.vinculos}/$idVinculo');
   }
 
+  Future<Map<String, dynamic>> activarVinculo(String idVinculo) async {
+    final response = await _dio.put('$_baseUrl${ApiConstants.vinculos}/$idVinculo/activar');
+    return response.data as Map<String, dynamic>;
+  }
+
   /// Enlaza (`enlazar=true`) o desenlaza una báscula del indicador.
   Future<Map<String, dynamic>> enlazarIndicador(
     String indicadorId,
@@ -1114,29 +1126,29 @@ Future<Response> getMonthlyReport(int year, int month) async {
   }
 
 
-  /// Registra un ajuste manual de inventario (movimiento de kardex).
+  /// Registra un ajuste manual de inventario como movimiento de kardex manual.
   ///
-  /// [idMovimiento]: 10 = INGRESO, 60 = DESPACHO.
-  /// [valorKg]: peso ajustado en kilogramos (positivo).
-  /// [idConcepto]: concepto del catálogo (motivo del movimiento, migración 029).
-  /// [documento]: texto libre (legado). El backend copia el nombre del concepto
-  /// cuando solo se envía `idConcepto`.
+  /// Contrato vigente: el movimiento se identifica por **[idConcepto]** del
+  /// catálogo `conceptos_kardex` (IDs 0-99, no del sistema) y **[cantidad]**
+  /// con el signo que exige ese concepto (positivo 01-49 / negativo 50-99).
+  /// El backend rechaza con 422 un concepto de sistema (0/10/60) o un signo
+  /// incoherente con la cantidad.
   Future<Response> crearAjusteInventario({
-    required int idMovimiento,
+    required int idConcepto,
     required String idProducto,
     required String idAlmacen,
-    required double valorKg,
-    String? idConcepto,
+    required double cantidad,
+    required String motivo,
     String? documento,
   }) async {
     final response = await _dio.post(
-      '$_baseUrl/api/v1/inventario/ajustes',
+      ApiConstants.inventarioAjustes,
       data: {
-        'id_movimiento': idMovimiento,
         'id_producto': idProducto,
         'id_almacen': idAlmacen,
-        'valor_kg': valorKg,
-        if (idConcepto != null) 'id_concepto': idConcepto,
+        'id_concepto': idConcepto,
+        'cantidad': cantidad,
+        'motivo': motivo,
         if (documento != null && documento.isNotEmpty) 'documento': documento,
       },
     );

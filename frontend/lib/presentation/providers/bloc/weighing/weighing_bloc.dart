@@ -84,6 +84,7 @@ class WeighingBloc extends Bloc<WeighingEvent, WeighingState> {
         dateTo: event.dateTo,
         vehicleId: event.vehicleId,
         estado: event.estado,
+        kardexMov: event.kardexMov,
       );
       emit(WeighingListLoaded(weighings));
     } catch (e) {

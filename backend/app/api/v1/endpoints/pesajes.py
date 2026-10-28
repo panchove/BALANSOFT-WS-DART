@@ -429,10 +429,19 @@ async def list_weighings(
     date_to: datetime | None = None,
     vehicle_id: str | None = None,
     estado: str | None = None,
+    kardex_mov: int | None = Query(
+        None,
+        ge=0,
+        le=99,
+        description=(
+            "Segmenta por movimiento de kardex (10 = ingreso / 60 = despacho): "
+            "solo CERRADO/MODIFICADO con asiento de kardex; nunca ANULADO ni PENDIENTE."
+        ),
+    ),
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> list[WeighingOut]:
-    rows, _ = await _SERVICE.list(
+    rows, _total = await _SERVICE.list(
         db,
         empresa,
         skip=skip,
@@ -441,9 +450,28 @@ async def list_weighings(
         date_to=date_to,
         vehicle_id=vehicle_id,
         estado=estado,
+        kardex_mov=kardex_mov,
     )
     rows = await _enriquecer_pesajes_lista(db, rows)
     return [_resolve_to_weighing_out(r) for r in rows]
+
+
+@router.get("/resumen")
+async def resumen_movimiento(
+    kardex_mov: int = Query(..., ge=0, le=99, description="10 = ingreso / 60 = despacho"),
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    empresa: Empresa = Depends(get_current_empresa),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """KPI de una segmentación de kardex sobre el filtro completo.
+
+    Devuelve ``{"kardex_mov", "total_boletos", "total_kg"}`` con la suma de
+    ``peso_neto`` de todos los boletos que cumplen (no solo la página visible).
+    """
+    return await _SERVICE.resumen_movimiento(
+        db, empresa, kardex_mov=kardex_mov, date_from=date_from, date_to=date_to
+    )
 
 
 @router.get("/boleto/{boleto}", response_model=WeighingOut)

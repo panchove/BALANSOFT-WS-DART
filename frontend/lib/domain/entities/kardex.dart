@@ -5,6 +5,10 @@ class KardexMovimiento {
   final String idKardex;
   final String fecha;
   final int idMovimiento;
+  final String? conceptoNombre;
+  final String? conceptoSigno;
+  final bool conceptoEsSistema;
+  final String? origen;
   final String idProducto;
   final String? nombreProducto;
   final String? codigoProducto;
@@ -19,6 +23,10 @@ class KardexMovimiento {
     required this.idKardex,
     required this.fecha,
     required this.idMovimiento,
+    this.conceptoNombre,
+    this.conceptoSigno,
+    this.conceptoEsSistema = false,
+    this.origen,
     required this.idProducto,
     this.nombreProducto,
     this.codigoProducto,
@@ -35,6 +43,10 @@ class KardexMovimiento {
         idKardex: '${json['id_kardex']}',
         fecha: json['fecha'] as String? ?? '',
         idMovimiento: (json['id_movimiento'] as num?)?.toInt() ?? 0,
+        conceptoNombre: json['concepto_nombre'] as String?,
+        conceptoSigno: json['concepto_signo'] as String?,
+        conceptoEsSistema: json['concepto_es_sistema'] == true,
+        origen: json['origen'] as String?,
         idProducto: json['id_producto'] as String? ?? 'SIN_PRODUCTO',
         nombreProducto: json['nombre_producto'] as String?,
         codigoProducto: json['codigo_producto'] as String?,

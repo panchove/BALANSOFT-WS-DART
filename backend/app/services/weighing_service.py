@@ -120,6 +120,49 @@ def _mismo_valor(actual: Any, entrante: Any) -> bool:
     return str(actual) == str(entrante)
 
 
+def _filtros_list(
+    empresa: Empresa,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    vehicle_id: str | None = None,
+    estado: str | None = None,
+    kardex_mov: int | None = None,
+) -> list[Any]:
+    """Filtros comunes del listado de boletos (siempre acotados por tenant).
+
+    Con ``kardex_mov`` la segmentación es estricta: solo CERRADO/MODIFICADO
+    con asiento de kardex de ese movimiento y nunca ANULADO (regla de negocio:
+    un anulado no cuenta en inventario ni en reportes).
+    """
+    filtros: list[Any] = [BoletoPesaje.id_empresa == empresa.id_empresa]
+    if date_from is not None:
+        filtros.append(BoletoPesaje.fecha_hora_entrada >= date_from)
+    if date_to is not None:
+        filtros.append(BoletoPesaje.fecha_hora_entrada <= date_to)
+    if vehicle_id:
+        filtros.append(BoletoPesaje.id_vehiculo == vehicle_id)
+    if kardex_mov is not None:
+        filtros.append(BoletoPesaje.estado_boleto != BoletoPesaje.ESTADO_ANULADO)
+        filtros.append(
+            BoletoPesaje.estado_boleto.in_(
+                (BoletoPesaje.ESTADO_CERRADO, BoletoPesaje.ESTADO_MODIFICADO)
+            )
+        )
+        filtros.append(
+            select(Kardex.id_kardex)
+            .where(
+                Kardex.id_empresa == BoletoPesaje.id_empresa,
+                Kardex.boleto == BoletoPesaje.boleto,
+                Kardex.id_movimiento == kardex_mov,
+            )
+            .exists()
+        )
+    elif estado:
+        filtros.append(BoletoPesaje.estado_boleto == normalizar_estado(estado))
+    return filtros
+
+
 class WeighingService:
     # ------------------------------------------------------------------
     # Auditoría
@@ -1094,28 +1137,59 @@ class WeighingService:
         date_to: datetime | None = None,
         vehicle_id: str | None = None,
         estado: str | None = None,
+        kardex_mov: int | None = None,
     ) -> tuple[list[BoletoPesaje], int]:
-        stmt = select(BoletoPesaje).where(BoletoPesaje.id_empresa == empresa.id_empresa)
-        count_stmt = (
-            select(func.count()).select_from(BoletoPesaje).where(
-                BoletoPesaje.id_empresa == empresa.id_empresa
-            )
-        )
-        if date_from is not None:
-            stmt = stmt.where(BoletoPesaje.fecha_hora_entrada >= date_from)
-            count_stmt = count_stmt.where(BoletoPesaje.fecha_hora_entrada >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(BoletoPesaje.fecha_hora_entrada <= date_to)
-            count_stmt = count_stmt.where(BoletoPesaje.fecha_hora_entrada <= date_to)
-        if vehicle_id:
-            stmt = stmt.where(BoletoPesaje.id_vehiculo == vehicle_id)
-            count_stmt = count_stmt.where(BoletoPesaje.id_vehiculo == vehicle_id)
-        if estado:
-            estado_norm = normalizar_estado(estado)
-            stmt = stmt.where(BoletoPesaje.estado_boleto == estado_norm)
-            count_stmt = count_stmt.where(BoletoPesaje.estado_boleto == estado_norm)
+        """Listado de boletos.
 
+        ``kardex_mov`` segmenta la lista por el movimiento de kardex generado
+        (10 = ingreso / 60 = despacho): exige boleto CERRADO/MODIFICADO con al
+        menos una fila en ``kardex`` con ese ``id_movimiento``. Los ANULADOS y
+        los PENDIENTE (sin asiento todavía) nunca salen en esa segmentación.
+        """
+        filtros = _filtros_list(
+            empresa,
+            date_from=date_from,
+            date_to=date_to,
+            vehicle_id=vehicle_id,
+            estado=estado,
+            kardex_mov=kardex_mov,
+        )
+        count_stmt = select(func.count()).select_from(BoletoPesaje).where(*filtros)
         total = (await db.execute(count_stmt)).scalar() or 0
-        stmt = stmt.order_by(BoletoPesaje.fecha_hora_entrada.desc()).offset(skip).limit(limit)
+        stmt = (
+            select(BoletoPesaje)
+            .where(*filtros)
+            .order_by(BoletoPesaje.fecha_hora_entrada.desc())
+            .offset(skip)
+            .limit(limit)
+        )
         rows = (await db.execute(stmt)).scalars().all()
         return list(rows), total
+
+    async def resumen_movimiento(
+        self,
+        db: AsyncSession,
+        empresa: Empresa,
+        *,
+        kardex_mov: int,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> dict:
+        """Resumen de una segmentación de kardex (KPI de Ingresos/Despachos).
+
+        Agrega sobre el **filtro completo**, no sobre la página visible:
+        ``total_boletos`` y ``total_kg`` (suma de ``peso_neto``).
+        """
+        filtros = _filtros_list(
+            empresa, date_from=date_from, date_to=date_to, kardex_mov=kardex_mov
+        )
+        stmt = select(
+            func.count(),
+            func.coalesce(func.sum(BoletoPesaje.peso_neto), 0),
+        ).where(*filtros)
+        row = (await db.execute(stmt)).one()
+        return {
+            "kardex_mov": kardex_mov,
+            "total_boletos": int(row[0] or 0),
+            "total_kg": float(row[1] or 0),
+        }

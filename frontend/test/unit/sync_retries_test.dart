@@ -98,8 +98,17 @@ class _CountingRepo implements IWeighingRepository {
     DateTime? dateTo,
     String? vehicleId,
     String? estado,
+    int? kardexMov,
   }) async =>
       [];
+
+  @override
+  Future<Map<String, dynamic>> resumenMovimiento(
+    int kardexMov, {
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async =>
+      {'kardex_mov': kardexMov, 'total_boletos': 0, 'total_kg': 0.0};
 
   @override
   Future<Weighing> updateWeighing(String boleto, Map<String, dynamic> data) async =>

@@ -49,6 +49,7 @@ class ListWeighingsUseCase {
     DateTime? dateTo,
     String? vehicleId,
     String? estado,
+    int? kardexMov,
   }) {
     return _repo.listWeighings(
       skip: skip,
@@ -57,6 +58,7 @@ class ListWeighingsUseCase {
       dateTo: dateTo,
       vehicleId: vehicleId,
       estado: estado,
+      kardexMov: kardexMov,
     );
   }
 }

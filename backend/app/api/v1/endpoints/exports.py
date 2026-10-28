@@ -663,6 +663,8 @@ async def export_kardex_excel(
     headers = [
         t("col_fecha_corta", lang),
         t("col_movimiento", lang),
+        "Concepto",
+        "Origen",
         t("codigo", lang),
         t("col_producto", lang),
         t("col_almacen", lang),
@@ -673,9 +675,13 @@ async def export_kardex_excel(
     filas = []
     for m in data["movimientos"]:
         ref = m.get("numero_boleto") or m.get("documento") or "—"
+        concepto = m.get("concepto_nombre") or f"ID {m.get('id_movimiento')} (sin definir)"
+        origen = m.get("origen") or "—"
         filas.append([
             _fmt_fecha(m.get("fecha"), con_hora=False, lang=lang),
             _nombre_movimiento(m.get("id_movimiento"), idioma=lang),
+            str(concepto),
+            str(origen),
             m.get("codigo_producto") or "—",
             m.get("nombre_producto") or "—",
             m.get("nombre_almacen") or "—",
@@ -685,7 +691,7 @@ async def export_kardex_excel(
         ])
     _excel_escribir_tabla(
         ws, fila_tabla, headers, filas,
-        anchos=[12, 14, 12, 30, 24, 14, 14, 18],
+        anchos=[12, 14, 28, 12, 12, 30, 24, 14, 14, 18],
     )
 
     buffer = BytesIO()
@@ -755,6 +761,8 @@ async def export_kardex_pdf(
     headers = [
         t("col_fecha_corta", lang),
         t("col_movimiento", lang),
+        "Concepto",
+        "Origen",
         t("codigo", lang),
         t("col_producto", lang),
         t("col_almacen", lang),
@@ -765,9 +773,13 @@ async def export_kardex_pdf(
     filas: list = [[Paragraph(h, st["celda_enc"]) for h in headers]]
     for m in data["movimientos"]:
         ref = m.get("numero_boleto") or m.get("documento") or "—"
+        concepto = m.get("concepto_nombre") or f"ID {m.get('id_movimiento')} (sin definir)"
+        origen = m.get("origen") or "—"
         filas.append([
             Paragraph(_fmt_fecha(m.get("fecha"), lang=lang), st["celda"]),
             Paragraph(_nombre_movimiento(m.get("id_movimiento"), idioma=lang), st["celda"]),
+            Paragraph(str(concepto), st["celda"]),
+            Paragraph(str(origen), st["celda"]),
             Paragraph(m.get("codigo_producto") or "—", st["celda"]),
             Paragraph(m.get("nombre_producto") or "—", st["celda"]),
             Paragraph(m.get("nombre_almacen") or "—", st["celda"]),
@@ -778,26 +790,30 @@ async def export_kardex_pdf(
 
     if is_landscape:
         col_widths = [
-            24 * mm,   # Fecha
-            28 * mm,   # Movimiento
-            24 * mm,   # Código
-            60 * mm,   # Producto
-            45 * mm,   # Almacén
-            22 * mm,   # Valor
-            22 * mm,   # Stock
-            30 * mm,   # Referencia
+            22 * mm,   # Fecha
+            26 * mm,   # Movimiento
+            32 * mm,   # Concepto
+            16 * mm,   # Origen
+            22 * mm,   # Código
+            48 * mm,   # Producto
+            35 * mm,   # Almacén
+            20 * mm,   # Valor
+            20 * mm,   # Stock
+            28 * mm,   # Referencia
         ]
         pie_widths = [85 * mm, 85 * mm, 85 * mm]
     else:
         col_widths = [
-            18 * mm,   # Fecha
-            22 * mm,   # Movimiento
-            18 * mm,   # Código
-            38 * mm,   # Producto
-            30 * mm,   # Almacén
-            20 * mm,   # Valor
-            20 * mm,   # Stock
-            26 * mm,   # Referencia
+            16 * mm,   # Fecha
+            20 * mm,   # Movimiento
+            26 * mm,   # Concepto
+            14 * mm,   # Origen
+            16 * mm,   # Código
+            30 * mm,   # Producto
+            24 * mm,   # Almacén
+            18 * mm,   # Valor
+            18 * mm,   # Stock
+            24 * mm,   # Referencia
         ]
         pie_widths = [64 * mm, 64 * mm, 64 * mm]
 

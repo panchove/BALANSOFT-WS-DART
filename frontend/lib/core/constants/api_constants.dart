@@ -121,6 +121,11 @@ class ApiConstants {
   static const String conceptosInventario = '$apiPrefix/conceptos_inventario';
   static String conceptoInventario(String id) =>
       '$apiPrefix/conceptos_inventario/$id';
+  static const String conceptosKardex = '$apiPrefix/conceptos-kardex';
+  static String conceptoKardex(String id) =>
+      '$apiPrefix/conceptos-kardex/$id';
+  static const String inventarioAjustes = '$apiPrefix/inventario/ajustes';
+  static const String weighingResumen = '$apiPrefix/weighing/resumen';
 
   // Directorio
   static const String transportes = '$apiPrefix/transportes';

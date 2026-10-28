@@ -16,13 +16,13 @@ from app.api.dependencies import (
     require_catalog_manager,
 )
 from app.core.database import get_db
+from app.core.datetime_utils import naive_utc
 from app.core.scale_hal import TcpScaleHAL
 from app.core.scale_session import get_scale_session_manager
 from app.models import (
     Almacen,
     Balanza,
     Categoria,
-    ConceptoInventario,
     Empresa,
     Kardex,
     Producto,
@@ -589,12 +589,7 @@ async def probar_balanza(
     response_model=AjusteInventarioOut,
     dependencies=[Depends(require_admin)],
     summary="Registrar ajuste manual de inventario",
-    description=(
-        "Crea un movimiento de kardex manual con justificación obligatoria. "
-        "Solo productos con es_kardex=true y almacenes de la empresa. "
-        "id_movimiento: 10 = INGRESO (positivo) / 60 = DESPACHO (negativo). "
-        "Requiere rol administrador."
-    ),
+    description="Crea un movimiento de kardex manual usando el catálogo conceptos_kardex.",
 )
 async def crear_ajuste_inventario(
     payload: AjusteInventarioCreate,
@@ -603,18 +598,11 @@ async def crear_ajuste_inventario(
     empresa: Empresa = Depends(get_current_empresa),
     db: AsyncSession = Depends(get_db),
 ) -> AjusteInventarioOut:
-    """Registra un ajuste de inventario como movimiento de kardex manual.
+    from decimal import Decimal
 
-    Reglas de negocio:
-    - El producto debe pertenecer a la empresa y tener ``es_kardex=true``.
-    - El almacén debe pertenecer a la empresa.
-    - El motivo se elige del catálogo ``conceptos_inventario`` (``id_concepto``);
-      su nombre se copia a ``documento`` para el histórico. También se acepta
-      ``documento`` libre (clientes antiguos). Debe venir uno de los dos.
-    - El valor se almacena como positivo (el id_movimiento determina el signo).
-    - El movimiento queda auditado con la IP y el usuario que lo crea.
-    """
-    # Validar producto: debe pertenecer a la empresa y ser kardex
+    from app.models import Auditoria, ConceptoKardex
+
+    # Validar producto
     res_prod = await db.execute(
         select(Producto).where(
             Producto.id_producto == payload.id_producto,
@@ -640,48 +628,72 @@ async def crear_ajuste_inventario(
     if res_alm.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Almacén no encontrado en esta empresa")
 
-    # Validar concepto (aislamiento multi-tenant) y derivar el texto del documento.
-    documento = (payload.documento or "").strip() or None
-    if payload.id_concepto is not None:
-        res_con = await db.execute(
-            select(ConceptoInventario).where(
-                ConceptoInventario.id_concepto == payload.id_concepto,
-                ConceptoInventario.id_empresa == empresa.id_empresa,
-            )
+    # Validar concepto kardex
+    res_con = await db.execute(
+        select(ConceptoKardex).where(
+            ConceptoKardex.id_empresa == empresa.id_empresa,
+            ConceptoKardex.id_concepto == payload.id_concepto,
         )
-        concepto = res_con.scalar_one_or_none()
-        if concepto is None:
-            raise HTTPException(
-                status_code=404, detail="Concepto de inventario no encontrado en esta empresa"
-            )
-        if documento is None:
-            documento = concepto.nombre
-    if documento is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Debe indicar un concepto de inventario (id_concepto) o un documento.",
-        )
+    )
+    concepto = res_con.scalar_one_or_none()
+    if concepto is None:
+        raise HTTPException(status_code=404, detail="Concepto no encontrado")
+    if not concepto.activo:
+        raise HTTPException(status_code=422, detail="Concepto inactivo")
+    if concepto.es_sistema:
+        raise HTTPException(status_code=422, detail="Los conceptos 0/10/60 son del sistema y no se usan en ajustes manuales")
+    if concepto.signo == "inicial":
+        raise HTTPException(status_code=422, detail="El concepto 'Saldo inicial' no genera movimientos")
+    if concepto.signo not in ("positivo", "negativo"):
+        raise HTTPException(status_code=422, detail="Concepto inválido para ajustes")
 
-    ahora = datetime.now(UTC).replace(tzinfo=None)
+    cantidad = payload.cantidad
+    if concepto.signo == "positivo" and cantidad <= Decimal(0):
+        raise HTTPException(status_code=422, detail=f"El concepto '{concepto.nombre}' es positivo; la cantidad debe ser mayor que cero")
+    if concepto.signo == "negativo" and cantidad >= Decimal(0):
+        raise HTTPException(status_code=422, detail=f"El concepto '{concepto.nombre}' es negativo; la cantidad debe ser menor que cero")
+
+    # `kardex.fecha_kardex` es TIMESTAMP WITHOUT TIME ZONE: la BD guarda UTC
+    # naive (ISO 8601) y asyncpg no acepta datetimes "aware".
+    ahora = naive_utc(datetime.now(UTC))
+    documento = (payload.documento or "").strip() or f"AJUSTE-{uuid.uuid4().hex[:8].upper()}"
+
     entrada = Kardex(
         id_empresa=empresa.id_empresa,
-        id_movimiento=payload.id_movimiento,
-        fecha_kardex=ahora,
+        id_movimiento=payload.id_concepto,
         id_producto=payload.id_producto,
         id_almacen=payload.id_almacen,
-        valor=payload.valor_kg,
-        id_concepto=payload.id_concepto,
+        valor=abs(cantidad),
+        id_concepto=None,
         documento=documento,
+        fecha_kardex=ahora,
         fecha_documento=payload.fecha_documento or ahora,
     )
     db.add(entrada)
+    await db.flush()
+    try:
+        aud = Auditoria(
+            id_empresa=empresa.id_empresa,
+            id_usuario=current_user.id_usuario,
+            accion="AJUSTE_INVENTARIO",
+            entidad="kardex",
+            entidad_id=str(entrada.id_kardex),
+            detalle={
+                "id_concepto": payload.id_concepto,
+                "concepto_nombre": concepto.nombre,
+                "cantidad": str(cantidad),
+                "motivo": payload.motivo,
+            },
+            ip=request.client.host if request.client else None,
+        )
+        db.add(aud)
+    except Exception:
+        pass
     await db.commit()
     await db.refresh(entrada)
     return AjusteInventarioOut.model_validate(entrada)
 
 
-# ---------------------------------------------------------------------------
-# Helpers internos
 # ---------------------------------------------------------------------------
 
 

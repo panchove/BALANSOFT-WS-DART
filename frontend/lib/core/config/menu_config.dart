@@ -13,8 +13,8 @@ import '../constants/accesos_default.dart';
 class MenuIconos {
   MenuIconos._();
 
-  static const Map<String, IconData> mapa = {
-    // Navegación / general
+    static const Map<String, IconData> mapa = {
+    // ── Navegación / general ──
     'dashboard': Icons.dashboard,
     'dashboard_outlined': Icons.dashboard_outlined,
     'home': Icons.home,
@@ -23,7 +23,8 @@ class MenuIconos {
     'apps': Icons.apps,
     'grid_view': Icons.grid_view,
     'widgets_outlined': Icons.widgets_outlined,
-    // Operación
+
+    // ── Operación / Gestión ──
     'smart_toy': Icons.smart_toy,
     'smart_toy_outlined': Icons.smart_toy_outlined,
     'edit_note': Icons.edit_note,
@@ -32,7 +33,14 @@ class MenuIconos {
     'note_add_outlined': Icons.note_add_outlined,
     'create_new_folder_outlined': Icons.create_new_folder_outlined,
     'point_of_sale_outlined': Icons.point_of_sale_outlined,
-    // Terceros / gente
+    'tune': Icons.tune,
+    'tune_outlined': Icons.tune,
+    'build': Icons.build,
+    'build_outlined': Icons.build_outlined,
+    'engineering_outlined': Icons.engineering_outlined,
+    'settings_backup_restore_outlined': Icons.settings_backup_restore_outlined,
+
+    // ── Terceros / gente ──
     'people': Icons.people,
     'people_outline': Icons.people_outline,
     'handshake': Icons.handshake,
@@ -41,9 +49,12 @@ class MenuIconos {
     'person_outline': Icons.person_outline,
     'person_add_outlined': Icons.person_add_outlined,
     'groups_outlined': Icons.groups_outlined,
+    'group': Icons.group,
+    'group_outlined': Icons.group_outlined,
     'badge': Icons.badge,
     'badge_outlined': Icons.badge_outlined,
-    // Flota
+
+    // ── Flota ──
     'local_shipping': Icons.local_shipping,
     'local_shipping_outlined': Icons.local_shipping_outlined,
     'directions_car': Icons.directions_car,
@@ -52,12 +63,12 @@ class MenuIconos {
     'fire_truck': Icons.fire_truck,
     'fire_truck_outlined': Icons.fire_truck_outlined,
     'flight_outlined': Icons.flight_outlined,
-    'local_shipping_outlined_2': Icons.local_shipping_outlined,
-    // Inventario
+
+    // ── Inventario ──
     'warehouse': Icons.warehouse,
+    'warehouse_outlined': Icons.warehouse_outlined,
     'rule_folder': Icons.rule_folder,
     'rule_folder_outlined': Icons.rule_folder_outlined,
-    'warehouse_outlined': Icons.warehouse_outlined,
     'inventory': Icons.inventory,
     'inventory_2': Icons.inventory_2,
     'inventory_2_outlined': Icons.inventory_2_outlined,
@@ -69,14 +80,14 @@ class MenuIconos {
     'move_to_inbox_outlined': Icons.move_to_inbox_outlined,
     'outbox': Icons.outbox,
     'outbox_outlined': Icons.outbox_outlined,
-    'tune': Icons.tune,
-    'tune_outlined': Icons.tune,
     'filter_alt_outlined': Icons.filter_alt_outlined,
     'table_rows': Icons.table_rows,
     'table_rows_outlined': Icons.table_rows_outlined,
     'list_alt': Icons.list_alt,
     'list_alt_outlined': Icons.list_alt_outlined,
-    // Reportes
+
+    // ── Reportes ──
+    'bar_chart': Icons.bar_chart,
     'bar_chart_outlined': Icons.bar_chart_outlined,
     'pie_chart_outline': Icons.pie_chart_outline,
     'show_chart_outlined': Icons.show_chart_outlined,
@@ -86,9 +97,10 @@ class MenuIconos {
     'trending_up_outlined': Icons.trending_up_outlined,
     'trending_down_outlined': Icons.trending_down_outlined,
     'timeline_outlined': Icons.timeline_outlined,
-    // Reportes por preset (REPORTES → Diarios/Mensuales/Personalizado)
     'today': Icons.today,
+    'today_outlined': Icons.today_outlined,
     'calendar_month': Icons.calendar_month,
+    'calendar_month_outlined': Icons.calendar_month_outlined,
     'date_range': Icons.date_range,
     'date_range_outlined': Icons.date_range_outlined,
     'arrow_downward': Icons.arrow_downward,
@@ -100,13 +112,15 @@ class MenuIconos {
     'fact_check_outlined': Icons.fact_check_outlined,
     'checklist_outlined': Icons.checklist_outlined,
     'task_alt_outlined': Icons.task_alt_outlined,
-    // Seguridad / mantenimiento
+
+    // ── Seguridad / mantenimiento ──
     'settings': Icons.settings,
     'settings_outlined': Icons.settings_outlined,
     'admin_panel_settings': Icons.admin_panel_settings,
     'admin_panel_settings_outlined': Icons.admin_panel_settings_outlined,
     'lock': Icons.lock,
     'lock_outline': Icons.lock_outline,
+    'lock_outlined': Icons.lock_outlined,
     'lock_open_outlined': Icons.lock_open_outlined,
     'key_outlined': Icons.key_outlined,
     'vpn_key_outlined': Icons.vpn_key_outlined,
@@ -114,11 +128,8 @@ class MenuIconos {
     'shield_outlined': Icons.shield_outlined,
     'verified_user': Icons.verified_user,
     'verified_user_outlined': Icons.verified_user_outlined,
-    'build': Icons.build,
-    'build_outlined': Icons.build_outlined,
-    'engineering_outlined': Icons.engineering_outlined,
-    'settings_backup_restore_outlined': Icons.settings_backup_restore_outlined,
-    // Dispositivos / hardware
+
+    // ── Dispositivos / hardware ──
     'sensors': Icons.sensors,
     'sensors_outlined': Icons.sensors_outlined,
     'usb_outlined': Icons.usb_outlined,
@@ -137,6 +148,10 @@ class MenuIconos {
     'scale': Icons.scale,
     'scale_outlined': Icons.scale_outlined,
     'speed_outlined': Icons.speed_outlined,
+    'straighten': Icons.straighten,
+    'straighten_outlined': Icons.straighten_outlined,
+    'door_sliding': Icons.door_sliding,
+    'door_sliding_outlined': Icons.door_sliding_outlined,
     'memory_outlined': Icons.memory_outlined,
     'developer_board_outlined': Icons.developer_board_outlined,
     'dns_outlined': Icons.dns_outlined,
@@ -148,7 +163,8 @@ class MenuIconos {
     'tablet_outlined': Icons.tablet_outlined,
     'battery_full_outlined': Icons.battery_full_outlined,
     'power_settings_new_outlined': Icons.power_settings_new_outlined,
-    // Empresa / documentos
+
+    // ── Empresa / documentos ──
     'business': Icons.business,
     'business_outlined': Icons.business_outlined,
     'apartment_outlined': Icons.apartment_outlined,
@@ -163,11 +179,15 @@ class MenuIconos {
     'payments_outlined': Icons.payments_outlined,
     'attach_money_outlined': Icons.attach_money_outlined,
     'request_quote_outlined': Icons.request_quote_outlined,
-    // Ayuda / comunicación
+
+    // ── Ayuda / comunicación ──
     'help': Icons.help,
     'help_outline': Icons.help_outline,
+    'info': Icons.info,
+    'info_outline': Icons.info_outline,
     'info_outlined': Icons.info_outlined,
     'contact_support_outlined': Icons.contact_support_outlined,
+    'support_agent': Icons.support_agent,
     'support_agent_outlined': Icons.support_agent_outlined,
     'chat_outlined': Icons.chat_outlined,
     'forum_outlined': Icons.forum_outlined,
@@ -176,15 +196,23 @@ class MenuIconos {
     'campaign_outlined': Icons.campaign_outlined,
     'notifications_none': Icons.notifications_none,
     'notifications_active_outlined': Icons.notifications_active_outlined,
-    // Tiempo / sistema
+    'menu_book': Icons.menu_book,
+    'menu_book_outlined': Icons.menu_book_outlined,
+    'public': Icons.public,
+    'public_outlined': Icons.public_outlined,
+    'play_circle': Icons.play_circle,
+    'play_circle_outline': Icons.play_circle_outline,
+    'school': Icons.school,
+    'school_outlined': Icons.school_outlined,
+
+    // ── Tiempo / sistema ──
     'schedule_outlined': Icons.schedule_outlined,
     'history_outlined': Icons.history_outlined,
     'event_outlined': Icons.event_outlined,
-    'today_outlined': Icons.today_outlined,
-    'calendar_month_outlined': Icons.calendar_month_outlined,
     'timer_outlined': Icons.timer_outlined,
     'storage_outlined': Icons.storage_outlined,
-    // Diversos útiles
+
+    // ── Diversos útiles ──
     'star_outline': Icons.star_outline,
     'favorite_border': Icons.favorite_border,
     'bookmark_border': Icons.bookmark_border,
@@ -498,11 +526,11 @@ class MenuConfig {
         ),
         MenuNode.separador(),
         MenuNode(
-          label: 'Conceptos de Inventario',
+          label: 'Conceptos Kardex',
           icon: Icons.rule_folder_outlined,
           activeIcon: Icons.rule_folder,
           clave: 'conceptos_inventario',
-          index: 22,
+          index: 29,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
       ],
@@ -566,7 +594,7 @@ class MenuConfig {
           icon: Icons.move_to_inbox_outlined,
           activeIcon: Icons.move_to_inbox,
           clave: 'ingresos',
-          index: 20,
+          index: 21,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode(
@@ -574,7 +602,7 @@ class MenuConfig {
           icon: Icons.outbox_outlined,
           activeIcon: Icons.outbox,
           clave: 'despachos',
-          index: 21,
+          index: 22,
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
         MenuNode.separador(),
@@ -663,7 +691,7 @@ class MenuConfig {
           icon: Icons.badge_outlined,
           activeIcon: Icons.badge,
           clave: 'roles',
-          index: 23,
+          index: 20,
           rolesPermitidos: {'ADMIN', 'AUDITOR'},
         ),
         MenuNode(

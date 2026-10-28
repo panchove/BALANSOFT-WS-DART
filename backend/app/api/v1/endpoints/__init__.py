@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     camaras,
     catalogo,
     conceptos_inventario,
+    conceptos_kardex,
     config,
     directorio,
     empresa,
@@ -66,6 +67,7 @@ API_ROUTERS = [
     camaras.router,
     indicadores.router,
     conceptos_inventario.router,
+    conceptos_kardex.router,
     barreras.router,
 ]
 

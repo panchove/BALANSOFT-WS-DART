@@ -9,7 +9,8 @@ enum CatalogFieldType {
   entero,
   dropdown,
   email,
-  foto
+  foto,
+  booleano
 }
 
 class CatalogField {
@@ -283,6 +284,13 @@ class AppCatalogos {
         label: 'Tolerancia (%)',
         icono: Icons.percent_outlined,
         tipo: CatalogFieldType.numero,
+      ),
+      const CatalogField(
+        key: 'es_kardex',
+        label: 'Generar movimientos de kardex',
+        icono: Icons.sync_alt_outlined,
+        tipo: CatalogFieldType.booleano,
+        hint: 'Si está activo, este producto generará movimientos de inventario en Kardex',
       ),
     ],
   );
@@ -586,26 +594,35 @@ class AppCatalogos {
 
   static final _conceptosInventario = CatalogResource(
     clave: 'conceptos_inventario',
-    plural: 'Conceptos de Inventario',
-    singular: 'Concepto de Inventario',
-    icono: Icons.rule_folder_outlined,
+    plural: 'Conceptos Inventario',
+    singular: 'Concepto Inventario',
+    icono: Icons.inventory_outlined,
     listaPath: ApiConstants.conceptosInventario,
     itemPath: ApiConstants.conceptoInventario,
     idKey: 'id_concepto',
-    tituloFila: (f) => '${f['nombre'] ?? ''}',
+    tituloFila: (f) {
+      final id = f['id_concepto']?.toString() ?? f['codigo']?.toString() ?? '';
+      final nombre = f['nombre'] ?? f['descripcion'] ?? '';
+      if (id.isNotEmpty && nombre.toString().isNotEmpty) return '$id - $nombre';
+      if (nombre.toString().isNotEmpty) return nombre.toString();
+      return id;
+    },
     subtituloFila: (f) {
-      final partes = <String>[
-        if (f['codigo'] != null) f['codigo'] as String,
-        if (f['tipo_movimiento'] != null)
-          _tipoConceptoLabel(f['tipo_movimiento'] as String),
-        if (f['activo'] == false) 'Inactivo',
-      ];
+      final partes = <String>[];
+      if (f['codigo'] != null && f['codigo'].toString().isNotEmpty) {
+        partes.add(f['codigo'].toString());
+      }
+      if (f['tipo_movimiento'] != null) {
+        partes.add(_tipoConceptoLabel(f['tipo_movimiento'] as String));
+      }
+      if (f['es_sistema'] == true) partes.add('Sistema');
+      if (f['activo'] == false) partes.add('Inactivo');
       return partes.isEmpty ? null : partes.join(' · ');
     },
     campos: [
       const CatalogField(
-        key: 'codigo',
-        label: 'Código',
+        key: 'id_concepto',
+        label: 'Código / ID',
         icono: Icons.numbers_outlined,
       ),
       const CatalogField(
@@ -613,6 +630,12 @@ class AppCatalogos {
         label: 'Nombre',
         icono: Icons.label_outline,
         requerido: true,
+      ),
+      const CatalogField(
+        key: 'descripcion',
+        label: 'Descripción',
+        icono: Icons.notes_outlined,
+        tipo: CatalogFieldType.multilinea,
       ),
       const CatalogField(
         key: 'tipo_movimiento',
@@ -623,10 +646,80 @@ class AppCatalogos {
         opcionLabels: ['Ingreso', 'Despacho', 'Ajuste', 'Ambos'],
       ),
       const CatalogField(
+        key: 'activo',
+        label: 'Activo',
+        icono: Icons.toggle_on_outlined,
+        tipo: CatalogFieldType.booleano,
+      ),
+    ],
+  );
+
+  static final _conceptosKardex = CatalogResource(
+    clave: 'conceptos_kardex',
+    plural: 'Conceptos Kardex',
+    singular: 'Concepto Kardex',
+    icono: Icons.rule_folder_outlined,
+    listaPath: ApiConstants.conceptosKardex,
+    itemPath: ApiConstants.conceptoKardex,
+    idKey: 'id_concepto',
+    tituloFila: (f) {
+      final id = f['id_concepto']?.toString() ?? '';
+      final nombre = f['nombre'] ?? '';
+      if (id.isNotEmpty && nombre.toString().isNotEmpty) return '$id - $nombre';
+      if (nombre.toString().isNotEmpty) return nombre.toString();
+      return id;
+    },
+    subtituloFila: (f) {
+      final partes = <String>[];
+      final signo = f['signo']?.toString() ?? '';
+      if (signo.isNotEmpty) partes.add(signo);
+      final aplica = f['aplica_a']?.toString() ?? '';
+      if (aplica.isNotEmpty) partes.add(aplica);
+      if (f['es_sistema'] == true) partes.add('Sistema');
+      if (f['activo'] == false) partes.add('Inactivo');
+      return partes.isEmpty ? null : partes.join(' · ');
+    },
+    campos: [
+      const CatalogField(
+        key: 'id_concepto',
+        label: 'ID (0-99)',
+        icono: Icons.numbers_outlined,
+        requerido: true,
+      ),
+      const CatalogField(
+        key: 'nombre',
+        label: 'Nombre',
+        icono: Icons.label_outline,
+        requerido: true,
+      ),
+      const CatalogField(
         key: 'descripcion',
         label: 'Descripción',
         icono: Icons.notes_outlined,
         tipo: CatalogFieldType.multilinea,
+      ),
+      const CatalogField(
+        key: 'signo',
+        label: 'Signo',
+        icono: Icons.swap_vert_outlined,
+        tipo: CatalogFieldType.dropdown,
+        opciones: ['inicial', 'positivo', 'negativo'],
+        opcionLabels: ['Inicial', 'Positivo (+)', 'Negativo (-)'],
+        requerido: true,
+      ),
+      const CatalogField(
+        key: 'aplica_a',
+        label: 'Aplica a',
+        icono: Icons.swap_horiz_outlined,
+        tipo: CatalogFieldType.dropdown,
+        opciones: ['INGRESO', 'DESPACHO', 'AJUSTE', 'AMBOS'],
+        opcionLabels: ['Ingreso', 'Despacho', 'Ajuste', 'Ambos'],
+      ),
+      const CatalogField(
+        key: 'activo',
+        label: 'Activo',
+        icono: Icons.toggle_on_outlined,
+        tipo: CatalogFieldType.booleano,
       ),
     ],
   );
@@ -784,6 +877,7 @@ class AppCatalogos {
   static CatalogResource get almacenResource => _almacenes;
   static CatalogResource get tercerosResource => _clientesYProveedores;
   static CatalogResource get conceptoInventarioResource => _conceptosInventario;
+  static CatalogResource get conceptoKardexResource => _conceptosKardex;
 
   /// `terceros` segmentado: la MISMA tabla, vista como CRUD individual.
   static CatalogResource get clienteResource => _clientes;

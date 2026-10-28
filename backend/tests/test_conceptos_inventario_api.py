@@ -255,38 +255,66 @@ class TestAislamiento:
 # Uso desde el ajuste de inventario
 # ---------------------------------------------------------------------------
 class TestAjusteConConcepto:
-    async def test_ajuste_copia_el_nombre_del_concepto_en_documento(
+    """Ajuste manual contra el catálogo `conceptos_kardex` (migración 031).
+
+    El contrato cambió respecto al diseño anterior: el movimiento se identifica
+    por ``id_concepto`` (int, no del sistema) y ``cantidad`` con signo; el nombre
+    del concepto queda en la auditoría y el documento pasa a ``AJUSTE-*``.
+    La cobertura completa vive en ``tests/test_inventario_ajustes.py``.
+    """
+
+    async def _kardex(self, db, empresa, id_concepto=5, nombre="Merma por derrame"):
+        from app.models import ConceptoKardex
+
+        concepto = ConceptoKardex(
+            id_empresa=empresa.id_empresa,
+            id_concepto=id_concepto,
+            nombre=nombre,
+            signo="negativo" if id_concepto >= 50 else "positivo",
+            es_sistema=False,
+            activo=True,
+            aplica_a="AMBOS",
+        )
+        db.add(concepto)
+        await db.commit()
+        await db.refresh(concepto)
+        return concepto
+
+    async def test_ajuste_con_concepto_kardex_registra_movimiento(
         self, client, db, empresa
     ):
-        concepto = await _crear_concepto(db, empresa, nombre="Merma por derrame")
+        concepto = await self._kardex(db, empresa, id_concepto=55)
         producto = await _crear_producto(db, empresa)
         almacen = await _crear_almacen(db, empresa)
 
         r = await client.post(
             "/api/v1/inventario/ajustes",
             json={
-                "id_movimiento": 60,
+                "id_concepto": concepto.id_concepto,
                 "id_producto": str(producto.id_producto),
                 "id_almacen": str(almacen.id_almacen),
-                "valor_kg": "12.50",
-                "id_concepto": str(concepto.id_concepto),
+                "cantidad": "-12.50",
+                "motivo": "Merma por derrame en patio",
             },
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["id_concepto"] == str(concepto.id_concepto)
-        assert data["documento"] == "Merma por derrame"
+        assert data["id_movimiento"] == 55
+        assert data["valor"] == "12.50"
+        assert data["documento"].startswith("AJUSTE-")
 
-    async def test_ajuste_sin_concepto_ni_documento_devuelve_422(
-        self, client, db, empresa
-    ):
+        # El nombre del concepto queda trazado en la auditoría.
+        aud = await client.get("/api/v1/auditoria", params={"entidad": "kardex"})
+        assert aud.status_code == 200, aud.text
+        assert concepto.nombre in str(aud.json()[0]["detalle"])
+
+    async def test_ajuste_sin_concepto_devuelve_422(self, client, db, empresa):
         producto = await _crear_producto(db, empresa)
         almacen = await _crear_almacen(db, empresa)
 
         r = await client.post(
             "/api/v1/inventario/ajustes",
             json={
-                "id_movimiento": 10,
                 "id_producto": str(producto.id_producto),
                 "id_almacen": str(almacen.id_almacen),
                 "valor_kg": "10",
@@ -302,18 +330,19 @@ class TestAjusteConConcepto:
         db.add(otra)
         await db.commit()
         await db.refresh(otra)
-        ajeno = await _crear_concepto(db, otra, nombre="Ajeno")
+        # El concepto existe, pero en otra empresa (no debe filtrarse).
+        await self._kardex(db, otra, id_concepto=44, nombre="Ajeno")
         producto = await _crear_producto(db, empresa)
         almacen = await _crear_almacen(db, empresa)
 
         r = await client.post(
             "/api/v1/inventario/ajustes",
             json={
-                "id_movimiento": 10,
+                "id_concepto": 44,
                 "id_producto": str(producto.id_producto),
                 "id_almacen": str(almacen.id_almacen),
-                "valor_kg": "10",
-                "id_concepto": str(ajeno.id_concepto),
+                "cantidad": "10",
+                "motivo": "Concepto que no es de esta empresa",
             },
         )
         assert r.status_code == 404

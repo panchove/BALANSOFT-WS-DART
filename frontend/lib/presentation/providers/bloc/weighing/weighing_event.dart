@@ -35,14 +35,20 @@ class ListWeighingsEvent extends WeighingEvent {
   final DateTime? dateTo;
   final String? vehicleId;
   final String? estado;
+
+  /// Segmenta por movimiento de kardex (10 = ingreso / 60 = despacho).
+  /// `null` (por defecto) no filtra: el listado general no cambia.
+  final int? kardexMov;
+
   const ListWeighingsEvent({
     this.dateFrom,
     this.dateTo,
     this.vehicleId,
     this.estado,
+    this.kardexMov,
   });
   @override
-  List<Object?> get props => [dateFrom, dateTo, vehicleId, estado];
+  List<Object?> get props => [dateFrom, dateTo, vehicleId, estado, kardexMov];
 }
 
 class GetWeighingEvent extends WeighingEvent {

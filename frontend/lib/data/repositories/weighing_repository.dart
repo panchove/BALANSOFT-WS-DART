@@ -132,6 +132,7 @@ class WeighingRepository implements IWeighingRepository {
     DateTime? dateTo,
     String? vehicleId,
     String? estado,
+    int? kardexMov,
   }) async {
     if (await _isConnected) {
       try {
@@ -143,6 +144,7 @@ class WeighingRepository implements IWeighingRepository {
         if (dateTo != null) params['date_to'] = dateTo.toIso8601String();
         if (vehicleId != null) params['vehicle_id'] = vehicleId;
         if (estado != null) params['estado'] = estado;
+        if (kardexMov != null) params['kardex_mov'] = kardexMov;
 
         final response = await _apiClient.listWeighings(params: params);
         final list = (response.data as List)
@@ -151,12 +153,68 @@ class WeighingRepository implements IWeighingRepository {
         for (final w in list) {
           await _saveLocal(w, synced: true);
         }
+        if (kardexMov != null) {
+          // Segmentación de kardex (Ingresos/Despachos): NUNCA se mezclan los
+          // pendientes locales, un PENDIENTE no tiene asiento de kardex todavía
+          // y colarse aquí falsearía el listado y el KPI.
+          return list;
+        }
         return await _mergeLocalPendientes(list);
       } catch (_) {
-        return _listLocal();
+        return kardexMov != null
+            ? await _listLocalKardex(kardexMov)
+            : await _listLocal();
       }
     }
-    return _listLocal();
+    return kardexMov != null
+        ? await _listLocalKardex(kardexMov)
+        : await _listLocal();
+  }
+
+  /// Listado local filtrado por movimiento de kardex (camino offline).
+  ///
+  /// Solo boletos con ``kardex_mov`` conocido y que no estén ANULADOS: es el
+  /// espejo del filtro del servidor para que Ingresos/Despachos no muestre
+  /// operaciones que ya no cuentan.
+  Future<List<Weighing>> _listLocalKardex(int kardexMov) async {
+    final todos = await _listLocal();
+    return todos
+        .where((w) => w.kardexMov == kardexMov && w.estadoBoleto != 'ANULADO')
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> resumenMovimiento(
+    int kardexMov, {
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    if (await _isConnected) {
+      try {
+        final params = <String, dynamic>{'kardex_mov': kardexMov};
+        if (dateFrom != null) params['date_from'] = dateFrom.toIso8601String();
+        if (dateTo != null) params['date_to'] = dateTo.toIso8601String();
+        final response = await _apiClient.resumenMovimiento(params: params);
+        return Map<String, dynamic>.from(response.data as Map);
+      } catch (_) {
+        // Offline: el KPI se calcula con lo persistido localmente.
+        return _resumenMovimientoLocal(kardexMov);
+      }
+    }
+    return _resumenMovimientoLocal(kardexMov);
+  }
+
+  /// KPI offline: suma los boletos locales de la segmentación indicada.
+  Future<Map<String, dynamic>> _resumenMovimientoLocal(int kardexMov) async {
+    final todos = await _listLocal();
+    final items = todos.where((w) => w.kardexMov == kardexMov).toList();
+    final totalKg =
+        items.fold<double>(0, (s, w) => s + (w.pesoNeto ?? 0).toDouble());
+    return {
+      'kardex_mov': kardexMov,
+      'total_boletos': items.length,
+      'total_kg': totalKg,
+    };
   }
 
   @override

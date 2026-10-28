@@ -28,6 +28,7 @@ import '../../widgets/mobile_nav_sheet.dart';
 import '../../widgets/quick_actions_bar.dart';
 import '../../widgets/top_nav_bar.dart';
 import '../ajustes_inventario/ajustes_inventario_screen.dart';
+import '../inventario/conceptos_kardex_screen.dart';
 import '../auditoria/auditoria_screen.dart';
 import '../ayuda/ayuda_screen.dart';
 import '../catalog/catalog_crud_screen.dart';
@@ -36,6 +37,7 @@ import '../dispositivos/dispositivos_screen.dart';
 import '../empresa/documentos_empresa_screen.dart';
 import '../kardex/kardex_screen.dart';
 import '../reports/reports_screen.dart';
+import '../roles/roles_screen.dart';
 import '../seguridad/seguridad_screen.dart';
 import '../sesiones/sesiones_screen.dart';
 import '../settings/initial_setup_screen.dart';
@@ -47,6 +49,7 @@ import '../settings/usuarios_screen.dart';
 import '../settings/connections_screen.dart';
 import '../weighing/weighing_form_screen.dart';
 import '../weighing/weighing_list_screen.dart';
+import '../../../domain/entities/weighing.dart';
 import 'dashboard_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -76,30 +79,39 @@ class _HomeShellState extends State<HomeShell> {
   final List<int> _historial = [];
 
   late final List<Widget Function(BuildContext)> _pages = [
-    (_) => const DashboardScreen(),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.tercerosResource),
-    (_) => const UsuariosScreen(),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.camionResource),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.conductorResource),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.transporteResource),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.categoriaResource),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.productoResource),
-    (_) => CatalogCrudScreen(recurso: AppCatalogos.almacenResource),
-    (_) => const KardexScreen(),
-    (_) => const WeighingListScreen(titulo: 'Entradas'),
-    (_) => const WeighingListScreen(
-          estadoInicial: 'CERRADO',
-          titulo: 'Salidas',
-        ),
-    (_) => const ReportsScreen(),
-    (_) => const DispositivosScreen(),
-    (_) => const SeguridadScreen(),
-    (_) => const DocumentosEmpresaScreen(),
-    (_) => SettingsScreen(
+    (_) => const DashboardScreen(),                                      // 0  Inicio
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.tercerosResource),    // 1  Terceros
+    (_) => const UsuariosScreen(),                                       // 2  Usuarios
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.camionResource),      // 3  Camiones
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.conductorResource),   // 4  Conductores
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.transporteResource),  // 5  Transportes
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.categoriaResource),   // 6  Categorías
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.productoResource),    // 7  Productos
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.almacenResource),     // 8  Almacenes
+    (_) => const KardexScreen(),                                         // 9  Kardex
+    (_) => const WeighingListScreen(titulo: 'Entradas'),                 // 10 Entradas
+    (_) => const WeighingListScreen(estadoInicial: 'CERRADO', titulo: 'Salidas'), // 11 Salidas
+    (_) => const ReportsScreen(),                                        // 12 Reportes
+    (_) => const DispositivosScreen(),                                   // 13 Dispositivos
+    (_) => const SeguridadScreen(),                                      // 14 Seguridad
+    (_) => const DocumentosEmpresaScreen(),                              // 15 Empresa
+    (_) => SettingsScreen(                                               // 16 Configuración
           themeController: widget.themeController,
           localeController: di.sl<LocaleController>(),
         ),
-    (_) => const TicketDesignScreen(),
+    (_) => const TicketDesignScreen(),                                   // 17 Diseño Ticket
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.clienteResource),     // 18 Clientes
+    (_) => CatalogCrudScreen(recurso: AppCatalogos.proveedorResource),   // 19 Proveedores
+    (_) => const RolesScreen(),                                          // 20 Roles
+    (_) => const WeighingListScreen(tipoMovimiento: TipoMovimientoListado.ingreso), // 21 Ingresos
+    (_) => const WeighingListScreen(tipoMovimiento: TipoMovimientoListado.despacho), // 22 Despachos
+    (_) => const DispositivosScreen(initialTab: 0),                      // 23 Básculas
+    (_) => const DispositivosScreen(initialTab: 1),                      // 24 Indicadores
+    (_) => const DispositivosScreen(initialTab: 2),                      // 25 Semáforos
+    (_) => const DispositivosScreen(initialTab: 3),                      // 26 Cámaras
+    (_) => const DispositivosScreen(initialTab: 5),                      // 27 Barreras
+    (_) => const DispositivosScreen(initialTab: 4),                      // 28 Impresoras
+    (_) => const ConceptosKardexScreen(), // 29 Conceptos Kardex
   ];
 
   @override
@@ -184,8 +196,6 @@ class _HomeShellState extends State<HomeShell> {
     const map = {
       'inicio': 0,
       'terceros': 1,
-      'clientes': 1,
-      'proveedores': 1,
       'usuarios': 2,
       'camiones': 3,
       'conductores': 4,
@@ -197,11 +207,28 @@ class _HomeShellState extends State<HomeShell> {
       'entradas': 10,
       'salidas': 11,
       'reportes': 12,
+      'reportes_generales': 12,
+      'reportes_diarios': 12,
+      'reportes_mensuales': 12,
+      'reportes_personalizado': 12,
       'dispositivos': 13,
       'seguridad': 14,
       'documentos_empresa': 15,
       'configuracion': 16,
       'diseno_ticket': 17,
+      'clientes': 18,
+      'proveedores': 19,
+      'roles': 20,
+      'ingresos': 21,
+      'despachos': 22,
+      'conceptos_inventario': 29,
+      'conceptos_kardex': 29,
+      'dispositivos_basculas': 23,
+      'dispositivos_indicadores': 24,
+      'dispositivos_semaforos': 25,
+      'dispositivos_camaras': 26,
+      'dispositivos_barreras': 27,
+      'dispositivos_impresoras': 28,
     };
     return map[clave] ?? -1;
   }
@@ -866,8 +893,10 @@ class _HomeShellState extends State<HomeShell> {
         _irA('camiones');
         return;
       case 'go:clientes':
+        _irA('clientes');
+        return;
       case 'go:proveedores':
-        _irA('terceros');
+        _irA('proveedores');
         return;
       case 'go:inventario_base':
         _irA('categorias');

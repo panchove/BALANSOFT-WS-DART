@@ -9,7 +9,16 @@ from sqlalchemy import Date, bindparam, case, cast, func, select
 from sqlalchemy.dialects import mssql
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Almacen, BoletoPesaje, Empresa, Kardex, Producto, Tercero, Transporte
+from app.models import (
+    Almacen,
+    BoletoPesaje,
+    ConceptoKardex,
+    Empresa,
+    Kardex,
+    Producto,
+    Tercero,
+    Transporte,
+)
 
 
 class ReportService:
@@ -258,10 +267,18 @@ class ReportService:
                 Producto.codigo.label("codigo_producto"),
                 Almacen.nombre.label("nombre_almacen"),
                 BoletoPesaje.numero_boleto.label("numero_boleto"),
+                ConceptoKardex.nombre.label("concepto_nombre"),
+                ConceptoKardex.signo.label("concepto_signo"),
+                ConceptoKardex.es_sistema.label("concepto_es_sistema"),
             )
             .outerjoin(Producto, Kardex.id_producto == Producto.id_producto)
             .outerjoin(Almacen, Kardex.id_almacen == Almacen.id_almacen)
             .outerjoin(BoletoPesaje, Kardex.boleto == BoletoPesaje.boleto)
+            .outerjoin(
+                ConceptoKardex,
+                (ConceptoKardex.id_empresa == Kardex.id_empresa)
+                & (ConceptoKardex.id_concepto == Kardex.id_movimiento),
+            )
             .where(*filtros_rango)
             .order_by(Kardex.fecha_kardex, Kardex.id_kardex)
         )
@@ -270,16 +287,36 @@ class ReportService:
 
         movimientos: list[dict] = []
         acumulado = Decimal(saldo_inicial)
-        for k, prod_nombre, prod_codigo, alm_nombre, num_bol in rows_with_details:
+        for k, prod_nombre, prod_codigo, alm_nombre, num_bol, c_nombre, c_signo, c_sistema in rows_with_details:
             signo = 1 if k.id_movimiento < Kardex.RANGO_NEGATIVO_DESDE else -1
             valor_saldo = Decimal(k.valor) * signo
             acumulado += valor_saldo
-            
+
+            if k.id_movimiento in (10, 60):
+                origen = "Báscula"
+            elif k.id_movimiento == 0:
+                origen = "Sistema"
+            else:
+                origen = "Manual"
+
+            if c_nombre:
+                concepto_nombre = c_nombre
+                concepto_signo = c_signo
+                concepto_es_sistema = bool(c_sistema) if c_sistema is not None else (k.id_movimiento in (0, 10, 60))
+            else:
+                concepto_nombre = f"ID {k.id_movimiento} (sin definir)"
+                concepto_signo = None
+                concepto_es_sistema = False
+
             movimientos.append(
                 {
                     "id_kardex": str(k.id_kardex),
                     "fecha": k.fecha_kardex.isoformat(),
                     "id_movimiento": k.id_movimiento,
+                    "concepto_nombre": concepto_nombre,
+                    "concepto_signo": concepto_signo,
+                    "concepto_es_sistema": concepto_es_sistema,
+                    "origen": origen,
                     "id_producto": str(k.id_producto) if k.id_producto else "SIN_PRODUCTO",
                     "nombre_producto": prod_nombre or "SIN_PRODUCTO",
                     "codigo_producto": prod_codigo or "",
