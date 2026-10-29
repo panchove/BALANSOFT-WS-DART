@@ -26,29 +26,6 @@ class LoginUseCase {
   }
 }
 
-class RegisterUseCase {
-  final IAuthRepository _repo;
-  RegisterUseCase(this._repo);
-
-  Future<User> execute({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) {
-    return _repo.register(
-      empresaNombre: empresaNombre,
-      empresaRif: empresaRif,
-      usuarioNombre: usuarioNombre,
-      email: email,
-      password: password,
-      licenciaKey: licenciaKey,
-    );
-  }
-}
-
 class LogoutUseCase {
   final IAuthRepository _repo;
   LogoutUseCase(this._repo);

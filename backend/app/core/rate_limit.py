@@ -39,6 +39,8 @@ _AUTH_PATHS: dict[str, tuple[str, int]] = {
     "/register": ("rate_limit_register", 3),
     "/forgot-password": ("rate_limit_password", 5),
     "/reset-password": ("rate_limit_password", 5),
+    "/setup/validar-licencia": ("rate_limit_setup", 10),
+    "/setup/crear-admin": ("rate_limit_setup_admin", 3),
 }
 
 

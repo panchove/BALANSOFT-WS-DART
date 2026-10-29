@@ -52,6 +52,10 @@ class AppConfig {
   /// `null` = sin config válida (la app no debe operar).
   static StationRole? rol;
 
+  /// Clave de licencia opcional escrita por el instalador en `config.json`.
+  /// Se usa en el setup inicial para precargar el formulario de licencia.
+  static String? licenciaKey;
+
   /// Error de provisión si `config.json` faltaba o era inválido: la app no
   /// debe arrancar con rol nulo (contrato BALANSOFT-INSTALLER).
   static StationConfigError? configError;
@@ -110,12 +114,19 @@ class AppConfig {
     // el arranque real, migración única del legado. Sin archivo ni legado,
     // se deja `rol` nulo y se expone el error (no se debe operar).
     rol = null;
+    licenciaKey = null;
     configError = null;
     apiBaseUrl = null;
     try {
       final cfg = await StationConfigLoader.cargar(migrarLegado: migrarLegado);
       apiBaseUrl = cfg.apiBaseUrl;
       rol = cfg.rol;
+      licenciaKey = cfg.licenciaKey;
+      // Persistir la licencia_key en SharedPreferences para que la pantalla
+      // de Setup pueda leerla sin depender de volver a parsear config.json.
+      if (licenciaKey != null && licenciaKey!.trim().isNotEmpty) {
+        await _prefs.setString('licencia_key', licenciaKey!);
+      }
     } on StationConfigError catch (e) {
       configError = e;
     }

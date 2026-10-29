@@ -50,6 +50,230 @@ class _IndicadoresConfigTabState extends State<IndicadoresConfigTab> {
     );
   }
 
+  Future<void> _crearIndicador() async {
+    final formKey = GlobalKey<FormState>();
+    final codigoCtrl = TextEditingController();
+    final descripcionCtrl = TextEditingController();
+    final marcaCtrl = TextEditingController();
+    final modeloCtrl = TextEditingController();
+    final protocoloCtrl = TextEditingController(text: 'tcp');
+    final ipAddressCtrl = TextEditingController();
+    final puertoTcpCtrl = TextEditingController();
+    final puertoComCtrl = TextEditingController();
+    final formatoTramaCtrl = TextEditingController(text: 'auto');
+    final baudrateCtrl = TextEditingController(text: '9600');
+    final delimitadorCtrl = TextEditingController(text: 'lf');
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Crear Indicador',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: descripcionCtrl,
+                  decoration: const InputDecoration(labelText: 'Descripción *'),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: codigoCtrl,
+                  decoration: const InputDecoration(labelText: 'Código'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: marcaCtrl,
+                  decoration: const InputDecoration(labelText: 'Marca'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: modeloCtrl,
+                  decoration: const InputDecoration(labelText: 'Modelo'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Protocolo'),
+                  value: protocoloCtrl.text,
+                  items: const [
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP / RED')),
+                    DropdownMenuItem(value: 'serial', child: Text('SERIAL / USB')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      protocoloCtrl.text = v;
+                      if (v == 'serial') {
+                        ipAddressCtrl.clear();
+                        puertoTcpCtrl.clear();
+                      } else {
+                        puertoComCtrl.clear();
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: ipAddressCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Dirección IP',
+                    hintText: 'Ej. 192.168.1.100',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: puertoTcpCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Puerto TCP',
+                    hintText: 'Ej. 5025',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: puertoComCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Puerto Serie (COM)',
+                    hintText: 'Ej. COM1 o /dev/ttyUSB0',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Formato de trama'),
+                  value: formatoTramaCtrl.text,
+                  items: const [
+                    DropdownMenuItem(value: 'auto', child: Text('Auto')),
+                    DropdownMenuItem(value: 'json', child: Text('JSON')),
+                    DropdownMenuItem(value: 'ascii', child: Text('ASCII')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) formatoTramaCtrl.text = v;
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  decoration: const InputDecoration(labelText: 'Baudrate'),
+                  value: baudrateCtrl.text.isEmpty
+                      ? null
+                      : int.tryParse(baudrateCtrl.text),
+                  items: const [
+                    DropdownMenuItem(value: 1200, child: Text('1200')),
+                    DropdownMenuItem(value: 2400, child: Text('2400')),
+                    DropdownMenuItem(value: 4800, child: Text('4800')),
+                    DropdownMenuItem(value: 9600, child: Text('9600')),
+                    DropdownMenuItem(value: 19200, child: Text('19200')),
+                    DropdownMenuItem(value: 38400, child: Text('38400')),
+                    DropdownMenuItem(value: 57600, child: Text('57600')),
+                    DropdownMenuItem(value: 115200, child: Text('115200')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) baudrateCtrl.text = v.toString();
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Delimitador'),
+                  value: delimitadorCtrl.text,
+                  items: const [
+                    DropdownMenuItem(value: 'lf', child: Text('LF (\\n)')),
+                    DropdownMenuItem(value: 'cr', child: Text('CR (\\r)')),
+                    DropdownMenuItem(value: 'crlf', child: Text('CRLF (\\r\\n)')),
+                    DropdownMenuItem(value: 'stx_etx', child: Text('STX/ETX')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) delimitadorCtrl.text = v;
+                  },
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancelar'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () async {
+                          if (formKey.currentState!.validate()) {
+                            await _guardarIndicador({
+                              'descripcion': descripcionCtrl.text,
+                              'codigo': codigoCtrl.text.isEmpty ? null : codigoCtrl.text,
+                              'marca': marcaCtrl.text.isEmpty ? null : marcaCtrl.text,
+                              'modelo': modeloCtrl.text.isEmpty ? null : modeloCtrl.text,
+                              'protocolo': protocoloCtrl.text,
+                              'ip_address': protocoloCtrl.text == 'tcp'
+                                  ? ipAddressCtrl.text.isEmpty ? null : ipAddressCtrl.text
+                                  : null,
+                              'puerto_tcp': protocoloCtrl.text == 'tcp'
+                                  ? puertoTcpCtrl.text.isEmpty ? null : int.tryParse(puertoTcpCtrl.text)
+                                  : null,
+                              'puerto_com': protocoloCtrl.text == 'serial'
+                                  ? puertoComCtrl.text.isEmpty ? null : puertoComCtrl.text
+                                  : null,
+                              'formato_trama': formatoTramaCtrl.text,
+                              'baudrate': int.tryParse(baudrateCtrl.text) ?? 9600,
+                              'delimitador': delimitadorCtrl.text,
+                            });
+                          }
+                        },
+                        child: const Text('Crear'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _guardarIndicador(Map<String, dynamic> body) async {
+    try {
+      await _api.crearIndicador(body);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Indicador creado correctamente'),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+      await _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_detalleError(e)),
+          backgroundColor: SwsColors.danger,
+        ),
+      );
+    }
+  }
+
+  String _detalleError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['detail'] != null) return '${data['detail']}';
+    }
+    return 'No se pudo guardar el indicador.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtrados = _items.where((e) {
@@ -84,6 +308,12 @@ class _IndicadoresConfigTabState extends State<IndicadoresConfigTab> {
                 onPressed: _cargar,
                 icon: const Icon(Icons.refresh),
                 label: Text(context.tr('refrescar')),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _crearIndicador,
+                icon: const Icon(Icons.add),
+                label: Text(context.tr('crear_indicador')),
               ),
             ],
           ),

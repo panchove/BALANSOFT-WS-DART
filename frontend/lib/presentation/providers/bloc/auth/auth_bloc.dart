@@ -1,7 +1,9 @@
 import 'package:bloc/bloc.dart';
+import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/utils/mensaje_error.dart';
 import '../../../../domain/entities/user.dart';
+import '../../../../data/repositories/auth_repository.dart';
 import '../../../../domain/repositories/i_auth_repository.dart';
 import '../../../../domain/usecases/auth_usecases.dart';
 import '../../../../core/security/device_info.dart';
@@ -10,39 +12,39 @@ part 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final LoginUseCase _loginUseCase;
-  final RegisterUseCase _registerUseCase;
   final LogoutUseCase _logoutUseCase;
   final GetCachedUserUseCase _getCachedUserUseCase;
   final RestoreSessionUseCase _restoreSessionUseCase;
   final ForgotPasswordUseCase _forgotPasswordUseCase;
   final ResetPasswordUseCase _resetPasswordUseCase;
   final RefrescarEmpresaUseCase _refrescarEmpresaUseCase;
+  final AuthRepository _authRepository;
 
   AuthBloc({
     required LoginUseCase loginUseCase,
-    required RegisterUseCase registerUseCase,
     required LogoutUseCase logoutUseCase,
     required GetCachedUserUseCase getCachedUserUseCase,
     required RestoreSessionUseCase restoreSessionUseCase,
     required ForgotPasswordUseCase forgotPasswordUseCase,
     required ResetPasswordUseCase resetPasswordUseCase,
     required RefrescarEmpresaUseCase refrescarEmpresaUseCase,
+    required AuthRepository authRepository,
   })  : _loginUseCase = loginUseCase,
-        _registerUseCase = registerUseCase,
         _logoutUseCase = logoutUseCase,
         _getCachedUserUseCase = getCachedUserUseCase,
         _restoreSessionUseCase = restoreSessionUseCase,
         _forgotPasswordUseCase = forgotPasswordUseCase,
         _resetPasswordUseCase = resetPasswordUseCase,
         _refrescarEmpresaUseCase = refrescarEmpresaUseCase,
+        _authRepository = authRepository,
         super(AuthInitial()) {
     on<LoginEvent>(_onLogin);
-    on<RegisterEvent>(_onRegister);
     on<LogoutEvent>(_onLogout);
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<ForgotPasswordEvent>(_onForgotPassword);
     on<ResetPasswordEvent>(_onResetPassword);
     on<RefreshCompanyEvent>(_onRefreshCompany);
+    on<SetupAdminEvent>(_onSetupAdmin);
   }
 
   Future<void> _onLogin(LoginEvent event, Emitter<AuthState> emit) async {
@@ -86,23 +88,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         emit(AuthError(info.mensaje));
       }
-    }
-  }
-
-  Future<void> _onRegister(RegisterEvent event, Emitter<AuthState> emit) async {
-    emit(AuthLoading());
-    try {
-      final user = await _registerUseCase.execute(
-        empresaNombre: event.empresaNombre,
-        empresaRif: event.empresaRif,
-        usuarioNombre: event.usuarioNombre,
-        email: event.email,
-        password: event.password,
-        licenciaKey: event.licenciaKey,
-      );
-      emit(AuthAuthenticated(user));
-    } catch (e) {
-      emit(AuthError(mensajeDeError(e)));
     }
   }
 
@@ -153,6 +138,34 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  Future<void> _onSetupAdmin(
+      SetupAdminEvent event, Emitter<AuthState> emit) async {
+    emit(AuthSetupLoading());
+    try {
+      final ok = await _authRepository.setupCrearAdmin(event.data);
+      if (!ok) {
+        emit(const AuthSetupFailure('No se pudo crear la cuenta de administrador.'));
+        return;
+      }
+      // Leer el usuario cacheado (guardado por el repositorio tras crear-admin)
+      final user = await _getCachedUserUseCase.execute();
+      if (user == null) {
+        emit(const AuthSetupFailure('La cuenta se creó pero no se pudo leer el usuario.'));
+        return;
+      }
+      emit(AuthSetupSuccess(user));
+      // Transición directa al dashboard: emite AuthAuthenticated como el login normal.
+      emit(AuthAuthenticated(user));
+    } catch (e) {
+      // Capturar cualquier excepción (DioException de conexión, error 409 de
+      // duplicidad, etc.) y mostrar el mensaje exacto del servidor en la UI.
+      final errorMsg = e is DioException
+          ? _extraerMensajeDio(e)
+          : e.toString();
+      emit(AuthSetupFailure(errorMsg));
+    }
+  }
+
   /// Refresca la empresa del usuario en sesión sin pasar por `AuthLoading`.
   ///
   /// Si no hay sesión (`AuthInitial`) no hace nada: el refresco depende de un
@@ -168,5 +181,28 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // Best-effort: la sesión sigue válida con los datos que ya tenía. Borrar
       // al operador por no poder releer un logo sería peor que no refrescarlo.
     }
+  }
+
+  /// Extrae el mensaje legible de una DioException, mostrando el detalle del
+  /// servidor cuando está disponible (p.ej. "Error de conexión rechazada").
+  String _extraerMensajeDio(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['detail'] is String) {
+      final detalle = (data['detail'] as String).trim();
+      if (detalle.isNotEmpty) return detalle;
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionError:
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+        return 'Error de conexión con el servidor. Verifica que el WServer esté ejecutándose.';
+      case DioExceptionType.unknown:
+        if (e.response == null) return 'No se pudo conectar con el servidor.';
+        break;
+      default:
+        break;
+    }
+    return mensajeDeError(e);
   }
 }

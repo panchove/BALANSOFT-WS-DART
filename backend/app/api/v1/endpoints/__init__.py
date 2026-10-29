@@ -34,6 +34,7 @@ from app.api.v1.endpoints import (
     semaforos,
     series,
     servidor,
+    setup,
     sync,
     usuarios,
 )
@@ -69,6 +70,7 @@ API_ROUTERS = [
     conceptos_inventario.router,
     conceptos_kardex.router,
     barreras.router,
+    setup.router,
 ]
 
 SERVER_ROUTERS = [

@@ -6,17 +6,20 @@ import '../../../core/constants/api_constants.dart';
 
 class ApiClient {
   final Dio _dio;
-  String _baseUrl;
   String? _serverToken;
   Future<String?> Function()? _refreshTokenHandler;
   String Function()? _languageProvider;
   bool _refrescando = false;
 
+  /// URL base de la API. Siempre lee el valor actual de [AppConfig.apiBaseUrl]
+  /// para no hardcodear localhost si el instalador escribió otro puerto/host
+  /// en config.json.
+  String get _baseUrl => AppConfig.apiBaseUrl ?? 'http://localhost:8000';
+
   String get baseUrl => _baseUrl;
 
   ApiClient({String? baseUrl, Dio? dio})
-      : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl ?? 'http://localhost:8000',
-        _dio = dio ??
+      : _dio = dio ??
             Dio(BaseOptions(
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 30),
@@ -25,6 +28,9 @@ class ApiClient {
                 'Accept': 'application/json',
               },
             )) {
+    if (baseUrl != null && baseUrl.isNotEmpty) {
+      AppConfig.apiBaseUrl = baseUrl.replaceAll(RegExp(r'/$'), '');
+    }
     _setupInterceptor();
   }
 
@@ -32,7 +38,7 @@ class ApiClient {
   /// Las repositorios comparten esta misma instancia, así el cambio aplica a
   /// todas las llamadas sin reiniciar la app.
   void setBaseUrl(String url) {
-    _baseUrl = url.replaceAll(RegExp(r'/$'), '');
+    AppConfig.apiBaseUrl = url.replaceAll(RegExp(r'/$'), '');
   }
 
   void onUnauthorized(Future<String?> Function() handler) {
@@ -217,6 +223,24 @@ class ApiClient {
 
   Future<Response> register(Map<String, dynamic> body) async {
     final response = await _dio.post('$_baseUrl/api/v1/auth/register', data: body);
+    return response;
+  }
+
+  /// Valida una licencia contra el LM antes del setup inicial.
+  Future<Response> setupValidarLicencia(Map<String, dynamic> body) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.setupValidarLicencia}',
+      data: body,
+    );
+    return response;
+  }
+
+  /// Crea la empresa y el primer usuario ADMIN en la estación (setup inicial).
+  Future<Response> setupCrearAdmin(Map<String, dynamic> body) async {
+    final response = await _dio.post(
+      '$_baseUrl${ApiConstants.setupCrearAdmin}',
+      data: body,
+    );
     return response;
   }
 

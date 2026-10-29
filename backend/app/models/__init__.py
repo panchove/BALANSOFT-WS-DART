@@ -137,6 +137,11 @@ class Empresa(Base):
     licencia_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     licencia_expira: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Identidad del cliente en el License Manager (LM), asignada durante el setup inicial.
+    lm_client_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    lm_client_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), default=lambda: _now_utc()

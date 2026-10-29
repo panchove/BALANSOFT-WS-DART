@@ -250,6 +250,9 @@ IF OBJECT_ID(N'dbo.empresas', N'U') IS NULL BEGIN
         [licencia_tier] NVARCHAR(20),
         [licencia_status] NVARCHAR(20),
         [licencia_expira] DATETIME2(6),
+        -- Identidad del cliente en el License Manager (LM), asignada durante el setup inicial.
+        [lm_client_id] UNIQUEIDENTIFIER NULL,
+        [lm_client_email] NVARCHAR(255) NULL,
         [activa] BIT DEFAULT 1 NOT NULL,
         [created_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,
         [updated_at] DATETIME2(6) DEFAULT SYSUTCDATETIME() NOT NULL,

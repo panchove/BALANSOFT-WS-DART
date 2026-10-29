@@ -14,10 +14,11 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(SPECPATH).resolve()
 
-# --- Datos embebidos (esquemas + migraciones + plantilla de config) --------
+# --- Datos embebidos (esquemas + migraciones + configuración de entorno) --------
 datas = [
     (str(ROOT / "balansoft-ws-local.sql"), "."),
     (str(ROOT / "balansoft-ws-server.sql"), "."),
+    (str(ROOT / ".env"), "."),
     (str(ROOT / ".env.plantilla"), "."),
 ]
 # Icono de la app: lo usa el aviso nativo del SO (app/services/notifier.py).

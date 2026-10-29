@@ -252,7 +252,7 @@ AuthBloc _authBloc(String rol) {
   ));
   return AuthBloc(
     loginUseCase: LoginUseCase(repo),
-    registerUseCase: RegisterUseCase(repo),
+
     logoutUseCase: LogoutUseCase(repo),
     getCachedUserUseCase: GetCachedUserUseCase(repo),
     restoreSessionUseCase: RestoreSessionUseCase(repo),

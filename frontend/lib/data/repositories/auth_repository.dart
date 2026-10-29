@@ -308,34 +308,27 @@ class AuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async {
-    final response = await _apiClient.register({
-      'empresa_nombre': empresaNombre,
-      'empresa_rif': empresaRif,
-      'usuario_nombre': usuarioNombre,
-      'email': email,
-      'password': password,
-      'licencia_key': licenciaKey,
-    });
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async {
+    final response = await _apiClient.setupCrearAdmin(data);
+    final respData = response.data as Map<String, dynamic>;
 
-    final data = response.data;
-    await _secureStorage.saveTokens(data['access_token'], data['refresh_token']);
-    _apiClient.setToken(data['access_token']);
+    final accessToken = respData['access_token'] as String?;
+    final refreshToken = respData['refresh_token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
 
-    final empresa = data['empresa'] is Map<String, dynamic>
-        ? data['empresa'] as Map<String, dynamic>
-        : null;
-    final user = UserModel.fromJson(data['user'], empresa: empresa);
-    await _localStorage.saveUser(user);
+    await _secureStorage.saveTokens(accessToken, refreshToken ?? '');
+    _apiClient.setToken(accessToken);
 
-    return user;
+    final userMap = respData['user'] as Map<String, dynamic>?;
+    final empresaMap = respData['empresa'] as Map<String, dynamic>?;
+    if (userMap != null) {
+      final user = UserModel.fromJson(userMap, empresa: empresaMap);
+      await _localStorage.saveUser(user);
+    }
+
+    return true;
   }
 
   @override

@@ -50,19 +50,25 @@ enum StationRole {
 class StationConfig {
   final String apiBaseUrl;
   final StationRole rol;
+  /// Clave de licencia opcional escrita por el instalador en `config.json`.
+  /// Se usa en el setup inicial para precargar el formulario de licencia.
+  final String? licenciaKey;
 
   const StationConfig({
     required this.apiBaseUrl,
     required this.rol,
+    this.licenciaKey,
   });
 
   StationConfig copyWith({
     String? apiBaseUrl,
     StationRole? rol,
+    String? licenciaKey,
   }) {
     return StationConfig(
       apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
       rol: rol ?? this.rol,
+      licenciaKey: licenciaKey ?? this.licenciaKey,
     );
   }
 
@@ -71,16 +77,23 @@ class StationConfig {
     if (identical(this, other)) return true;
     return other is StationConfig &&
         other.apiBaseUrl == apiBaseUrl &&
-        other.rol == rol;
+        other.rol == rol &&
+        other.licenciaKey == licenciaKey;
   }
 
   @override
-  int get hashCode => Object.hash(apiBaseUrl, rol);
+  int get hashCode => Object.hash(apiBaseUrl, rol, licenciaKey);
 
-  Map<String, dynamic> toJson() => {
-        'api_base_url': apiBaseUrl,
-        'rol': rol.etiqueta,
-      };
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'api_base_url': apiBaseUrl,
+      'rol': rol.etiqueta,
+    };
+    if (licenciaKey != null) {
+      json['licencia_key'] = licenciaKey;
+    }
+    return json;
+  }
 }
 
 enum StationConfigErrorType {
@@ -212,19 +225,29 @@ Future<Map<String, dynamic>?> _leerJson(File f) async {
 }
 
 /// Decide si el JSON cumple el contrato y construye la [StationConfig].
+///
+/// Contrato: `api_base_url` y `rol` son obligatorias; `licencia_key` es
+/// opcional (escrita por el instalador para el setup inicial). Cualquier otra
+/// clave desconocida rompe el contrato.
 /// Lanza [StationConfigError] con el tipo exacto.
 StationConfig _configDesdeJson(Map<String, dynamic> obj, String ruta) {
-  // Contrato ESTRICTO: exactamente las dos claves conocidas. Claves extra
-  // rompen el contrato (el instalador solo escribe estas dos).
   final claves = obj.keys.toSet();
-  const esperadas = {'api_base_url', 'rol'};
-  if (!claves.containsAll(esperadas) || claves.length != esperadas.length) {
+  const obligatorias = {'api_base_url', 'rol'};
+  const opcionales = {'licencia_key'};
+  const permitidas = {'api_base_url', 'rol', 'licencia_key'};
+
+  // Debe contener al menos las obligatorias y no puede tener claves fuera del
+  // conjunto permitido.
+  if (!claves.containsAll(obligatorias) ||
+      claves.difference(permitidas).isNotEmpty) {
     throw StationConfigError(
       ruta: ruta,
       motivo: StationConfigErrorType.camposInvalidos,
-      detalle: 'se esperaban exactamente $esperadas, se encontró $claves',
+      detalle: 'se esperaban $obligatorias (y opcionalmente $opcionales), '
+          'se encontró $claves',
     );
   }
+
   final api = obj['api_base_url'];
   final rolVal = obj['rol'];
   if (api is! String || rolVal is! String) {
@@ -241,9 +264,23 @@ StationConfig _configDesdeJson(Map<String, dynamic> obj, String ruta) {
       detalle: 'api_base_url no cumple el contrato: $api',
     );
   }
+
+  final licenciaKey = obj['licencia_key'];
+  if (licenciaKey != null && licenciaKey is! String) {
+    throw StationConfigError(
+      ruta: ruta,
+      motivo: StationConfigErrorType.esquemaInvalido,
+      detalle: 'licencia_key debe ser una cadena de texto',
+    );
+  }
+
   try {
     final rol = StationRole.parse(rolVal);
-    return StationConfig(apiBaseUrl: api, rol: rol);
+    return StationConfig(
+      apiBaseUrl: api,
+      rol: rol,
+      licenciaKey: licenciaKey as String?,
+    );
   } on FormatException catch (e) {
     throw StationConfigError(
       ruta: ruta,

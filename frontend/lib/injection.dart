@@ -82,8 +82,6 @@ Future<void> init() async {
   // Use cases
   sl.registerLazySingleton<LoginUseCase>(
       () => LoginUseCase(sl<AuthRepository>()));
-  sl.registerLazySingleton<RegisterUseCase>(
-      () => RegisterUseCase(sl<AuthRepository>()));
   sl.registerLazySingleton<LogoutUseCase>(
       () => LogoutUseCase(sl<AuthRepository>()));
   sl.registerLazySingleton<GetCachedUserUseCase>(
@@ -134,13 +132,13 @@ Future<void> init() async {
   // Blocs
   sl.registerFactory<AuthBloc>(() => AuthBloc(
         loginUseCase: sl(),
-        registerUseCase: sl(),
         logoutUseCase: sl(),
         getCachedUserUseCase: sl(),
         restoreSessionUseCase: sl(),
         forgotPasswordUseCase: sl(),
         resetPasswordUseCase: sl(),
         refrescarEmpresaUseCase: sl(),
+        authRepository: sl(),
       ));
   sl.registerFactory<WeighingBloc>(() => WeighingBloc(
         createUseCase: sl(),

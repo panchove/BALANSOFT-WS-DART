@@ -28,3 +28,22 @@ class AuthError extends AuthState {
 class AuthPasswordResetSent extends AuthState {}
 
 class AuthPasswordChanged extends AuthState {}
+
+/// Estado durante el setup inicial: se está creando la empresa y el ADMIN.
+class AuthSetupLoading extends AuthState {}
+
+/// Estado de éxito del setup inicial: cuenta creada y JWT listo.
+class AuthSetupSuccess extends AuthState {
+  final User user;
+  const AuthSetupSuccess(this.user);
+  @override
+  List<Object?> get props => [user];
+}
+
+/// Estado de fallo del setup inicial.
+class AuthSetupFailure extends AuthState {
+  final String message;
+  const AuthSetupFailure(this.message);
+  @override
+  List<Object?> get props => [message];
+}

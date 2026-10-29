@@ -190,7 +190,7 @@ class _FakeAuthRepository implements IAuthRepository {
 
 AuthBloc _blocCon(_FakeAuthRepository repo) => AuthBloc(
       loginUseCase: LoginUseCase(repo),
-      registerUseCase: RegisterUseCase(repo),
+
       logoutUseCase: LogoutUseCase(repo),
       getCachedUserUseCase: GetCachedUserUseCase(repo),
       restoreSessionUseCase: RestoreSessionUseCase(repo),

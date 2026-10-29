@@ -125,7 +125,7 @@ void main() {
     final repo = _FakeAuthRepository(_admin);
     final authBloc = AuthBloc(
       loginUseCase: LoginUseCase(repo),
-      registerUseCase: RegisterUseCase(repo),
+
       logoutUseCase: LogoutUseCase(repo),
       getCachedUserUseCase: GetCachedUserUseCase(repo),
       restoreSessionUseCase: RestoreSessionUseCase(repo),

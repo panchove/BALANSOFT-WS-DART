@@ -56,6 +56,7 @@ class AppTranslations {
       'search_barreras': 'Buscar barreras',
       'no_barreras_found': 'No hay barreras registradas.',
       'detect_barreras': 'Detectar',
+      'detectar_barreras': 'Detectar barreras',
       'barrera_comando': 'Comando enviado:',
       'abrir_paso': 'Abrir paso',
       'cerrar_paso': 'Cerrar paso',
@@ -752,6 +753,7 @@ class AppTranslations {
       'scales_detected_registered':
           '{0} detectada(s) · {1} registrada(s) automáticamente',
       'detectar_balanzas': 'Detectar básculas',
+      'detectar_indicadores': 'Detectar indicadores',
       // Semáforos de pesaje (dispositivo actuador, docs/SEMAFORO.md)
       'semaforos_titulo': 'Semáforos',
       'detectar_semaforos': 'Detectar semáforos',
@@ -770,6 +772,7 @@ class AppTranslations {
       'delete_camara': 'Eliminar cámara',
       'camara_deleted': 'Cámara eliminada',
       'detectar_camaras': 'Detectar cámaras',
+      'detectar_impresoras': 'Detectar impresoras',
       'scanning_camaras': 'Buscando cámaras conectadas…',
       'no_camaras_found': 'No se detectaron cámaras conectadas',
       'camaras_detected_registered':

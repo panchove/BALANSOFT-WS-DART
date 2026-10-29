@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS empresas (
     licencia_tier    VARCHAR(20),
     licencia_status  VARCHAR(20),
     licencia_expira  TIMESTAMP,
+    -- Identidad del cliente en el License Manager (LM), asignada durante el setup inicial.
+    lm_client_id     UUID,
+    lm_client_email  VARCHAR(255),
     activa           BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -77,6 +80,8 @@ ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_key VARCHAR(255);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_tier VARCHAR(20);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_status VARCHAR(20);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS licencia_expira TIMESTAMP;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS lm_client_id UUID;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS lm_client_email VARCHAR(255);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS formato_ticket VARCHAR(10);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ruta_exportacion_reportes VARCHAR(500);
 ALTER TABLE empresas ADD COLUMN IF NOT EXISTS idioma VARCHAR(5) DEFAULT 'es';

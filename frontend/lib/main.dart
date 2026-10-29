@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,6 +12,7 @@ import 'core/config/app_config.dart';
 import 'core/config/env_config.dart';
 import 'core/config/menu_config.dart';
 import 'core/config/station_config.dart';
+import 'data/datasources/remote/api_client.dart';
 import 'core/controllers/typography_controller.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/i18n/translations.dart';
@@ -24,10 +27,10 @@ import 'presentation/providers/bloc/license/license_bloc.dart';
 import 'presentation/providers/bloc/sync/sync_bloc.dart';
 import 'presentation/providers/bloc/notifications/notifications_cubit.dart';
 import 'presentation/screens/auth/login_screen.dart';
-import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/auth/forgot_password_screen.dart';
 import 'presentation/screens/auth/reset_password_screen.dart';
 import 'presentation/screens/dashboard/home_shell.dart';
+import 'presentation/screens/setup/setup_screen.dart';
 import 'presentation/screens/weighing/weighing_detail_screen.dart';
 import 'presentation/screens/weighing/weighing_list_screen.dart'
     show weighingListRouteObserver;
@@ -38,13 +41,17 @@ import 'presentation/widgets/tipografia_scope.dart';
 final themeController = ThemeController();
 late final LocaleController localeController;
 
-/// Ruta de arranque: SIEMPRE el login.
+/// Ruta de arranque: si ya existe empresa en la estación, va al login;
+/// si no, va a la pantalla de setup inicial (configuración de cuenta).
 ///
-/// El instalador (BALANSOFT-INSTALLER) decide el rol de la estación y escribe
-/// `config.json`; la app ya no tiene asistente de instalación. Si la config
-/// falta o es inválida, `main()` ni siquiera monta `BalansoftApp` (error duro
-/// con instrucciones), así que aquí solo hay login, registro y recuperación.
-String _rutaInicial() => '/login';
+/// Se resuelve de forma síncrona para `initialRoute`. Si la red está caída
+/// o el WServer aún no responde, se asume que hay empresa (se intentará
+/// login local); si el setup ya se completó, va al login.
+String _rutaInicial() {
+  if (AppConfig.onboardingCompletado) return '/login';
+  // Si no se ha completado el onboarding, ir directo al setup inicial.
+  return '/setup';
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -213,6 +220,46 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
       windowManager.addListener(this);
     }
+    // Primera vez: si no hay empresa configurada, ir al setup inicial.
+    unawaited(_verificarPrimeraVez());
+  }
+
+  /// Comprueba si la estación ya tiene empresa configurada (GET /api/v1/empresa).
+  /// Si no hay empresa (404 o error de red), redirige a la pantalla de setup.
+  /// Si ya hay empresa, se queda en el login (ruta inicial).
+  /// Comprueba si la estación ya tiene empresa configurada.
+  /// Si el backend responde 401 (no autenticado) o 404 (no hay DB), 
+  /// redirige a la pantalla de setup.
+  Future<void> _verificarPrimeraVez() async {
+    if (!mounted) return;
+    // Si el onboarding ya se marcó como completado, no hacer nada.
+    if (AppConfig.onboardingCompletado) return;
+
+    try {
+      final api = di.sl<ApiClient>();
+      await api.getEmpresaPerfil();
+      // Si llegó aquí sin excepción, ya hay empresa y token válido: ir al login.
+      if (mounted) {
+        Navigator.of(navigatorKey.currentContext!).pushReplacementNamed('/login');
+      }
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      // 404: No hay empresa en la DB.
+      // 401: No hay token (la DB está vacía o es instalación nueva).
+      // 500: Error de base de datos (tablas no creadas).
+      if (status == 404 || status == 401 || status == 500) {
+        if (mounted) {
+          Navigator.of(navigatorKey.currentContext!).pushReplacementNamed('/setup');
+        }
+      } else {
+        // Error de red: quedarse en el login.
+      }
+    } catch (_) {
+      // Sin red o error inesperado: intentar ir al setup (mejor que quedarse en login vacío).
+      if (mounted) {
+        Navigator.of(navigatorKey.currentContext!).pushReplacementNamed('/setup');
+      }
+    }
   }
 
   @override
@@ -346,7 +393,7 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
           initialRoute: _rutaInicial(),
           routes: {
             '/login': (_) => const LoginScreen(),
-            '/register': (_) => const RegisterScreen(),
+            '/setup': (_) => const SetupScreen(),
             '/forgot-password': (_) => const ForgotPasswordScreen(),
             '/reset-password': (_) => const ResetPasswordScreen(),
             '/connections': (_) => const ConnectionsScreen(),

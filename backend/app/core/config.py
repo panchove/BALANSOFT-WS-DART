@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any
 
 from pydantic import Field, model_validator
@@ -17,10 +20,24 @@ _SECRET_KEY_INSEGURA = {
     "CAMBIAR_ESTA_CLAVE_CON_openssl_rand_hex_32",
 }
 
+# --- Resolver la ruta del archivo .env junto al ejecutable -------------------
+# Cuando se empaqueta con PyInstaller (one-file), sys.executable apunta al
+# binario y sys._MEIPASS al directorio temporal de extracción. Buscamos .env
+# junto al ejecutable primero, y si no está, caemos al directorio de trabajo.
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # PyInstaller one-file: los datos se extraen en _MEIPASS
+    _env_dir = Path(sys._MEIPASS)
+else:
+    _env_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path.cwd()
+
+_ENV_FILE = str(_env_dir / ".env")
+
+log.debug("Archivo de entorno resuelto: %s", _ENV_FILE)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -253,7 +270,12 @@ class Settings(BaseSettings):
                 return json.loads(self.cors_origins)
             except json.JSONDecodeError:
                 return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-        return list(self.cors_origins)
+        origins = list(self.cors_origins)
+        # En desarrollo, permitir cualquier origen (útil para app Flutter compilada
+        # que no usa navegador y para evitar problemas de CORS en desktop).
+        if self.app_env.strip().lower() == "development" and "*" not in origins:
+            origins.append("*")
+        return origins
 
     @property
     def db_engine(self) -> str:

@@ -774,6 +774,15 @@ def main() -> int:
 
     host = settings.api_host
     port = settings.api_port
+
+    # --- Validación de arranque: mostrar configuración resuelta ---------------
+    db_url = settings.database_url_sync or settings.database_url or "(no configurada)"
+    print(f"[WServer] Puerto asignado: {port}")
+    print(f"[WServer] Ruta DB: {db_url}")
+    print(f"[WServer] Host API: {host}")
+    print(f"[WServer] Entorno: {settings.app_env}")
+    # ------------------------------------------------------------------------
+
     if _es_bind_red(host):
         _configurar_firewall(port)
     print(f"[WServer] Levantando API local en http://{host}:{port} "

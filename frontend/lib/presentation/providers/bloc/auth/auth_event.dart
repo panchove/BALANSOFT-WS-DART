@@ -30,28 +30,6 @@ class LoginEvent extends AuthEvent {
       [email, password, hardwareId, deviceBrand, deviceModel, osVersion, macAddress];
 }
 
-class RegisterEvent extends AuthEvent {
-  final String empresaNombre;
-  final String empresaRif;
-  final String usuarioNombre;
-  final String email;
-  final String password;
-  final String? licenciaKey;
-
-  const RegisterEvent({
-    required this.empresaNombre,
-    required this.empresaRif,
-    required this.usuarioNombre,
-    required this.email,
-    required this.password,
-    this.licenciaKey,
-  });
-
-  @override
-  List<Object?> get props =>
-      [empresaNombre, empresaRif, usuarioNombre, email, password, licenciaKey];
-}
-
 class LogoutEvent extends AuthEvent {
   const LogoutEvent();
 }
@@ -68,6 +46,16 @@ class CheckAuthStatusEvent extends AuthEvent {
 /// anterior —que ya no existe en `media/`— hasta el siguiente login.
 class RefreshCompanyEvent extends AuthEvent {
   const RefreshCompanyEvent();
+}
+
+/// Evento para crear la empresa y el primer usuario ADMIN en el setup inicial.
+class SetupAdminEvent extends AuthEvent {
+  final Map<String, dynamic> data;
+
+  const SetupAdminEvent({required this.data});
+
+  @override
+  List<Object?> get props => [data];
 }
 
 class ForgotPasswordEvent extends AuthEvent {

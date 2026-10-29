@@ -1439,3 +1439,14 @@ class LlaveActivacionValidarResponse(BaseModel):
     usuario_email: str
     empresa_nombre: str
     mensaje: str
+
+
+from app.schemas.setup import (  # noqa: E402
+    SetupCreateAdminRequest,
+    SetupCreateAdminResponse,
+    SetupEmpresaOut,
+    SetupLicenseOut,
+    SetupUserOut,
+    SetupValidateRequest,
+    SetupValidateResponse,
+)

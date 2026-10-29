@@ -25,15 +25,6 @@ abstract class IAuthRepository {
     String? macAddress,
   });
 
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  });
-
   Future<void> logout();
   Future<String> refreshToken(String refreshToken);
   Future<String?> refreshAccessToken();
@@ -41,6 +32,12 @@ abstract class IAuthRepository {
   Future<void> resetPassword(String token, String newPassword);
   Future<User?> getCachedUser();
   Future<SesionRestaurada> restoreSession();
+
+  /// Crea la empresa y el primer usuario ADMIN en la estación (setup inicial).
+  ///
+  /// Llama a `POST /api/v1/setup/crear-admin`, guarda los tokens y devuelve
+  /// `true` si la cuenta se creó exitosamente.
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data);
 
   /// Relee el perfil de la empresa (`GET /api/v1/empresa`) y lo aplica al
   /// [User] cacheado (nombre, RIF, dirección y logo).
