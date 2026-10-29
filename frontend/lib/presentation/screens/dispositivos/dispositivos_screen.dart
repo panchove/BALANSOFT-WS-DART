@@ -21,7 +21,6 @@ import 'semaforos_tab.dart';
 import 'camaras_tab.dart';
 import 'barreras_tab.dart';
 
-/// Estado de conexión de una báscula, derivado de `/balanzas/{id}/probar`.
 enum EstadoBalanza { sinVerificar, disponible, inestable, noDisponible }
 
 class DispositivosScreen extends StatefulWidget {
@@ -149,7 +148,6 @@ class _DispositivosScreenState extends State<DispositivosScreen>
     try {
       final index = _tabController.index;
 
-      // --- 1. BÁSCULAS ---
       if (index == 0) {
         List<Map<String, dynamic>> encontradas = await _api.descubrirBalanzas(incluirSimuladas: true);
         
@@ -194,16 +192,13 @@ class _DispositivosScreenState extends State<DispositivosScreen>
         return;
       }
 
-      // --- 2. CÁMARAS ---
       if (index == 3) {
-        // 1. Obtenemos la lista de cámaras que YA están en la base de datos
         final respActuales = await _api.getList('/api/v1/camaras');
         final camarasActuales = (respActuales.data as List? ?? [])
             .whereType<Map<String, dynamic>>()
             .map((c) => c['dispositivo']?.toString() ?? '')
-            .toSet(); // Usamos la ruta del dispositivo como clave única (ej. /dev/video0)
+            .toSet();
 
-        // 2. Obtenemos las cámaras descubiertas
         final resp = await _api.getList('/api/v1/camaras/descubrir');
         final camaras = (resp.data as List? ?? []).whereType<Map<String, dynamic>>().toList();
 
@@ -217,7 +212,6 @@ class _DispositivosScreenState extends State<DispositivosScreen>
         for (final cam in camaras) {
           final dispositivo = cam['dispositivo']?.toString() ?? '';
           
-          // 3. Si la cámara ya existe, la ignoramos
           if (camarasActuales.contains(dispositivo)) {
             continue;
           }
@@ -252,7 +246,6 @@ class _DispositivosScreenState extends State<DispositivosScreen>
         return;
       }
 
-      // --- 3. OTRAS PESTAÑAS ---
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Detección no implementada para esta sección.')),
@@ -655,7 +648,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       widget.onGuardado();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vínculo activado correctamente'), backgroundColor: SwsColors.success),
+        const SnackBar(content: Text('Vínculo activado correctamente. Reinicie el backend para aplicar los cambios.'), backgroundColor: SwsColors.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -764,22 +757,63 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       _error = null;
     });
     try {
+      // 1. Guardar la configuración de la báscula
       await _api.updateItem(ApiConstants.balanza(b.id), body);
 
+      // 2. Si hay un indicador seleccionado, enlazarlo y activarlo
       final nuevoInd = (_indicadorSel != null && _indicadorSel!.isNotEmpty) ? _indicadorSel : null;
       if (nuevoInd != null) {
+        // Enlazar (esto crea el vínculo)
         await _api.enlazarIndicador(nuevoInd, b.id);
+        
+        // 3. Recargar los vínculos para obtener el ID del vínculo recién creado
+        await _cargarVinculos();
+        
+        // 4. Si hay un vínculo para este indicador, activarlo automáticamente
+        try {
+          final vinculoCreado = _vinculosBalanza.firstWhere(
+            (v) => '${v['id_indicador']}' == nuevoInd,
+          );
+          final idVinculo = '${vinculoCreado['id_vinculo']}';
+          if (vinculoCreado['activo'] != true) {
+            await _api.activarVinculo(idVinculo);
+            await _cargarVinculos(); // Recargar para verlo como activo
+          }
+        } catch (e) {
+          // Si no encuentra el vínculo o falla la activación, lo ignoramos.
+          debugPrint('No se pudo activar automáticamente el vínculo: $e');
+        }
       } else if (b.idIndicador != null && b.idIndicador!.isNotEmpty) {
+        // Si se deseleccionó el indicador, desenlazar
         await _api.enlazarIndicador(b.idIndicador!, b.id, enlazar: false);
       }
 
       if (!mounted) return;
+      
       widget.onGuardado();
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('connection_config_saved'.tr()), backgroundColor: SwsColors.success));
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Configuración guardada y vínculo activado. Reinicie el backend para aplicar los cambios.'),
+          duration: const Duration(seconds: 4),
+          backgroundColor: SwsColors.success,
+        ),
+      );
+      
+      // Opcional: Cerrar el modal después de guardar
+      // Navigator.of(context).pop();
+      
     } catch (e) {
       if (!mounted) return;
-      setState(() { _guardando = false; _error = _detalleError(e); });
+      setState(() { 
+        _guardando = false; 
+        _error = _detalleError(e); 
+      });
+    } finally {
+      if (mounted && _guardando) {
+        setState(() => _guardando = false);
+      }
     }
   }
 
