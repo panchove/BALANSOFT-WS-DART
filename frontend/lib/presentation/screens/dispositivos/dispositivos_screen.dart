@@ -624,13 +624,26 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
     setState(() => _cargandoVinculos = true);
     try {
       final list = await _api.listarVinculos();
-      final filtrados = list
-          .whereType<Map<String, dynamic>>()
-          .where((v) => '${v['id_bascula']}' == widget.balanza.id)
-          .toList();
+      
+      // Imprimimos para depurar qué está llegando
+      debugPrint('VINCULOS BACKEND: $list');
+      debugPrint('ID BÁSCULA ACTUAL: ${widget.balanza.id}');
+      
+      // Buscamos el vínculo comparando contra el ID de la báscula
+      // con múltiples formatos posibles para evitar fallos.
+      final filtrados = list.whereType<Map<String, dynamic>>().where((v) {
+        final idBascula = v['id_bascula']?.toString() ?? 
+                          v['bascula']?['id_balanza']?.toString() ?? 
+                          v['bascula_id']?.toString() ?? '';
+        return idBascula == widget.balanza.id;
+      }).toList();
+      
+      debugPrint('VINCULOS FILTRADOS: $filtrados');
+      
       if (!mounted) return;
       setState(() => _vinculosBalanza = filtrados);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ERROR AL CARGAR VÍNCULOS: $e');
       if (!mounted) return;
       setState(() => _vinculosBalanza = []);
     } finally {

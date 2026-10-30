@@ -30,7 +30,7 @@ from app.api.dependencies import (
 )
 from app.core.database import get_db
 from app.core.indicador_hal import get_indicador_hal  # <-- IMPORTANTE AÑADIR ESTO
-from app.models import Balanza, Empresa, Indicador, Usuario
+from app.models import Balanza, Empresa, Indicador, Usuario, VinculoBalanzaIndicador
 from app.schemas import IndicadorCreate, IndicadorOut
 from app.services.catalog_service import CatalogService
 
@@ -247,7 +247,7 @@ async def _fijar_enlace(
     *,
     enlazar: bool,
 ) -> IndicadorOut:
-    """Escribe (o limpia) ``balanzas.id_indicador`` y devuelve el indicador."""
+    """Escribe (o limpia) ``balanzas.id_indicador`` y gestiona el vínculo en ``vinculos_balanza_indicador``."""
     indicador = await _obtener_indicador(db, empresa, id_indicador)
 
     result = await db.execute(
@@ -262,9 +262,50 @@ async def _fijar_enlace(
 
     if enlazar:
         balanza.id_indicador = id_indicador
-    elif balanza.id_indicador == id_indicador:
+    else:
         balanza.id_indicador = None
+
+    # --- NUEVO: Crear o actualizar vínculo en vinculos_balanza_indicador ---
+    # Buscar si ya existe un vínculo activo para esta báscula e indicador
+    res_vinc = await db.execute(
+        select(VinculoBalanzaIndicador).where(
+            VinculoBalanzaIndicador.id_empresa == empresa.id_empresa,
+            VinculoBalanzaIndicador.id_bascula == id_balanza,
+            VinculoBalanzaIndicador.id_indicador == id_indicador,
+            VinculoBalanzaIndicador.activo.is_(True),
+        )
+    )
+    vinculo = res_vinc.scalar_one_or_none()
+
+    if enlazar:
+        if vinculo is None:
+            # Crear nuevo vínculo
+            vinculo = VinculoBalanzaIndicador(
+                id_empresa=empresa.id_empresa,
+                id_bascula=id_balanza,
+                id_indicador=id_indicador,
+                activo=True,
+            )
+            db.add(vinculo)
+        else:
+            # Ya existe, asegurar que esté activo
+            vinculo.activo = True
+    else:
+        # Desenlazar: poner activo = False (o borrar, según política)
+        if vinculo is not None:
+            vinculo.activo = False
+
     await db.commit()
+
+    # Log de depuración
+    import logging
+    logging.getLogger("balansoft_ws.vinculos").info(
+        "Vínculo %s: enlazar=%s, id_vinculo=%s, activo=%s",
+        "crear" if enlazar else "borrar",
+        enlazar,
+        getattr(vinculo, 'id_vinculo', None),
+        getattr(vinculo, 'activo', None),
+    )
 
     enlazadas = await _contar_enlazadas(db, empresa.id_empresa, id_indicador)
     return IndicadorOut(
