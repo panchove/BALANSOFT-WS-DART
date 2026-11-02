@@ -103,6 +103,8 @@ Future<void> _pump(WidgetTester tester, _FakeApiClient fake) async {
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
+  await tester.tap(find.byType(FloatingActionButton));
+  await tester.pumpAndSettle();
 }
 
 void main() {

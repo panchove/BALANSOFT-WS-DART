@@ -206,9 +206,6 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
         case CatalogFieldType.booleano:
           body[campo.key] = _boolVals[campo.key] ?? false;
           continue;
-        case CatalogFieldType.booleano:
-          body[campo.key] = _boolVals[campo.key] ?? false;
-          continue;
       }
     }
     return body;

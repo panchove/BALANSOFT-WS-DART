@@ -9,7 +9,8 @@ import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
 
 class IndicadoresConfigTab extends StatefulWidget {
-  const IndicadoresConfigTab({super.key});
+  final bool esAdmin;
+  const IndicadoresConfigTab({super.key, this.esAdmin = true});
 
   @override
   State<IndicadoresConfigTab> createState() => _IndicadoresConfigTabState();

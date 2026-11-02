@@ -111,7 +111,9 @@ class AyudaScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
-            color: SwsColors.blue100,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? SwsColors.darkCard
+                : SwsColors.blue100,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(

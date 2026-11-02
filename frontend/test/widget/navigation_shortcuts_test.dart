@@ -40,17 +40,6 @@ class _FakeAuthRepository implements IAuthRepository {
       usuario;
 
   @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async =>
-      usuario;
-
-  @override
   Future<void> logout() async {}
 
   @override
@@ -79,6 +68,9 @@ class _FakeAuthRepository implements IAuthRepository {
 
   @override
   Future<void> clearCache() async {}
+
+  @override
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async => true;
 }
 
 class _FakeApiClient extends ApiClient {
@@ -143,6 +135,7 @@ void main() {
   }) {
     final repo = _FakeAuthRepository(_usuario(rol));
     final authBloc = AuthBloc(
+      authRepository: repo,
       loginUseCase: LoginUseCase(repo),
 
       logoutUseCase: LogoutUseCase(repo),
@@ -215,7 +208,7 @@ void main() {
       expect(indices.toSet().length, indices.length,
           reason: 'no puede haber índices repetidos');
       for (final i in indices) {
-        expect(i, inInclusiveRange(0, 30));
+        expect(i, inInclusiveRange(0, 32));
       }
     });
 
@@ -246,29 +239,29 @@ void main() {
       // Dispositivos separado en vistas independientes: ahora cada una navega
       // por su clave e índice propio (ya no son hojas-acción del shell).
       expect(buscar('Semáforos')?.clave, 'dispositivos_semaforos');
-      expect(buscar('Semáforos')?.index, 28);
+      expect(buscar('Semáforos')?.index, 25);
       expect(buscar('Impresoras')?.clave, 'dispositivos_impresoras');
-      expect(buscar('Impresoras')?.index, 30);
+      expect(buscar('Impresoras')?.index, 28);
       expect(buscar('Básculas')?.clave, 'dispositivos_basculas');
-      expect(buscar('Básculas')?.index, 13);
+      expect(buscar('Básculas')?.index, 23);
       expect(buscar('Cámaras')?.clave, 'dispositivos_camaras');
-      expect(buscar('Cámaras')?.index, 29);
+      expect(buscar('Cámaras')?.index, 26);
       expect(buscar('Indicadores')?.clave, 'dispositivos_indicadores');
-      expect(buscar('Indicadores')?.index, 27);
+      expect(buscar('Indicadores')?.index, 24);
       // El catálogo de conceptos de inventario (migración 029) es una
       // hoja-página bajo CATÁLOGOS: navega por clave, no por acción.
-      expect(buscar('Conceptos de Inventario')?.clave, 'conceptos_inventario');
-      expect(buscar('Conceptos de Inventario')?.index, 22);
+      expect(buscar('Conceptos Kardex')?.clave, 'conceptos_inventario');
+      expect(buscar('Conceptos Kardex')?.index, 29);
       // Catálogo de roles (informativo, enlaza a la matriz de accesos).
       expect(buscar('Roles')?.clave, 'roles');
-      expect(buscar('Roles')?.index, 23);
+      expect(buscar('Roles')?.index, 20);
       // REPORTES → presets de rango sobre la misma pantalla.
       expect(buscar('Diarios')?.clave, 'reportes_diarios');
-      expect(buscar('Diarios')?.index, 24);
+      expect(buscar('Diarios')?.index, 30);
       expect(buscar('Mensuales')?.clave, 'reportes_mensuales');
-      expect(buscar('Mensuales')?.index, 25);
+      expect(buscar('Mensuales')?.index, 31);
       expect(buscar('Personalizado')?.clave, 'reportes_personalizado');
-      expect(buscar('Personalizado')?.index, 26);
+      expect(buscar('Personalizado')?.index, 32);
       // AYUDA → opciones que ejecuta el shell (no ocupan índice).
       expect(buscar('Manuales')?.accion, 'go:ayuda_manuales');
       expect(buscar('Página Web')?.accion, 'go:ayuda_pagina');
@@ -532,6 +525,98 @@ void main() {
       expect(find.text('Kardex'), findsOneWidget);
       expect(find.text('Alt+K'), findsOneWidget);
       expect(find.text('Ayuda y Soporte'), findsOneWidget);
+    });
+
+    testWidgets('varios separadores hermanos no colisionan entre sí',
+        (tester) async {
+      // Regresión: todos los separadores llevaban la MISMA key
+      // (`menu_separador`) y con dos o más hermanos Flutter lanzaba
+      // «Duplicate keys found», tirando la pantalla completa.
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'seccion',
+          'label': 'CATÁLOGOS',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Clientes', 'clave': 'clientes'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Proveedores', 'clave': 'proveedores'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Almacenes', 'clave': 'almacenes'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Productos', 'clave': 'productos'},
+          ],
+        },
+        {
+          'tipo': 'seccion',
+          'label': 'AYUDA Y SOPORTE',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Ayuda', 'accion': 'go:ayuda'},
+            {'tipo': 'separador'},
+            {
+              'tipo': 'opcion',
+              'label': 'Manuales',
+              'accion': 'go:ayuda_manuales'
+            },
+          ],
+        },
+      ]));
+
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      // Los tres de la sección más el de ayuda se dibujan todos, con key
+      // distinta cada uno (la primera conserva la key estable).
+      expect(find.byKey(const Key('menu_separador')), findsOneWidget);
+      expect(find.byKey(const Key('menu_separador_2')), findsOneWidget);
+      expect(find.byKey(const Key('menu_separador_3')), findsOneWidget);
+      expect(find.byKey(const Key('menu_separador_4')), findsOneWidget);
+      expect(find.text('Clientes'), findsOneWidget);
+      expect(find.text('Proveedores'), findsOneWidget);
+      expect(find.text('Almacenes'), findsOneWidget);
+      expect(find.text('Productos'), findsOneWidget);
+      expect(find.text('Manuales'), findsOneWidget);
+    });
+
+    testWidgets('un grupo expandido con varios separadores tampoco colisiona',
+        (tester) async {
+      // El grupo arranca colapsado, así que hay que desplegarlo para que sus
+      // hijos entren en el `Column` con borde izquierda: es el widget exacto
+      // del stack trace reportado («Duplicate keys found» en app_sidebar).
+      MenuConfig.inyectarParaPruebas(MenuConfig.desdeJson([
+        {
+          'tipo': 'grupo',
+          'label': 'CATÁLOGOS',
+          'hijos': [
+            {'tipo': 'opcion', 'label': 'Clientes', 'clave': 'clientes'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Proveedores', 'clave': 'proveedores'},
+            {'tipo': 'separador'},
+            {'tipo': 'opcion', 'label': 'Almacenes', 'clave': 'almacenes'},
+          ],
+        },
+      ]));
+
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      await tester.tap(find.byKey(const Key('menu_grupo_CATÁLOGOS')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byKey(const Key('menu_separador')), findsOneWidget);
+      expect(find.byKey(const Key('menu_separador_2')), findsOneWidget);
+      expect(find.text('Clientes'), findsOneWidget);
+      expect(find.text('Proveedores'), findsOneWidget);
+      expect(find.text('Almacenes'), findsOneWidget);
+    });
+
+    testWidgets('el árbol de fábrica, con sus 14 separadores, no lanza',
+        (tester) async {
+      // El menú por defecto siembra separadores en casi todas las secciones:
+      // es exactamente el árbol que estallaba al abrir la estación.
+      await renderSidebar(tester, sidebarApp('ADMIN'));
+
+      expect(find.byKey(const Key('menu_separador')), findsWidgets);
+      expect(find.byKey(const Key('menu_separador_2')), findsWidgets);
+      expect(find.text('Inicio'), findsOneWidget);
     });
 
     testWidgets('dos opciones con la MISMA clave no rompen el sidebar',

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, EmailStr
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # POST /api/v1/setup/validar-licencia

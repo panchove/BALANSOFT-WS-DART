@@ -210,15 +210,7 @@ class _FakeAuthRepository implements IAuthRepository {
   }) async =>
       usuario;
   @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async =>
-      usuario;
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async => true;
   @override
   Future<void> logout() async {}
   @override

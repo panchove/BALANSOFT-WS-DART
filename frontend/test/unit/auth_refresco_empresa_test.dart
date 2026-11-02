@@ -149,15 +149,7 @@ class _FakeAuthRepository implements IAuthRepository {
       throw UnimplementedError();
 
   @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async =>
-      throw UnimplementedError();
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async => true;
 
   @override
   Future<void> logout() async {}

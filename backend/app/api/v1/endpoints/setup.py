@@ -16,7 +16,6 @@ import logging
 import re
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -48,7 +47,7 @@ def _mask_license_key(key: str | None) -> str | None:
     """Devuelve la clave de licencia mascarada para no exponerla completa."""
     if not key or len(key) <= 8:
         return "••••" if key else None
-    return f"{key[:4]}...{key[-4:]}"
+    return f"{key[:3]}...{key[-4:]}"
 
 
 @router.post(

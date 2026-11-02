@@ -150,23 +150,27 @@ class _SeguridadScreenState extends State<SeguridadScreen> {
   }
 
   Widget _rolSesion() {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
     final u = _usuario;
     return Card(
       margin: EdgeInsets.zero,
-      color: SwsColors.blue100,
+      color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            const Icon(Icons.verified_user_outlined,
-                color: SwsColors.primary, size: 28),
+            Icon(Icons.verified_user_outlined,
+                color: oscuro ? SwsColors.accent : SwsColors.primary, size: 28),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 u != null
-                    ? 'Sesión actual: ${u.nombre} (${u.rol})'
-                    : 'Inicia sesión para ver tu rol.',
-                style: const TextStyle(fontSize: 13, color: SwsColors.gray700),
+                    ? '${'current_session'.tr()}: ${u.nombre} (${u.rol})'
+                    : 'login_to_view_role'.tr(),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: oscuro ? SwsColors.darkText : SwsColors.gray700,
+                ),
               ),
             ),
           ],

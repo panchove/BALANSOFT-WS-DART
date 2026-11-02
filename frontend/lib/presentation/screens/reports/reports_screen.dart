@@ -97,14 +97,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return r.data as Map<String, dynamic>;
   }
 
-  void _cambiarModo(String modo) {
-    setState(() {
-      _avanzado = modo == 'avanzado';
-      _mensual = modo == 'mensual';
-      _future = _cargar();
-    });
-  }
-
   Future<DateTime?> _elegirRango(DateTime inicial) async {
     return showDatePicker(
       context: context,

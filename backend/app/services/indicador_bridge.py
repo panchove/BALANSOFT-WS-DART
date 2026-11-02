@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.indicador_hal import IndicadorHAL, get_indicador_hal
-from app.core.scale_session import get_scale_session_manager
+from app.core.scale_session import ScaleSessionManager, get_scale_session_manager
 from app.models import Balanza, Indicador, VinculoBalanzaIndicador
 
 log = logging.getLogger("balansoft_ws.indicador_bridge")
@@ -60,9 +60,9 @@ class IndicadorBridge:
         self._lock = threading.Lock()
         self._ultimo_peso: float | None = None
         self._hal_ind: IndicadorHAL | None = None
-        self._balanza = None  # type: ignore
-        self._indicador = None  # type: ignore
-        self._mgr = None  # type: ignore
+        self._balanza: Balanza | None = None
+        self._indicador: Indicador | None = None
+        self._mgr: ScaleSessionManager | None = None
 
     # ------------------------------------------------------------------
     # Ciclo de vida
@@ -173,6 +173,10 @@ class IndicadorBridge:
     async def _loop(self) -> None:
         """Bucle principal: leer peso y enviar al indicador."""
         log.info("Bucle puente indicador comenzado para vínculo %s", self.id_vinculo)
+
+        if self._mgr is None or self._balanza is None:
+            log.warning("Puente %s sin báscula o manager configurado", self.id_vinculo)
+            return
 
         try:
             ses = None

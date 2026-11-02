@@ -90,7 +90,7 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: _modo == 0 ? _encabezado() : _encabezadoRegistro(),
+            child: _modo == 0 ? _encabezado(context) : _encabezadoRegistro(context),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -276,23 +276,25 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     );
   }
 
-  Widget _encabezadoRegistro() {
-    return const Card(
+  Widget _encabezadoRegistro(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    return Card(
       margin: EdgeInsets.zero,
-      color: SwsColors.blue100,
+      color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
       child: Padding(
-        padding: EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             Icon(Icons.receipt_long_outlined,
-                color: SwsColors.primary, size: 28),
-            SizedBox(width: 12),
+                color: oscuro ? SwsColors.accent : SwsColors.primary, size: 28),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Volcado completo de la tabla de auditoría: acción, entidad, '
-                'identificador, detalle del cambio, usuario, IP y marca de '
-                'tiempo UTC. Solo visible para los roles ADMIN y AUDITOR.',
-                style: TextStyle(fontSize: 12.5, color: SwsColors.gray700),
+                'audit_table_full_desc'.tr(),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: oscuro ? SwsColors.darkText : SwsColors.gray700,
+                ),
               ),
             ),
           ],
@@ -301,23 +303,25 @@ class _AuditoriaScreenState extends State<AuditoriaScreen> {
     );
   }
 
-  Widget _encabezado() {
-    return const Card(
+  Widget _encabezado(BuildContext context) {
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    return Card(
       margin: EdgeInsets.zero,
-      color: SwsColors.blue100,
+      color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
       child: Padding(
-        padding: EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             Icon(Icons.verified_user_outlined,
-                color: SwsColors.primary, size: 28),
-            SizedBox(width: 12),
+                color: oscuro ? SwsColors.accent : SwsColors.primary, size: 28),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Todo cambio de estado en un pesaje (entrada, salida, '
-                'anulación, modificación) queda inmutablemente registrado en el '
-                'servidor: usuario, IP, marca de tiempo UTC y datos antes/después.',
-                style: TextStyle(fontSize: 12.5, color: SwsColors.gray700),
+                'audit_states_desc'.tr(),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: oscuro ? SwsColors.darkText : SwsColors.gray700,
+                ),
               ),
             ),
           ],

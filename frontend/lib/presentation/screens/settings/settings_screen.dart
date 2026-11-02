@@ -960,7 +960,6 @@ class _DirectorioTile extends StatefulWidget {
 class _DirectorioTileState extends State<_DirectorioTile> {
   String? _ruta;
   bool _esPersonalizada = false;
-  bool _guardando = false;
 
   @override
   void initState() {
@@ -1106,11 +1105,14 @@ class _LanguageSelector extends StatelessWidget {
                 const Icon(Icons.language_outlined,
                     size: 18, color: SwsColors.accent),
                 const SizedBox(width: 8),
-                Text(
-                  AppTranslations.of(
-                      context, 'language_title', localeController),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13),
+                Expanded(
+                  child: Text(
+                    AppTranslations.of(
+                        context, 'language_title', localeController),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

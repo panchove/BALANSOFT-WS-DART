@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/utils/mensaje_error.dart';
 import '../../../../domain/entities/user.dart';
-import '../../../../data/repositories/auth_repository.dart';
 import '../../../../domain/repositories/i_auth_repository.dart';
 import '../../../../domain/usecases/auth_usecases.dart';
 import '../../../../core/security/device_info.dart';
@@ -18,7 +17,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final ForgotPasswordUseCase _forgotPasswordUseCase;
   final ResetPasswordUseCase _resetPasswordUseCase;
   final RefrescarEmpresaUseCase _refrescarEmpresaUseCase;
-  final AuthRepository _authRepository;
+  final IAuthRepository? _authRepository;
 
   AuthBloc({
     required LoginUseCase loginUseCase,
@@ -28,7 +27,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required ForgotPasswordUseCase forgotPasswordUseCase,
     required ResetPasswordUseCase resetPasswordUseCase,
     required RefrescarEmpresaUseCase refrescarEmpresaUseCase,
-    required AuthRepository authRepository,
+    IAuthRepository? authRepository,
   })  : _loginUseCase = loginUseCase,
         _logoutUseCase = logoutUseCase,
         _getCachedUserUseCase = getCachedUserUseCase,
@@ -142,6 +141,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       SetupAdminEvent event, Emitter<AuthState> emit) async {
     emit(AuthSetupLoading());
     try {
+      if (_authRepository == null) {
+        emit(const AuthSetupFailure('Repositorio de autenticación no configurado.'));
+        return;
+      }
       final ok = await _authRepository.setupCrearAdmin(event.data);
       if (!ok) {
         emit(const AuthSetupFailure('No se pudo crear la cuenta de administrador.'));

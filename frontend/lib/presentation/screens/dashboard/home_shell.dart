@@ -21,7 +21,6 @@ import '../../../data/datasources/local/local_storage.dart';
 import '../../../domain/entities/user.dart';
 import '../../../injection.dart' as di;
 import '../../providers/bloc/auth/auth_bloc.dart';
-import '../../providers/bloc/catalog_crud/catalog_crud_cubit.dart';
 import '../../providers/bloc/weighing/weighing_bloc.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../widgets/command_palette.dart';
@@ -520,6 +519,10 @@ class _HomeShellState extends State<HomeShell> {
         _irA('conductores');
 
       default:
+        final idx = _claveAIndice(destino);
+        if (idx != -1) {
+          _irA(destino);
+        }
         break;
     }
   }
@@ -617,14 +620,6 @@ class _HomeShellState extends State<HomeShell> {
     return contexto.findAncestorStateOfType<EditableTextState>() != null;
   }
 
-  bool _enShellVisible() {
-    final ruta = ModalRoute.of(context);
-    if (ruta == null || !ruta.isCurrent) return false;
-    if (di.sl<ModalManager>().hasOpenModals) return false;
-    if (_rutaSuperior() != null) return false;  // 🆕 NO capturar si hay pantalla encima
-    return true;
-  }
-
   void _cancelarOperacion() {
     final nav = Navigator.of(context);
     if (nav.canPop()) {
@@ -632,29 +627,6 @@ class _HomeShellState extends State<HomeShell> {
       return;
     }
     if (_index != 0) _irA('inicio');
-  }
-
-  void _refrescarModuloActual() {
-    final catalogosPorIndice = <int, CatalogResource>{
-      1: AppCatalogos.tercerosResource,
-      3: AppCatalogos.camionResource,
-      4: AppCatalogos.conductorResource,
-      5: AppCatalogos.transporteResource,
-      6: AppCatalogos.categoriaResource,
-      7: AppCatalogos.productoResource,
-      8: AppCatalogos.almacenResource,
-    };
-
-    final recurso = catalogosPorIndice[_index];
-    if (recurso != null) {
-      di.sl<CatalogCrudCubit>().cargar(recurso);
-      return;
-    }
-    if (_index == 0 || _index == 9 || _index == 10 || _index == 11) {
-      context.read<WeighingBloc>().add(const ListWeighingsEvent());
-      return;
-    }
-    setState(() {});
   }
 
   void _volverAtras() {

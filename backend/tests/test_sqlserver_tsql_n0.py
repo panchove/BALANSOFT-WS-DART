@@ -38,8 +38,8 @@ ESPERADAS_FK = 55
 # ``schema_migrations`` guarda el NOMBRE del archivo como versión, así que dos
 # archivos pueden compartir prefijo numérico sin colisionar (caso real: migran
 # 031_camaras_marca_modelo y 031_conceptos_kardex). Lo que se exige es que la
-# numeración 001..032 no tenga huecos, no que los prefijos sean únicos.
-ESPERADAS_MIGRACIONES_PLEGADAS = 33
+# numeración 001..034 no tenga huecos, no que los prefijos sean únicos.
+ESPERADAS_MIGRACIONES_PLEGADAS = 36
 MAX_NVARCHAR_INDEXADA = 255
 
 

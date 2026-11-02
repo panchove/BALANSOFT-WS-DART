@@ -568,23 +568,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     unawaited(_cargarConfigFotosPlaca());
   }
 
-  Future<void> _cargarPesoManualPermitido() async {
-    try {
-      final permitido = await di.sl<ApiClient>().getPesoManualPermitido();
-      if (mounted) {
-        setState(() {
-          _pesoManualPermitido = permitido;
-          // 🆕 Si el admin permite peso manual, desbloquear la edición del campo
-          if (permitido && !_pesoManualCambiadoPorUsuario) {
-            _esPesoManual = true;
-          }
-        });
-      }
-    } catch (_) {
-      // default true
-    }
-  }
-
   Future<void> _cargarConfigFotosPlaca() async {
     final api = di.sl<ApiClient>();
     bool activas = false;
@@ -777,14 +760,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _tieneDatosSinGuardar = valor;
     _marcarDatosSinGuardarGlobal(valor);
   }
-
-  List<int> _ordenEfectivo() => <int>[
-    _idxCamion, if (_remolque) _idxRemolque, _idxTransporte, _idxConductor,
-    _idxProducto, _idxAlmacen, _idxBalanza, _idxTipoTercero, _idxTercero,
-    _idxPesoEntrada, if (_remolque) _idxPesoRemolque, _idxDocumento,
-    _idxGuiaSunagro, _idxMedida, _idxUnidades, _idxDensidad, _idxFlete,
-    _idxCostoFlete, _idxObservaciones,
-  ];
 
   KeyEventResult _manejarFlechas(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -2715,30 +2690,6 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     final nombres = nombresPlacaLocal(fotos.length, remolque: _remolque);
     return [for (var i = 0; i < fotos.length; i++) PhotoCaptured(bytes: fotos[i].bytes, nombre: nombres[i])];
   }
-
-  Widget _botonPlaca(String sufijo) {
-    if (!_esPesoManual) return const SizedBox.shrink();
-    final hecha = _placaCamara.containsKey(sufijo);
-    return OutlinedButton.icon(
-      key: Key('placa_capturar_$sufijo'),
-      onPressed: (_capturandoPlaca || _camaraSeleccionada == null)
-          ? null : () => unawaited(_capturarPlaca(sufijo)),
-      icon: _capturandoPlaca
-        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-        : Icon(hecha ? Icons.check_circle : Icons.camera_alt_outlined, size: 18),
-      label: Text(_etiquetaPlaca(sufijo)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: hecha ? SwsColors.success : SwsColors.primary,
-        side: BorderSide(color: (hecha ? SwsColors.success : SwsColors.primary).withValues(alpha: 0.4))),
-    );
-  }
-
-  String _etiquetaPlaca(String sufijo) => switch (sufijo) {
-    'placa_trasera' => _remolque ? 'placa_placa_remolque'.tr() : 'placa_placa_trasera'.tr(),
-    'frente' => 'placa_frente'.tr(),
-    'placa_remolque' => 'placa_placa_remolque'.tr(),
-    _ => sufijo,
-  };
 
   String _formatFecha(DateTime? fecha) {
     if (fecha == null) return '';

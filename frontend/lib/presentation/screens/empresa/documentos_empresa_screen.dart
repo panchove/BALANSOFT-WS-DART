@@ -424,13 +424,14 @@ class _DocumentosEmpresaScreenState extends State<DocumentosEmpresaScreen> {
       child = const Icon(Icons.business_outlined,
           color: SwsColors.gray500, size: 32);
     }
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color: SwsColors.blue100,
+        color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: SwsColors.gray200),
+        border: Border.all(color: oscuro ? SwsColors.darkBorder : SwsColors.gray200),
       ),
       clipBehavior: Clip.antiAlias,
       child: child,

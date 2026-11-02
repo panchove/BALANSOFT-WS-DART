@@ -7,9 +7,7 @@ Dispositivo actuador de control de acceso: la app decide la apertura o cierre
 
 from __future__ import annotations
 
-import os
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -21,8 +19,6 @@ from app.api.dependencies import (
     require_admin,
 )
 from app.core.barrera_hal import (
-    HttpBarreraHAL,
-    SerialBarreraHAL,
     get_barrera_hal,
 )
 from app.core.database import get_db
@@ -44,7 +40,7 @@ from app.schemas import (
 from app.services.audit_service import registrar
 from app.services.catalog_service import CatalogService
 
-router = APIRouter(prefix="/barreras", tags=["Barreras"])
+router = APIRouter(prefix="/api/v1/barreras", tags=["Barreras"])
 _SERVICE = CatalogService()
 
 _DEFAULT_HTTP_HOST = "127.0.0.1"
@@ -145,7 +141,7 @@ async def crear_barrera(
         empresa.id_empresa,
         "barreras",
         data,
-        usuario_email=current_user.email,
+        id_usuario=current_user.id_usuario,
         ip=request.client.host if request.client else None,
     )
     return BarreraOut.model_validate(creada)
@@ -218,9 +214,9 @@ async def actualizar_barrera(
         db,
         empresa.id_empresa,
         "barreras",
-        id_barrera,
+        str(id_barrera),
         data,
-        usuario_email=current_user.email,
+        id_usuario=current_user.id_usuario,
         ip=request.client.host if request.client else None,
     )
     return BarreraOut.model_validate(actualizada)
@@ -239,8 +235,8 @@ async def eliminar_barrera(
         db,
         empresa.id_empresa,
         "barreras",
-        id_barrera,
-        usuario_email=current_user.email,
+        str(id_barrera),
+        id_usuario=current_user.id_usuario,
         ip=request.client.host if request.client else None,
     )
     return {"ok": True}
@@ -323,8 +319,8 @@ async def enviar_comando_barrera(
     ok = await hal.enviar_comando(payload.action)
     await registrar(
         db,
-        empresa.id_empresa,
-        usuario_email=current_user.email,
+        id_usuario=current_user.id_usuario,
+        id_empresa=empresa.id_empresa,
         accion="COMANDO_BARRERA",
         entidad="barreras",
         entidad_id=str(barrera.id_barrera),
@@ -335,6 +331,7 @@ async def enviar_comando_barrera(
         },
         ip=request.client.host if request.client else None,
     )
+    await db.commit()
     return BarreraComandoOut(
         aplicado=ok,
         action=payload.action,

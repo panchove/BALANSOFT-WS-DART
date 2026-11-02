@@ -32,148 +32,228 @@ class _CommandPaletteState extends State<CommandPalette> {
     // Navegación por nombre
     const _Command(
       label: 'Dashboard / Inicio',
+      labelKey: 'cmd_dashboard',
       icon: Icons.dashboard_outlined,
       shortcut: 'Ctrl+H',
       action: 'go:inicio',
     ),
     const _Command(
       label: 'Pesaje Manual',
+      labelKey: 'cmd_pesaje_manual',
       icon: Icons.edit_note,
       shortcut: 'Ctrl+Shift+N',
       action: 'go:pesaje_manual',
     ),
     const _Command(
       label: 'Pesaje Automático',
+      labelKey: 'cmd_pesaje_automatico',
       icon: Icons.smart_toy_outlined,
       shortcut: 'Ctrl+N  /  F1',
       action: 'go:pesaje_automatico',
     ),
     const _Command(
       label: 'Entradas',
+      labelKey: 'cmd_entradas',
       icon: Icons.arrow_downward_outlined,
       shortcut: 'Ctrl+2',
       action: 'go:entradas',
     ),
     const _Command(
       label: 'Salidas',
+      labelKey: 'cmd_salidas',
       icon: Icons.arrow_upward_outlined,
       shortcut: 'Ctrl+3',
       action: 'go:salidas',
     ),
     const _Command(
       label: 'Ajustes de Inventario',
+      labelKey: 'cmd_ajustes_inventario',
       icon: Icons.tune,
       shortcut: 'Ctrl+A',
       action: 'go:ajustes',
     ),
     const _Command(
       label: 'Terceros (Clientes / Proveedores / Ambos)',
+      labelKey: 'cmd_terceros',
       icon: Icons.people_outline,
       shortcut: 'Alt+C',
       action: 'go:terceros',
     ),
     const _Command(
       label: 'Camiones / Vehículos',
+      labelKey: 'cmd_vehiculos',
       icon: Icons.directions_car_outlined,
       shortcut: 'Alt+F',
       action: 'go:camiones',
     ),
     const _Command(
       label: 'Conductores',
+      labelKey: 'cmd_conductores',
       icon: Icons.badge_outlined,
       shortcut: 'Ctrl+Shift+D  /  F8',
       action: 'go:conductores',
     ),
     const _Command(
       label: 'Empresas de Transporte',
+      labelKey: 'cmd_transportes',
       icon: Icons.fire_truck_outlined,
       shortcut: 'Ctrl+Shift+T',
       action: 'go:transportes',
     ),
     const _Command(
       label: 'Categorías',
+      labelKey: 'cmd_categorias',
       icon: Icons.category_outlined,
       action: 'go:categorias',
     ),
     const _Command(
       label: 'Productos',
+      labelKey: 'cmd_productos',
       icon: Icons.inventory_2_outlined,
       shortcut: 'Alt+P',
       action: 'go:productos',
     ),
     const _Command(
       label: 'Almacenes',
+      labelKey: 'cmd_almacenes',
       icon: Icons.warehouse_outlined,
       shortcut: 'Alt+A',
       action: 'go:almacenes',
     ),
     const _Command(
       label: 'Kardex',
+      labelKey: 'cmd_kardex',
       icon: Icons.table_rows_outlined,
       shortcut: 'Alt+K',
       action: 'go:kardex',
     ),
     const _Command(
       label: 'Reportes',
+      labelKey: 'cmd_reportes',
       icon: Icons.analytics_outlined,
       shortcut: 'Alt+R',
       action: 'go:reportes',
     ),
     const _Command(
       label: 'Auditoría',
+      labelKey: 'cmd_auditoria',
       icon: Icons.fact_check_outlined,
       action: 'go:auditoria',
     ),
     const _Command(
       label: 'Diagnóstico del Sistema',
+      labelKey: 'cmd_diagnostico',
       icon: Icons.monitor_heart_outlined,
       action: 'go:diagnostico',
     ),
     const _Command(
       label: 'Administración de Licencia',
+      labelKey: 'cmd_licencia',
       icon: Icons.key_outlined,
       action: 'go:licencia',
     ),
     const _Command(
       label: 'Conexiones',
+      labelKey: 'cmd_conexiones',
       icon: Icons.hub_outlined,
       action: 'go:conexiones',
     ),
     const _Command(
       label: 'Ayuda',
+      labelKey: 'cmd_ayuda',
       icon: Icons.help_outline,
       action: 'go:ayuda',
     ),
     const _Command(
       label: 'Básculas',
+      labelKey: 'cmd_basculas',
       icon: Icons.scale_outlined,
       shortcut: 'Alt+D',
       action: 'go:dispositivos_basculas',
     ),
     const _Command(
+      label: 'Indicadores',
+      labelKey: 'cmd_indicadores',
+      icon: Icons.speed_outlined,
+      action: 'go:dispositivos_indicadores',
+    ),
+    const _Command(
+      label: 'Semáforos',
+      labelKey: 'cmd_semaforos',
+      icon: Icons.traffic_outlined,
+      action: 'go:dispositivos_semaforos',
+    ),
+    const _Command(
+      label: 'Cámaras',
+      labelKey: 'cmd_camaras',
+      icon: Icons.videocam_outlined,
+      action: 'go:dispositivos_camaras',
+    ),
+    const _Command(
+      label: 'Barreras de tránsito',
+      labelKey: 'cmd_barreras',
+      icon: Icons.door_sliding_outlined,
+      action: 'go:dispositivos_barreras',
+    ),
+    const _Command(
+      label: 'Impresoras',
+      labelKey: 'cmd_impresoras',
+      icon: Icons.print_outlined,
+      action: 'go:dispositivos_impresoras',
+    ),
+    const _Command(
+      label: 'Roles y Permisos',
+      labelKey: 'cmd_roles',
+      icon: Icons.security_outlined,
+      action: 'go:roles',
+    ),
+    const _Command(
+      label: 'Ingresos',
+      labelKey: 'cmd_ingresos',
+      icon: Icons.login_outlined,
+      action: 'go:ingresos',
+    ),
+    const _Command(
+      label: 'Despachos',
+      labelKey: 'cmd_despachos',
+      icon: Icons.logout_outlined,
+      action: 'go:despachos',
+    ),
+    const _Command(
+      label: 'Conceptos de Kardex',
+      labelKey: 'cmd_conceptos_kardex',
+      icon: Icons.category_outlined,
+      action: 'go:conceptos_kardex',
+    ),
+    const _Command(
       label: 'Seguridad y Accesos',
+      labelKey: 'cmd_seguridad',
       icon: Icons.lock_outline,
       shortcut: 'Alt+S',
       action: 'go:seguridad',
     ),
     const _Command(
       label: 'Empresa y Documentos',
+      labelKey: 'cmd_documentos_empresa',
       icon: Icons.business_outlined,
       action: 'go:documentos_empresa',
     ),
     const _Command(
       label: 'Diseño de Ticket',
+      labelKey: 'cmd_diseno_ticket',
       icon: Icons.receipt_long_outlined,
       action: 'go:diseno_ticket',
     ),
     const _Command(
       label: 'Configuración General',
+      labelKey: 'cmd_configuracion',
       icon: Icons.settings_outlined,
       shortcut: 'Ctrl+,',
       action: 'go:configuracion',
     ),
     const _Command(
       label: 'Usuarios del Sistema',
+      labelKey: 'cmd_usuarios',
       icon: Icons.admin_panel_settings_outlined,
       shortcut: 'Alt+U',
       action: 'go:usuarios',
@@ -181,18 +261,21 @@ class _CommandPaletteState extends State<CommandPalette> {
     // Acciones rápidas
     const _Command(
       label: 'Nuevo Ticket de Pesaje',
+      labelKey: 'cmd_nuevo_ticket',
       icon: Icons.add_circle_outline,
       shortcut: 'Ctrl+N  /  F1',
       action: 'new:ticket',
     ),
     const _Command(
       label: 'Nuevo Vehículo / Chuto',
+      labelKey: 'cmd_nuevo_vehiculo',
       icon: Icons.directions_car_outlined,
       shortcut: 'Ctrl+Shift+V',
       action: 'new:truck',
     ),
     const _Command(
       label: 'Nuevo Conductor',
+      labelKey: 'cmd_nuevo_conductor',
       icon: Icons.person_add_outlined,
       shortcut: 'Ctrl+Shift+D  /  F8',
       action: 'new:driver',
@@ -200,24 +283,28 @@ class _CommandPaletteState extends State<CommandPalette> {
     // Configuración
     const _Command(
       label: 'Cambiar Tema (Claro/Oscuro)',
+      labelKey: 'cmd_cambiar_tema',
       icon: Icons.dark_mode_outlined,
       shortcut: 'Ctrl+Shift+L',
       action: 'cfg:theme',
     ),
     const _Command(
       label: 'Pantalla Completa',
+      labelKey: 'cmd_pantalla_completa',
       icon: Icons.fullscreen,
       shortcut: 'F11',
       action: 'cfg:fullscreen',
     ),
     const _Command(
       label: 'Maximizar / Restaurar ventana',
+      labelKey: 'cmd_maximizar',
       icon: Icons.crop_square_outlined,
       shortcut: 'F9',
       action: 'cfg:maximize',
     ),
     const _Command(
       label: 'Salir del sistema',
+      labelKey: 'cmd_salir',
       icon: Icons.power_settings_new_outlined,
       shortcut: 'Ctrl+Q',
       action: 'cfg:exit',
@@ -230,6 +317,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     return _comandos
         .where(
           (c) =>
+              c.translatedLabel.toLowerCase().contains(q) ||
               c.label.toLowerCase().contains(q) ||
               c.action.toLowerCase().contains(q),
         )
@@ -250,9 +338,9 @@ class _CommandPaletteState extends State<CommandPalette> {
     if (cruda[1] != ':') return null;
 
     final (etiqueta, icono, atajo) = switch (tipo) {
-      't' => ('Buscar boleto', Icons.confirmation_number_outlined, 't:#123'),
-      'p' => ('Buscar placa', Icons.directions_car_outlined, 'p:A12BC3'),
-      'c' => ('Buscar conductor', Icons.badge_outlined, 'c:V12345678'),
+      't' => (AppTranslations.tr('cmd_buscar_boleto'), Icons.confirmation_number_outlined, 't:#123'),
+      'p' => (AppTranslations.tr('cmd_buscar_placa'), Icons.directions_car_outlined, 'p:A12BC3'),
+      'c' => (AppTranslations.tr('cmd_buscar_conductor'), Icons.badge_outlined, 'c:V12345678'),
       _ => ('', Icons.search, ''),
     };
     if (etiqueta.isEmpty) return null;
@@ -348,9 +436,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                         child: TextField(
                           controller: _controller,
                           decoration: InputDecoration(
-                            hintText:
-                                'Buscar módulo, comando o acción… '
-                                '(t:#123 · p:A12BC3 · c:V12345678)',
+                            hintText: AppTranslations.tr('cmd_buscar_hint'),
                             hintStyle: const TextStyle(fontSize: 13),
                             prefixIcon:
                                 const Icon(Icons.search, size: 20),
@@ -405,7 +491,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                                       : SwsColors.gray500,
                                 ),
                                 title: Text(
-                                  cmd.label,
+                                  cmd.translatedLabel,
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: isSelected
@@ -448,14 +534,19 @@ class _CommandPaletteState extends State<CommandPalette> {
 
 class _Command {
   final String label;
+  final String? labelKey;
   final IconData icon;
   final String? shortcut;
   final String action;
 
   const _Command({
     required this.label,
+    this.labelKey,
     required this.icon,
     this.shortcut,
     required this.action,
   });
+
+  String get translatedLabel =>
+      labelKey != null ? AppTranslations.tr(labelKey!) : label;
 }

@@ -6,8 +6,6 @@ credenciales globales, panel del proveedor y recepción de sync.
 """
 
 from app.api.v1.endpoints import (
-    dispositivos,
-    vinculos,
     activacion,
     archivos,
     auditoria,
@@ -20,6 +18,7 @@ from app.api.v1.endpoints import (
     conceptos_kardex,
     config,
     directorio,
+    dispositivos,
     empresa,
     entorno,
     exports,
@@ -37,6 +36,7 @@ from app.api.v1.endpoints import (
     setup,
     sync,
     usuarios,
+    vinculos,
 )
 
 API_ROUTERS = [

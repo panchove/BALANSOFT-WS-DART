@@ -334,6 +334,17 @@ class _DispositivosScreenState extends State<DispositivosScreen>
         key: _scaffoldKey,
         appBar: AppBar(
           title: Text(context.tr('Dispositivos de Campo')),
+          actions: [
+            if (_verificando)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          ],
           bottom: TabBar(
             controller: _tabController,
             isScrollable: true,
@@ -527,15 +538,18 @@ class _DispositivosScreenState extends State<DispositivosScreen>
 
   Widget _chipProtocolo(String protocolo) {
     final esSerial = protocolo.toLowerCase() == 'serial';
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final bg = oscuro ? SwsColors.darkCard : SwsColors.gray200;
+    final fg = oscuro ? SwsColors.gray400 : SwsColors.gray700;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: SwsColors.gray200, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(esSerial ? Icons.usb : Icons.router_outlined, size: 10, color: SwsColors.gray700),
+          Icon(esSerial ? Icons.usb : Icons.router_outlined, size: 10, color: fg),
           const SizedBox(width: 4),
-          Text(protocolo.toUpperCase(), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: SwsColors.gray700)),
+          Text(protocolo.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
         ],
       ),
     );
@@ -661,7 +675,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       widget.onGuardado();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vínculo activado correctamente.'), backgroundColor: SwsColors.success),
+        SnackBar(content: Text(context.tr('vinculo_activado_ok')), backgroundColor: SwsColors.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -691,7 +705,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
 
   String get _indicadorVinculadoTexto {
     final id = widget.balanza.idIndicador;
-    if (id == null || id.isEmpty) return 'Sin vincular';
+    if (id == null || id.isEmpty) return 'sin_vincular'.tr();
     return _indicadoresNombres[id] ?? 'Vinculado (indicador $id)';
   }
 
@@ -703,7 +717,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
         prefixIcon: Icon(icono),
         filled: true,
         fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        suffixIcon: Tooltip(message: 'No editable: identifica al dispositivo', child: Icon(Icons.lock_outline, size: 16, color: scheme.outline)),
+        suffixIcon: Tooltip(message: context.tr('identifica_dispositivo_tooltip'), child: Icon(Icons.lock_outline, size: 16, color: scheme.outline)),
       ),
       child: Text(valor, style: TextStyle(fontSize: 16, color: scheme.onSurface.withValues(alpha: 0.7))),
     );
@@ -742,7 +756,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       final data = e.response?.data;
       if (data is Map && data['detail'] != null) return '${data['detail']}';
     }
-    return 'No se pudo probar la conexión.';
+    return context.tr('connection_test_failed');
   }
 
   Future<void> _guardar() async {
@@ -807,9 +821,9 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configuración guardada y vínculo activado.'),
-          duration: Duration(seconds: 4),
+        SnackBar(
+          content: Text(context.tr('config_y_vinculo_guardados')),
+          duration: const Duration(seconds: 4),
           backgroundColor: SwsColors.success,
         ),
       );
@@ -856,37 +870,37 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            Text('Conexión (identidad del dispositivo)', style: Theme.of(context).textTheme.titleMedium),
+            Text(context.tr('conexion_identidad_dispositivo'), style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text(
-              'El puerto identifica físicamente al dispositivo: si aparece con esa entrada es porque así fue detectado y no se modifica aquí. Para cambiar la conexión, elimínela y vuelva a detectarla.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            Text(
+              context.tr('conexion_identidad_ayuda'),
+              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
             const SizedBox(height: 10),
-            _campoLectura(context, etiqueta: 'Protocolo', valor: _protocolo == 'serial' ? 'SERIAL / USB' : 'TCP / RED', icono: _protocolo == 'serial' ? Icons.usb : Icons.router_outlined),
+            _campoLectura(context, etiqueta: context.tr('protocol'), valor: _protocolo == 'serial' ? 'SERIAL / USB' : 'TCP / RED', icono: _protocolo == 'serial' ? Icons.usb : Icons.router_outlined),
             const SizedBox(height: 10),
             if (_protocolo == 'tcp') ...[
-              _campoLectura(context, etiqueta: 'Dirección IP', valor: b.ipAddress ?? '—', icono: Icons.language),
+              _campoLectura(context, etiqueta: context.tr('ip_address'), valor: b.ipAddress ?? '—', icono: Icons.language),
               const SizedBox(height: 10),
-              _campoLectura(context, etiqueta: 'Puerto TCP', valor: '${b.puertoTcp ?? 5555}', icono: Icons.router_outlined),
+              _campoLectura(context, etiqueta: context.tr('tcp_port'), valor: '${b.puertoTcp ?? 5555}', icono: Icons.router_outlined),
             ] else ...[
-              _campoLectura(context, etiqueta: 'Puerto serie', valor: b.puertoCom ?? '—', icono: Icons.usb),
+              _campoLectura(context, etiqueta: context.tr('serial_port'), valor: b.puertoCom ?? '—', icono: Icons.usb),
             ],
             const SizedBox(height: 14),
-            const Text('Indicador vinculado', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            Text(context.tr('indicador_vinculado_titulo'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             const SizedBox(height: 4),
-            const Text(
-              'Asigna qué indicador (terminal de peso) muestra el peso de esta báscula. El indicador es esclavo: solo muestra lo que la app le envía.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            Text(
+              context.tr('indicador_vinculado_ayuda'),
+              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
             const SizedBox(height: 8),
             if (widget.esAdmin)
               DropdownButtonFormField<String?>(
                 initialValue: _indicadoresNombres.containsKey(_indicadorSel) ? _indicadorSel : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Indicador de esta báscula', prefixIcon: Icon(Icons.speed_outlined)),
+                decoration: InputDecoration(labelText: context.tr('indicador_esta_bascula'), prefixIcon: const Icon(Icons.speed_outlined)),
                 items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Sin vincular')),
+                  DropdownMenuItem<String?>(value: null, child: Text(context.tr('sin_vincular'))),
                   ..._indicadoresNombres.entries.map((e) => DropdownMenuItem<String?>(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))),
                 ],
                 onChanged: (v) => setState(() => _indicadorSel = v),
@@ -897,23 +911,23 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.speed_outlined),
-                  title: const Text('Indicador vinculado'),
+                  title: Text(context.tr('indicador_vinculado_titulo')),
                   subtitle: Text(_indicadorVinculadoTexto),
                   trailing: (widget.balanza.idIndicador != null) ? const Icon(Icons.link, color: SwsColors.success) : const Text('—'),
                 ),
               ),
             const Divider(height: 24),
-            const Text('Vínculos con indicadores', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            Text(context.tr('vinculos_indicadores'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             const SizedBox(height: 4),
-            const Text(
-              'Si el vínculo aparece inactivo, actívalo aquí para que el puente empiece a enviar el peso al indicador.',
-              style: TextStyle(fontSize: 12, color: SwsColors.gray500),
+            Text(
+              context.tr('vinculos_indicadores_ayuda'),
+              style: const TextStyle(fontSize: 12, color: SwsColors.gray500),
             ),
             const SizedBox(height: 10),
             if (_cargandoVinculos)
               const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
             else if (_vinculosBalanza.isEmpty)
-              const Text('Sin vínculos registrados para esta báscula', style: TextStyle(fontSize: 12, color: SwsColors.gray500))
+              Text(context.tr('sin_vinculos_registrados'), style: const TextStyle(fontSize: 12, color: SwsColors.gray500))
             else
               ..._vinculosBalanza.map((v) {
                 final activo = v['activo'] == true;
@@ -922,7 +936,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(border: Border.all(color: SwsColors.gray200), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(border: Border.all(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.circular(10)),
                   child: Row(
                     children: [
                       Icon(activo ? Icons.link : Icons.link_off, color: activo ? SwsColors.success : SwsColors.gray400),
@@ -932,7 +946,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(indLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            Text(activo ? 'Activo' : 'Inactivo', style: TextStyle(fontSize: 12, color: activo ? SwsColors.success : SwsColors.gray500)),
+                            Text(activo ? context.tr('activo') : context.tr('inactivo'), style: TextStyle(fontSize: 12, color: activo ? SwsColors.success : SwsColors.gray500)),
                           ],
                         ),
                       ),
@@ -940,7 +954,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                         FilledButton.tonalIcon(
                           onPressed: _activandoVinculo ? null : () => _activarVinculo(v),
                           icon: _activandoVinculo ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow),
-                          label: const Text('Activar'),
+                          label: Text(context.tr('activar')),
                         )
                       else if (activo)
                         const Icon(Icons.check_circle, color: SwsColors.success),
@@ -950,12 +964,12 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
               }),
             const Divider(height: 24),
             if (widget.esAdmin) ...[
-              Text('Configuración de lectura', style: Theme.of(context).textTheme.titleMedium),
+              Text(context.tr('reading_config'), style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _formatoTrama,
                 isExpanded: true,
-                decoration: InputDecoration(labelText: 'frame_format'.tr(), helperText: 'Idioma del cable: cómo el indicador envía el peso. "Auto" lo detecta solo.', helperMaxLines: 3, prefixIcon: const Icon(Icons.code)),
+                decoration: InputDecoration(labelText: 'frame_format'.tr(), helperText: context.tr('reading_config_help'), helperMaxLines: 3, prefixIcon: const Icon(Icons.code)),
                 items: [
                   DropdownMenuItem(value: 'auto', child: Text('frame_auto'.tr())),
                   DropdownMenuItem(value: 'json', child: Text('frame_json'.tr())),
@@ -968,7 +982,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
                 DropdownButtonFormField<int>(
                   initialValue: _baudrate,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Velocidad (baudrate)', helperText: 'Velocidad del puerto serie; debe coincidir con la del indicador.', helperMaxLines: 3, prefixIcon: Icon(Icons.speed)),
+                  decoration: InputDecoration(labelText: context.tr('baudrate_label'), helperText: context.tr('baudrate_help'), helperMaxLines: 3, prefixIcon: const Icon(Icons.speed)),
                   items: const [
                     DropdownMenuItem(value: 1200, child: Text('1200')),
                     DropdownMenuItem(value: 4800, child: Text('4800')),
@@ -985,7 +999,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
               DropdownButtonFormField<String>(
                 initialValue: _delimitador,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Delimitador de trama', helperText: 'Marca de fin de cada lectura de peso (salto de línea, retorno de carro, etc.).', helperMaxLines: 3, prefixIcon: Icon(Icons.format_align_left)),
+                decoration: InputDecoration(labelText: context.tr('delimiter_label'), helperText: context.tr('delimiter_help'), helperMaxLines: 3, prefixIcon: const Icon(Icons.format_align_left)),
                 items: [
                   DropdownMenuItem(value: 'lf', child: Text('delimiter_lf'.tr())),
                   DropdownMenuItem(value: 'cr', child: Text('delimiter_cr'.tr())),

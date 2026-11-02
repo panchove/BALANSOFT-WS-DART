@@ -129,8 +129,8 @@ class _TopRow extends StatelessWidget {
             icon: const Icon(Icons.menu, color: Colors.white70),
             onPressed: onToggleSidebar,
             tooltip: compacto
-                ? 'Menú (Navegación)'
-                : 'Toggle Sidebar (Ctrl+B / F10)',
+                ? context.tr('menu_navegacion')
+                : '${context.tr('toggle_sidebar')} (Ctrl+B / F10)',
           ),
 
           // BrandText SIEMPRE visible (tamaño reducido en móvil)

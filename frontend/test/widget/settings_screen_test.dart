@@ -31,16 +31,7 @@ class _FakeAuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async {
-    return _adminUser;
-  }
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async => true;
 
   @override
   Future<void> logout() async {}
@@ -196,7 +187,7 @@ void main() {
       (tester) async {
     await renderAt(tester, const Size(1280, 800));
     expect(find.text('Configuración'), findsOneWidget);
-    expect(find.text('Transportes Balansoft C.A.'), findsWidgets);
+    expect(find.textContaining('Transportes Balansoft C.A.'), findsWidgets);
   });
 
   testWidgets('settings sin overflows en ventana compacta 700x900',
@@ -226,6 +217,8 @@ void main() {
   testWidgets('el tile de diagnóstico abre la pantalla propia, no el asistente',
       (tester) async {
     await renderAt(tester, const Size(1280, 900));
+    await tester.tap(find.text('Sistema'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Diagnóstico del Sistema'),
       120,

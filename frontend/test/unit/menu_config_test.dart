@@ -329,10 +329,10 @@ void main() {
         for (final n in nodos)
           if (n.clave != null) n.clave!: n,
       };
-      expect(porClave['roles']?.index, 23);
-      expect(porClave['reportes_diarios']?.index, 24);
-      expect(porClave['reportes_mensuales']?.index, 25);
-      expect(porClave['reportes_personalizado']?.index, 26);
+      expect(porClave['roles']?.index, 20);
+      expect(porClave['reportes_diarios']?.index, 30);
+      expect(porClave['reportes_mensuales']?.index, 31);
+      expect(porClave['reportes_personalizado']?.index, 32);
 
       final acciones = {for (final n in nodos) if (n.accion != null) n.accion!};
       expect(acciones.contains('go:ayuda_manuales'), isTrue);
@@ -512,11 +512,11 @@ void main() {
       };
 
       const esperado = {
-        'dispositivos_basculas': 13,
-        'dispositivos_indicadores': 27,
-        'dispositivos_semaforos': 28,
-        'dispositivos_camaras': 29,
-        'dispositivos_impresoras': 30,
+        'dispositivos_basculas': 23,
+        'dispositivos_indicadores': 24,
+        'dispositivos_semaforos': 25,
+        'dispositivos_camaras': 26,
+        'dispositivos_impresoras': 28,
       };
 
       for (final entrada in esperado.entries) {
@@ -564,7 +564,7 @@ void main() {
       expect(nodos, hasLength(2));
       expect(nodos.first.accion, 'go:dispositivos_semaforos');
       expect(nodos.last.clave, 'dispositivos_camaras');
-      expect(nodos.last.index, 29);
+      expect(nodos.last.index, 26);
     });
 
     test('un menu.json con la clave nueva resuelve su índice', () {
@@ -579,7 +579,7 @@ void main() {
 
       expect(nodos, hasLength(1));
       expect(nodos.single.clave, 'dispositivos_camaras');
-      expect(nodos.single.index, 29);
+      expect(nodos.single.index, 26);
       expect(MenuConfig.errores, isEmpty);
     });
   });

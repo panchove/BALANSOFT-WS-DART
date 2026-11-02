@@ -14,6 +14,7 @@ import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI, status
 from httpx import ASGITransport, AsyncClient
@@ -21,10 +22,8 @@ from httpx import ASGITransport, AsyncClient
 from app.api.dependencies import get_db
 from app.api.v1.endpoints import API_ROUTERS
 from app.core.database import get_db as get_db_core
-from app.core.license_client import LicenseError, LicenseInfo, get_license_client
+from app.core.license_client import LicenseError, LicenseInfo
 from app.models import Empresa, Usuario
-from app.main import app as _app_main
-
 
 # ---------------------------------------------------------------------------
 # Helpers de mock del LM
@@ -70,7 +69,7 @@ def _override_license_client(fake: _FakeLicenseClient) -> None:
     """Reemplaza el cliente de licencia del módulo setup por un falso."""
     import app.api.v1.endpoints.setup as setup_mod
 
-    setup_mod.get_license_client = lambda: fake  # type: ignore[assignment]
+    setup_mod.get_license_client = lambda: fake  # type: ignore[assignment,return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +93,6 @@ async def app(db):  # noqa: F811 - fixture inyectada por conftest
 
 @pytest_asyncio.fixture
 async def client(app):  # noqa: F811
-    import httpx
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

@@ -11,11 +11,7 @@ import 'package:balansoft_ws/domain/repositories/i_auth_repository.dart';
 import 'package:balansoft_ws/domain/usecases/auth_usecases.dart';
 import 'package:balansoft_ws/injection.dart' as di;
 import 'package:balansoft_ws/presentation/providers/bloc/auth/auth_bloc.dart';
-import 'package:balansoft_ws/presentation/screens/dispositivos/basculas_screen.dart';
-import 'package:balansoft_ws/presentation/screens/dispositivos/camaras_screen.dart';
-import 'package:balansoft_ws/presentation/screens/dispositivos/impresoras_screen.dart';
-import 'package:balansoft_ws/presentation/screens/dispositivos/indicadores_screen.dart';
-import 'package:balansoft_ws/presentation/screens/dispositivos/semaforos_screen.dart';
+import 'package:balansoft_ws/presentation/screens/dispositivos/dispositivos_screen.dart';
 
 /// Las cuatro (cinco) vistas de dispositivos son pantallas independientes:
 /// cada una monta su propio `Scaffold` + `AppBar` y expone la barra de filtros
@@ -62,16 +58,6 @@ class _FakeAuthRepository implements IAuthRepository {
   }) async =>
       usuario;
 
-  @override
-  Future<User> register({
-    required String empresaNombre,
-    required String empresaRif,
-    required String usuarioNombre,
-    required String email,
-    required String password,
-    String? licenciaKey,
-  }) async =>
-      usuario;
 
   @override
   Future<void> logout() async {}
@@ -96,6 +82,9 @@ class _FakeAuthRepository implements IAuthRepository {
 
   @override
   Future<SesionRestaurada> restoreSession() async => SesionRestaurada.ok;
+
+  @override
+  Future<bool> setupCrearAdmin(Map<String, dynamic> data) async => true;
 
   @override
   Future<void> cacheUser(User user) async {}
@@ -157,48 +146,21 @@ void main() {
     await tester.pump();
   }
 
-  const pantallas = <String, Widget>{
-    'Básculas': BasculasScreen(),
-    'Indicadores': IndicadoresScreen(),
-    'Semáforos': SemaforosScreen(),
-    'Cámaras': CamarasScreen(),
-  };
+  testWidgets('DispositivosScreen se monta con TabBar y AppBar', (tester) async {
+    await montar(tester, const DispositivosScreen(initialTab: 0));
 
-  for (final entrada in pantallas.entries) {
-    testWidgets('${entrada.key} es una pantalla independiente con AppBar',
-        (tester) async {
-      await montar(tester, entrada.value);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
-      expect(find.byType(AppBar), findsOneWidget,
-          reason: 'la vista ${entrada.key} debe traer su propia AppBar');
-      expect(find.byType(Scaffold), findsWidgets);
-      expect(tester.takeException(), isNull);
-
-      await desmontar(tester);
-    });
-  }
-
-  testWidgets('las cuatro vistas con tabla traen su barra de búsqueda',
-      (tester) async {
-    for (final pantalla in [
-      const IndicadoresScreen(),
-      const SemaforosScreen(),
-      const CamarasScreen(),
-    ]) {
-      await montar(tester, pantalla);
-      expect(find.byType(TextField), findsWidgets,
-          reason: 'debe haber una barra de búsqueda de texto');
-      await desmontar(tester);
-    }
+    await desmontar(tester);
   });
 
-  testWidgets('Impresoras es su propia pantalla (no comparte la de básculas)',
-      (tester) async {
-    // No se monta: `PrinterDiscovery.scan()` lanza un subproceso real
-    // (`lpstat`/PowerShell) cuyo temporizador no se puede drenar de forma
-    // síncrona en un widget test. El montaje de la pantalla se cubre con
-    // `flutter analyze` y su lógica de filtrado es cliente puro.
-    expect(const ImpresorasScreen(), isA<StatefulWidget>());
-    expect(const ImpresorasScreen(), isNot(isA<BasculasScreen>()));
+  testWidgets('DispositivosScreen monta pestañas sin excepciones', (tester) async {
+    for (final tab in [0, 1, 2, 3, 5]) {
+      await montar(tester, DispositivosScreen(initialTab: tab));
+      expect(tester.takeException(), isNull);
+      await desmontar(tester);
+    }
   });
 }

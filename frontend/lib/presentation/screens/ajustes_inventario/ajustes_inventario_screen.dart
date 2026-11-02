@@ -122,13 +122,19 @@ class _AjustesInventarioScreenState extends State<AjustesInventarioScreen> {
                 if (_almacenes.isNotEmpty) ...[
                   Card(
                     margin: EdgeInsets.zero,
-                    color: SwsColors.blue100,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? SwsColors.darkCard
+                        : SwsColors.blue100,
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         'stocks_by_warehouse'.tr(),
-                        style: const TextStyle(
-                            fontSize: 12.5, color: SwsColors.gray700),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? SwsColors.darkText
+                              : SwsColors.gray700,
+                        ),
                       ),
                     ),
                   ),

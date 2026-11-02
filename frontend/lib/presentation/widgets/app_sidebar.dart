@@ -63,6 +63,9 @@ class AppSidebar extends StatefulWidget {
   static String traducir(String label, String lang) =>
       _AppSidebarState.traducir(label, lang);
 
+  static String traducirNodo(MenuNode node, String lang) =>
+      _AppSidebarState.traducirNodo(node, lang);
+
   @override
   State<AppSidebar> createState() => _AppSidebarState();
 }
@@ -180,7 +183,7 @@ class _AppSidebarState extends State<AppSidebar> {
       if (filtrados.isEmpty) continue;
       result.add(node.copyWith(children: filtrados));
     }
-    return result;
+    return MenuConfig.limpiarSeparadores(result);
   }
 
   static String traducir(String label, String lang) {
@@ -222,24 +225,47 @@ class _AppSidebarState extends State<AppSidebar> {
     return key != null ? AppTranslations.tr(key, langCode: lang) : label;
   }
 
-  String _traducir(BuildContext context, String label) {
+  static String traducirNodo(MenuNode node, String lang) {
+    if (node.i18n != null && node.i18n!.isNotEmpty) {
+      final key = node.i18n!;
+      final translated = AppTranslations.tr(key, langCode: lang);
+      if (translated != key) return translated;
+    }
+    return traducir(node.label, lang);
+  }
+
+  String _traducirNodo(BuildContext context, MenuNode node) {
     String lang = 'es';
     try {
       lang = Localizations.localeOf(context).languageCode;
     } catch (_) {}
-    return AppSidebar.traducir(label, lang);
+    return AppSidebar.traducirNodo(node, lang);
   }
 
   List<Widget> _buildNodes(
     List<MenuNode> nodes, {
     required String rol,
+    Set<String>? keysUsadas,
   }) {
     final widgets = <Widget>[];
+    final clavesOcupadas = keysUsadas ?? <String>{};
 
     for (final node in nodes) {
       if (node.esSeparador) {
+        // El separador es `const` en el árbol (sin identidad propia), así que la
+        // key se desambigua por ocurrencia: la primera se queda con la key
+        // estable `menu_separador` y las siguientes reciben sufijo numérico.
+        // Sin esto, dos separadores hermanos compartían key y Flutter lanzaba
+        // «Duplicate keys found» al construir la lista del menú.
+        var claveSeparador = 'menu_separador';
+        var n = 2;
+        while (!clavesOcupadas.add(claveSeparador)) {
+          claveSeparador = 'menu_separador_$n';
+          n++;
+        }
         widgets.add(
           Container(
+            key: Key(claveSeparador),
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             height: 1,
             width: double.infinity,
@@ -248,7 +274,7 @@ class _AppSidebarState extends State<AppSidebar> {
         );
         continue;
       }
-      final labelTraducido = _traducir(context, node.label);
+      final labelTraducido = _traducirNodo(context, node);
       if (node.isSectionHeader) {
         widgets.add(
           Padding(
@@ -266,7 +292,7 @@ class _AppSidebarState extends State<AppSidebar> {
         );
 
         if (node.children != null) {
-          widgets.addAll(_buildNodes(node.children!, rol: rol));
+          widgets.addAll(_buildNodes(node.children!, rol: rol, keysUsadas: clavesOcupadas));
         }
       } else if (node.isLeaf) {
         // El índice viene EXPLÍCITO en el nodo. No se calcula por orden.
@@ -274,9 +300,18 @@ class _AppSidebarState extends State<AppSidebar> {
         final idx = node.index;
         final isSelected = idx != null && widget.selectedIndex == idx;
 
+        final rawKey = 'menu_${node.clave ?? labelTraducido}';
+        final String leafKey;
+        if (clavesOcupadas.add(rawKey)) {
+          leafKey = rawKey;
+        } else {
+          leafKey = '${rawKey}_${node.label.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}';
+          clavesOcupadas.add(leafKey);
+        }
+
         widgets.add(
           _SidebarLeafTile(
-            key: Key('menu_${node.clave ?? labelTraducido}'),
+            key: Key(leafKey),
             icon: node.icon ?? Icons.circle_outlined,
             activeIcon: node.activeIcon ?? node.icon ?? Icons.circle_outlined,
             label: labelTraducido,
@@ -337,6 +372,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           .map((c) => c.copyWith(isSubItem: true))
                           .toList(),
                       rol: rol,
+                      keysUsadas: clavesOcupadas,
                     ),
                   ),
                 ),

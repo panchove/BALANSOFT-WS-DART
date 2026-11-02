@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/i18n/translations.dart';
 import '../../../core/security/device_info.dart';
 import '../../../core/widgets/brand_text.dart';
 import '../../../data/datasources/remote/api_client.dart';
@@ -194,11 +195,11 @@ class _SetupScreenState extends State<SetupScreen> {
   /// Valida campos básicos antes de pasar al paso 3 (credenciales).
   void _irACredenciales() {
     if ((_clientName ?? '').trim().isEmpty) {
-      setState(() => _error = 'La razón social es obligatoria.');
+      setState(() => _error = context.tr('setup_razon_social_required'));
       return;
     }
     if (_rifNitCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'El RIF/NIT es obligatorio.');
+      setState(() => _error = context.tr('setup_rif_required'));
       return;
     }
     setState(() {
@@ -226,9 +227,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 6),
-          TextField(
-            controller: TextEditingController(text: valor),
+          TextFormField(
+            key: ValueKey(valor),
+            initialValue: valor,
             enabled: false,
+            readOnly: true,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               filled: true,
@@ -404,10 +407,10 @@ class _SetupScreenState extends State<SetupScreen> {
                     children: [
                       const BrandText(size: 48, withTagline: true),
                       const SizedBox(height: 24),
-                      const Text(
-                        'Configuración Inicial',
+                      Text(
+                        context.tr('setup_inicial_titulo'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -415,7 +418,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Crea la cuenta de administrador de esta estación.',
+                        context.tr('setup_inicial_subtitulo'),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white70,
@@ -430,7 +433,7 @@ class _SetupScreenState extends State<SetupScreen> {
                           const CircularProgressIndicator(),
                           const SizedBox(height: 16),
                           Text(
-                            'Validando licencia con el License Manager...',
+                            context.tr('setup_validando_licencia'),
                             style: const TextStyle(color: Colors.white70),
                           ),
                         ] else ...[
@@ -438,12 +441,12 @@ class _SetupScreenState extends State<SetupScreen> {
                           const SizedBox(height: 16),
                           TextField(
                             controller: _licenseKeyCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'License Key',
+                            decoration: InputDecoration(
+                              labelText: context.tr('setup_license_key_label'),
                               hintText: 'BWS-XXXX-XXXX-XXXX-XXXX',
-                              prefixIcon: Icon(Icons.vpn_key_outlined,
+                              prefixIcon: const Icon(Icons.vpn_key_outlined,
                                               color: Colors.white70),
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                             ),
                             style: const TextStyle(color: Colors.white),
                           ),
@@ -457,13 +460,13 @@ class _SetupScreenState extends State<SetupScreen> {
                                         _licenseKeyCtrl.text.trim(),
                                       ),
                               icon: const Icon(Icons.refresh),
-                              label: const Text('Validar licencia'),
+                              label: Text(context.tr('setup_validar_licencia_btn')),
                             ),
                           ),
                           const SizedBox(height: 12),
                           TextButton(
                             onPressed: _cargando ? null : _validarLicenciaInicial,
-                            child: const Text('Usar clave guardada'),
+                            child: Text(context.tr('setup_usar_clave_guardada')),
                           ),
                         ],
                       ]
@@ -479,43 +482,43 @@ class _SetupScreenState extends State<SetupScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Datos del cliente (License Manager)',
-                                  style: TextStyle(
+                                Text(
+                                  context.tr('setup_datos_cliente'),
+                                  style: const TextStyle(
                                       color: Colors.white70, fontSize: 12),
                                 ),
                                 const SizedBox(height: 8),
                                 // Email: solo lectura (del LM)
                                 _campoSoloLectura(
-                                    'Email', _clientEmail ?? '(sin asignar)'),
+                                    'Email', _clientEmail ?? context.tr('setup_sin_asignar')),
                                 // Razón Social: solo lectura (del LM)
                                 _campoSoloLectura(
-                                    'Razón Social', _clientName ?? '(sin asignar)'),
+                                    context.tr('setup_razon_social'), _clientName ?? context.tr('setup_sin_asignar')),
                                 // RIF/NIT: editable y obligatorio
                                 _campoEditable(
                                   controller: _rifNitCtrl,
-                                  label: 'RIF/NIT',
-                                  hint: 'Ej. J-12345678-0',
+                                  label: context.tr('setup_rif_nit'),
+                                  hint: context.tr('setup_rif_nit_hint'),
                                   obligatorio: true,
                                 ),
                                 const SizedBox(height: 16),
                                 const Divider(color: Colors.white24),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  'Datos de la empresa',
-                                  style: TextStyle(
+                                Text(
+                                  context.tr('setup_datos_empresa'),
+                                  style: const TextStyle(
                                       color: Colors.white70, fontSize: 12),
                                 ),
                                 const SizedBox(height: 8),
                                 _campoEditable(
                                   controller: _direccionCtrl,
-                                  label: 'Dirección',
-                                  hint: 'Av. Principal, Edificio X',
+                                  label: context.tr('setup_direccion'),
+                                  hint: context.tr('setup_direccion_hint'),
                                 ),
                                 _campoEditable(
                                   controller: _telefonoCtrl,
-                                  label: 'Teléfono',
-                                  hint: '+58 212 123 4567',
+                                  label: context.tr('setup_telefono'),
+                                  hint: context.tr('setup_telefono_hint'),
                                 ),
                               ],
                             ),
@@ -527,13 +530,13 @@ class _SetupScreenState extends State<SetupScreen> {
                           child: FilledButton.icon(
                             onPressed: _enviando ? null : _irACredenciales,
                             icon: const Icon(Icons.arrow_forward),
-                            label: const Text('Siguiente'),
+                            label: Text(context.tr('setup_siguiente')),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextButton(
                           onPressed: _enviando ? null : () => setState(() => _paso = 1),
-                          child: const Text('Cambiar licencia'),
+                          child: Text(context.tr('setup_cambiar_licencia')),
                         ),
                       ]
 
@@ -546,22 +549,22 @@ class _SetupScreenState extends State<SetupScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Credenciales de administrador',
-                                  style: TextStyle(
+                                Text(
+                                  context.tr('setup_credenciales_admin'),
+                                  style: const TextStyle(
                                       color: Colors.white70, fontSize: 12),
                                 ),
                                 const SizedBox(height: 8),
                                 _campoPassword(
                                   controller: _passwordCtrl,
-                                  label: 'Contraseña',
-                                  hint: 'Mínimo 8 caracteres',
+                                  label: context.tr('setup_password'),
+                                  hint: context.tr('setup_password_hint'),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'La contraseña es obligatoria';
+                                      return context.tr('setup_password_required');
                                     }
                                     if (value.length < 8) {
-                                      return 'Mínimo 8 caracteres';
+                                      return context.tr('setup_password_hint');
                                     }
                                     return null;
                                   },
@@ -569,14 +572,14 @@ class _SetupScreenState extends State<SetupScreen> {
                                 const SizedBox(height: 12),
                                 _campoPassword(
                                   controller: _confirmPasswordCtrl,
-                                  label: 'Confirmar contraseña',
-                                  hint: 'Repite la contraseña',
+                                  label: context.tr('setup_password_confirm'),
+                                  hint: context.tr('setup_password_confirm_hint'),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'Confirma la contraseña';
+                                      return context.tr('setup_password_confirm_required');
                                     }
                                     if (value != _passwordCtrl.text) {
-                                      return 'Las contraseñas no coinciden';
+                                      return context.tr('setup_password_mismatch');
                                     }
                                     return null;
                                   },
@@ -591,13 +594,13 @@ class _SetupScreenState extends State<SetupScreen> {
                           child: FilledButton.icon(
                             onPressed: _enviando ? null : _crearCuenta,
                             icon: const Icon(Icons.login),
-                            label: const Text('Crear Cuenta e Iniciar Sesión'),
+                            label: Text(context.tr('setup_crear_cuenta_btn')),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextButton(
                           onPressed: _enviando ? null : () => setState(() => _paso = 2),
-                          child: const Text('Volver a empresa'),
+                          child: Text(context.tr('setup_volver_empresa')),
                         ),
                       ],
 

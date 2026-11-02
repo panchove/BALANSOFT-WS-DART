@@ -39,15 +39,17 @@ class _RegisterFormContentState extends State<RegisterFormContent> {
 
   void _onRegister() {
     if (_formKey.currentState?.validate() ?? false) {
-      context.read<AuthBloc>().add(RegisterEvent(
-            empresaNombre: _empresaNombreCtrl.text.trim(),
-            empresaRif: _empresaRifCtrl.text.trim(),
-            usuarioNombre: _usuarioNombreCtrl.text.trim(),
-            email: _emailCtrl.text.trim(),
-            password: _passwordCtrl.text,
-            licenciaKey: _licenciaCtrl.text.trim().isNotEmpty
-                ? _licenciaCtrl.text.trim()
-                : null,
+      context.read<AuthBloc>().add(SetupAdminEvent(
+            data: {
+              'empresa_nombre': _empresaNombreCtrl.text.trim(),
+              'empresa_rif': _empresaRifCtrl.text.trim(),
+              'usuario_nombre': _usuarioNombreCtrl.text.trim(),
+              'email': _emailCtrl.text.trim(),
+              'password': _passwordCtrl.text,
+              'licencia_key': _licenciaCtrl.text.trim().isNotEmpty
+                  ? _licenciaCtrl.text.trim()
+                  : null,
+            },
           ));
     }
   }

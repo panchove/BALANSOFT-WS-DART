@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
     try:
         async with AsyncSessionLocal() as db:
             res = await db.execute(
-                select(VinculoBalanzaIndicador).where(VinculoBalanzaIndicador.activo == True)
+                select(VinculoBalanzaIndicador).where(VinculoBalanzaIndicador.activo.is_(True))
             )
             for vinc in res.scalars().all():
                 try:
@@ -84,6 +84,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=API_VERSION,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
     lifespan=lifespan,
 )
 

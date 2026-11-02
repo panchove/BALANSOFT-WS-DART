@@ -9,7 +9,8 @@ import '../../../domain/entities/catalogs.dart';
 import '../../../injection.dart' as di;
 
 class SemaforosConfigTab extends StatefulWidget {
-  const SemaforosConfigTab({super.key});
+  final bool esAdmin;
+  const SemaforosConfigTab({super.key, this.esAdmin = true});
 
   @override
   State<SemaforosConfigTab> createState() => _SemaforosConfigTabState();

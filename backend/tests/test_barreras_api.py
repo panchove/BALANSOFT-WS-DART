@@ -9,7 +9,6 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-from sqlalchemy import select
 
 from app.api.dependencies import get_current_empresa, get_current_user
 from app.api.v1.endpoints import API_ROUTERS
@@ -200,10 +199,8 @@ async def test_actualizar_y_eliminar_barrera(client):
 async def test_aislamiento_multitenant(db, admin, empresa):
     # Crear otra empresa y una barrera perteneciente a ella
     otra_empresa = Empresa(
-        nombre="Otra Empresa SA",
-        rif=f"J-{uuid.uuid4().hex[:8]}",
-        pais="Venezuela",
-        moneda="USD",
+        nombre_fiscal="Otra Empresa SA",
+        rif_nit=f"J-{uuid.uuid4().hex[:8]}",
     )
     db.add(otra_empresa)
     await db.flush()

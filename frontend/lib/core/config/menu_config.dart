@@ -341,6 +341,7 @@ class MenuNode {
   /// Clave i18n explícita (`"i18n": "menu_inicio"`). Si viene, manda sobre el
   /// mapa label→clave; permite etiquetas personalizadas sin reescribir i18n.
   final String? claveI18n;
+  String? get i18n => claveI18n;
 
   const MenuNode({
     required this.label,
@@ -547,6 +548,14 @@ class MenuConfig {
           shortcut: 'F1',
           rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
         ),
+        MenuNode(
+          label: 'Peso Manual',
+          icon: Icons.scale_outlined,
+          activeIcon: Icons.scale,
+          accion: 'go:pesaje_manual',
+          shortcut: 'F2',
+          rolesPermitidos: {'ADMIN', 'OPERADOR', 'AUDITOR'},
+        ),
         MenuNode.separador(),
         MenuNode(
           label: 'Inventario',
@@ -701,7 +710,7 @@ class MenuConfig {
           icon: Icons.traffic_outlined,
           activeIcon: Icons.traffic,
           clave: 'dispositivos_semaforos',
-          index: 28,
+          index: 25,
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
@@ -709,7 +718,7 @@ class MenuConfig {
           icon: Icons.door_sliding,
           activeIcon: Icons.door_sliding,
           clave: 'dispositivos_barreras',
-          index: 31,
+          index: 27,
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
@@ -717,7 +726,7 @@ class MenuConfig {
           icon: Icons.photo_camera_outlined,
           activeIcon: Icons.photo_camera,
           clave: 'dispositivos_camaras',
-          index: 29,
+          index: 26,
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
@@ -725,7 +734,7 @@ class MenuConfig {
           icon: Icons.print_outlined,
           activeIcon: Icons.print,
           clave: 'dispositivos_impresoras',
-          index: 30,
+          index: 28,
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode(
@@ -733,7 +742,7 @@ class MenuConfig {
           icon: Icons.scale_outlined,
           activeIcon: Icons.scale,
           clave: 'dispositivos_basculas',
-          index: 13,
+          index: 23,
           shortcut: 'Alt+D',
           rolesPermitidos: {'ADMIN'},
         ),
@@ -742,7 +751,7 @@ class MenuConfig {
           icon: Icons.straighten_outlined,
           activeIcon: Icons.straighten,
           clave: 'dispositivos_indicadores',
-          index: 27,
+          index: 24,
           rolesPermitidos: {'ADMIN'},
         ),
         MenuNode.separador(),
@@ -766,7 +775,7 @@ class MenuConfig {
       ],
     ),
     MenuNode(
-      label: 'AYUDA',
+      label: 'AYUDA Y SOPORTE',
       isSectionHeader: true,
       children: [
         MenuNode(

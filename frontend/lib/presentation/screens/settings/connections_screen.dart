@@ -293,8 +293,9 @@ class _SetupBanner extends StatelessWidget {
       );
     }
 
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
     return Card(
-      color: SwsColors.blue100,
+      color: oscuro ? SwsColors.darkCard : SwsColors.blue100,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -38,6 +38,7 @@ from app.schemas import (
     LoginCentralRequest,
     LoginRequest,
     LoginResponse,
+    RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
     ValidateLicenseRequest,
@@ -107,6 +108,74 @@ async def _persistir_hardware_id(
         db.add(identidad)
     identidad.hardware_id = hardware_id
     identidad.ultima_validacion = datetime.now(UTC).replace(tzinfo=None)
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register(
+    payload: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Registra una empresa nueva y su primer usuario admin. Requiere una licencia válida."""
+    existente = (
+        await db.execute(select(Usuario).where(Usuario.email == payload.email.lower()))
+    ).scalar_one_or_none()
+    if existente:
+        raise HTTPException(status_code=400, detail="El email ya está registrado")
+
+    rif_existente = (
+        await db.execute(
+            select(Empresa).where(Empresa.rif_nit == payload.empresa_rif)
+        )
+    ).scalar_one_or_none()
+    if rif_existente:
+        raise HTTPException(status_code=400, detail="El RIF/NIT ya está registrado")
+
+    empresa = Empresa(
+        nombre_fiscal=payload.empresa_nombre,
+        nombre_comercial=payload.empresa_nombre,
+        rif_nit=payload.empresa_rif,
+        licencia_key=payload.licencia_key,
+    )
+
+    try:
+        info = await asyncio.to_thread(
+            get_license_client().check, payload.licencia_key
+        )
+        empresa.licencia_tier = info.get("tier")
+        empresa.licencia_status = info.get("status")
+    except LicenseError as e:
+        inc_license_error((empresa.licencia_tier or "UNKNOWN").upper(), "register")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo verificar la licencia en el LM: {e}",
+        ) from e
+
+    db.add(empresa)
+    await db.flush()
+
+    usuario = Usuario(
+        id_empresa=empresa.id_empresa,
+        nombre=payload.usuario_nombre,
+        email=payload.email.lower(),
+        password_hash=hash_password(payload.password),
+        rol="ADMIN",
+    )
+    db.add(usuario)
+    await db.commit()
+    await db.refresh(usuario)
+    await db.refresh(empresa)
+
+    await SeedService.sembrar_si_aplicable(db, empresa)
+
+    access = create_access_token(str(usuario.id_usuario), extra={"rol": usuario.rol})
+    refresh = create_refresh_token(str(usuario.id_usuario))
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "bearer",
+        "user": to_user_out(usuario).model_dump(),
+        "empresa": _company_out(empresa).model_dump(),
+    }
 
 
 @router.post("/login", response_model=LoginResponse)

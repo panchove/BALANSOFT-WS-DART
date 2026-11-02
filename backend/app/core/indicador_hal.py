@@ -28,7 +28,7 @@ class IndicadorSerialHAL(IndicadorHAL):
         self.baudrate = baudrate or 9600 
         self.timeout = float(timeout or 1.0)
         self.trama_formato = trama_formato
-        self._ser = None
+        self._ser: Any = None
 
     @classmethod
     def _lock_for(cls, puerto: str) -> threading.Lock:
@@ -68,7 +68,7 @@ class IndicadorSerialHAL(IndicadorHAL):
         if self.puerto.startswith("/") and not os.path.exists(self.puerto):
             return False
         
-        print(f"[HAL] Intentando escribir en {self.puerto} el peso {peso_kg}")
+        log.debug("[HAL] Intentando escribir en %s el peso %s", self.puerto, peso_kg)
         
         lock = self._lock_for(self.puerto)
         with lock:
@@ -83,15 +83,15 @@ class IndicadorSerialHAL(IndicadorHAL):
                     self._ser.open()
                     self._ser.dtr = False
                     self._ser.rts = False
-                    print(f"[HAL] Puerto {self.puerto} abierto")
+                    log.debug("[HAL] Puerto %s abierto", self.puerto)
 
                 data = self._formatear_trama(peso_kg, trama).encode("ascii", errors="ignore")
                 self._ser.write(data)
                 self._ser.flush()
-                print(f"[HAL] Enviado con éxito: {data}")
+                log.debug("[HAL] Enviado con éxito: %r", data)
                 return True
             except Exception as exc:
-                print(f"[HAL] ERROR al escribir: {exc}")
+                log.debug("[HAL] ERROR al escribir: %s", exc)
                 log.debug("indicador serial write fallo %s: %s", self.puerto, exc)
                 try:
                     if self._ser and self._ser.is_open:
@@ -107,7 +107,7 @@ class IndicadorSerialHAL(IndicadorHAL):
         el dispositivo responde (ej. la ESP32 devuelve "OK").
         """
         try:
-            import serial
+            import serial  # noqa: F401
         except ImportError:
             return {"conectado": False, "detalle": "pyserial no instalado"}
 
@@ -187,14 +187,14 @@ def get_indicador_hal(indicador) -> IndicadorHAL:  # noqa: ANN001
     proto = (getattr(indicador, "protocolo", None) or "").lower()
     if proto == "serial":
         return IndicadorSerialHAL(
-            puerto=getattr(indicador, "puerto_com") or "",
-            baudrate=int(getattr(indicador, "baudrate") or 9600),
+            puerto=indicador.puerto_com or "",
+            baudrate=int(indicador.baudrate or 9600),
         )
     if proto == "http":
         return IndicadorHttpHAL(
-            ip=getattr(indicador, "ip_address") or "127.0.0.1",
-            puerto=int(getattr(indicador, "puerto_tcp") or 80),
+            ip=indicador.ip_address or "127.0.0.1",
+            puerto=int(indicador.puerto_tcp or 80),
         )
-    if getattr(indicador, "puerto_com"):
-        return IndicadorSerialHAL(puerto=indicador.puerto_com, baudrate=getattr(indicador, "baudrate") or 9600)
-    return IndicadorHttpHAL(ip=getattr(indicador, "ip_address") or "127.0.0.1", puerto=getattr(indicador, "puerto_tcp") or 80)
+    if indicador.puerto_com:
+        return IndicadorSerialHAL(puerto=indicador.puerto_com, baudrate=indicador.baudrate or 9600)
+    return IndicadorHttpHAL(ip=indicador.ip_address or "127.0.0.1", puerto=indicador.puerto_tcp or 80)

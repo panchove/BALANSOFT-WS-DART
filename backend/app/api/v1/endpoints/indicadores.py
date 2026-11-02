@@ -21,7 +21,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
@@ -190,6 +190,14 @@ async def delete_indicador(
                 "indicador. Desenláncelas primero."
             ),
         )
+    # Limpiar cualquier vínculo remanente para este indicador
+    await db.execute(
+        delete(VinculoBalanzaIndicador).where(
+            VinculoBalanzaIndicador.id_empresa == empresa.id_empresa,
+            VinculoBalanzaIndicador.id_indicador == id_indicador,
+        )
+    )
+    await db.commit()
     await _SERVICE.delete(
         db,
         empresa.id_empresa,
@@ -308,13 +316,13 @@ async def _fijar_enlace(
             log.warning("No se pudo iniciar puente para vínculo %s: %s", vinculo.id_vinculo, exc)
     else:
         if vinculo is not None:
-            vinculo.activo = False
-            await db.commit()
             # Detener puente en caliente
             try:
                 await VINCULO_MGR.detener(vinculo.id_vinculo)
             except Exception as exc:
                 log.debug("Error deteniendo puente para vínculo %s: %s", vinculo.id_vinculo, exc)
+            await db.delete(vinculo)
+            await db.commit()
         else:
             await db.commit()
 

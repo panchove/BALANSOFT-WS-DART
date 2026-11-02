@@ -31,7 +31,9 @@ class VinculoManager:
         ev = asyncio.Event()
         self._stop[key] = ev
         self._estado[key] = "activo"
-        self._tasks[key] = asyncio.create_task(bridge.iniciar(db))
+        await bridge.iniciar(db)
+        if bridge._task is not None:
+            self._tasks[key] = bridge._task
 
     async def detener(self, id_vinculo: UUID):
         key = str(id_vinculo)

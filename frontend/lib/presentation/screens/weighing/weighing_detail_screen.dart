@@ -1120,10 +1120,12 @@ class _FotosBoletoState extends State<_FotosBoleto> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: SwsColors.blue100,
+              color: Theme.of(ctx).brightness == Brightness.dark
+                  ? SwsColors.darkCard
+                  : SwsColors.blue100,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Text(
-                'Foto · ${foto.tipo}',
+                '${'photo'.tr()} · ${foto.tipo}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),

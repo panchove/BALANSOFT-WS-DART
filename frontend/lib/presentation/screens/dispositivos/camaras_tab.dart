@@ -10,7 +10,8 @@ import '../../../injection.dart' as di;
 import '../../widgets/camara_preview.dart';
 
 class CamarasConfigTab extends StatefulWidget {
-  const CamarasConfigTab({super.key});
+  final bool esAdmin;
+  const CamarasConfigTab({super.key, this.esAdmin = true});
 
   @override
   State<CamarasConfigTab> createState() => _CamarasConfigTabState();

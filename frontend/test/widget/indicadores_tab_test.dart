@@ -6,13 +6,11 @@ import 'package:balansoft_ws/data/datasources/remote/api_client.dart';
 import 'package:balansoft_ws/injection.dart' as di;
 import 'package:balansoft_ws/presentation/screens/dispositivos/indicadores_tab.dart';
 
-/// Doble del `ApiClient` que sirve indicadores y básculas registradas.
-/// Ninguna prueba abre un socket.
+/// Doble del `ApiClient` que sirve indicadores registrados.
 class _FakeApiClient extends ApiClient {
-  _FakeApiClient({this.indicadores = const [], this.balanzas = const []});
+  _FakeApiClient({this.indicadores = const []});
 
   final List<Map<String, dynamic>> indicadores;
-  final List<Map<String, dynamic>> balanzas;
   final List<Map<String, dynamic>> llamadas = [];
 
   @override
@@ -21,9 +19,8 @@ class _FakeApiClient extends ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     llamadas.add(Map<String, dynamic>.from(queryParameters ?? const {}));
-    final data = path.endsWith('/indicadores') ? indicadores : balanzas;
     return Response(
-      data: data,
+      data: indicadores,
       requestOptions: RequestOptions(path: path),
     );
   }
@@ -32,18 +29,21 @@ class _FakeApiClient extends ApiClient {
 Map<String, dynamic> _indicadorJson({
   String id = 'uuid-i1',
   String descripcion = 'Indicador entrada',
+  String marca = 'Transcell',
+  String modelo = 'TI500E',
   bool activo = true,
   bool isSimulado = false,
   String? puertoCom,
   String protocolo = 'tcp',
   String? ipAddress = '192.168.1.50',
   int? puertoTcp = 5555,
+  int balanzasEnlazadas = 0,
 }) =>
     {
       'id_indicador': id,
       'descripcion': descripcion,
-      'marca': 'Transcell',
-      'modelo': 'TI500E',
+      'marca': marca,
+      'modelo': modelo,
       'activo': activo,
       'is_simulado': isSimulado,
       'protocolo': protocolo,
@@ -53,19 +53,7 @@ Map<String, dynamic> _indicadorJson({
       'formato_trama': 'auto',
       'baudrate': 9600,
       'delimitador': null,
-      'balanzas_enlazadas': 0,
-    };
-
-Map<String, dynamic> _balanzaJson({
-  String id = 'uuid-b1',
-  String descripcion = 'Báscula 1',
-  String? idIndicador,
-}) =>
-    {
-      'id_balanza': id,
-      'descripcion': descripcion,
-      'protocolo': 'tcp',
-      'id_indicador': idIndicador,
+      'balanzas_enlazadas': balanzasEnlazadas,
     };
 
 Future<void> _pumpTab(WidgetTester tester, _FakeApiClient fake) async {
@@ -86,93 +74,71 @@ void main() {
   testWidgets('lista los indicadores y su configuración', (tester) async {
     await _pumpTab(tester, _FakeApiClient(indicadores: [_indicadorJson()]));
 
-    expect(find.text('Indicador entrada'), findsOneWidget);
-    expect(find.text('TCP 192.168.1.50:5555'), findsOneWidget);
-    // Sin báscula enlazada.
-    expect(find.text('Sin báscula enlazada'), findsOneWidget);
+    expect(find.textContaining('Transcell TI500E'), findsOneWidget);
+    expect(find.textContaining('TCP 192.168.1.50:5555'), findsOneWidget);
+    expect(find.textContaining('Sin vincular'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('muestra la báscula enlazada al indicador', (tester) async {
-    await _pumpTab(
-      tester,
-      _FakeApiClient(
-        indicadores: [_indicadorJson()],
-        balanzas: [_balanzaJson(idIndicador: 'uuid-i1')],
-      ),
-    );
-
-    expect(find.text('Báscula: Báscula 1'), findsOneWidget);
-  });
-
-  testWidgets('la lista vacía invita a registrar un indicador', (tester) async {
-    await _pumpTab(tester, _FakeApiClient());
-
-    expect(
-      find.text('No hay indicadores registrados.\n'
-          'Registre el terminal de peso (marca y modelo) y enlácelo a su báscula.'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('el botón "Nuevo indicador" abre el formulario de alta',
+  testWidgets('muestra la vinculación cuando está enlazado a básculas',
       (tester) async {
-    await _pumpTab(tester, _FakeApiClient());
-
-    await tester.tap(find.byKey(const Key('indicadores_nuevo_vacio')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    expect(find.text('Nuevo indicador'), findsWidgets);
-    expect(find.text('Descripción'), findsOneWidget);
-    expect(find.text('Guardar indicador'), findsOneWidget);
-  });
-
-  testWidgets('un indicador inactivo se marca OFF', (tester) async {
     await _pumpTab(
       tester,
       _FakeApiClient(
-        indicadores: [_indicadorJson(activo: false, isSimulado: false)],
+        indicadores: [_indicadorJson(balanzasEnlazadas: 2)],
       ),
     );
 
-    expect(find.text('OFF'), findsOneWidget);
-    expect(find.text('SIM'), findsNothing);
+    expect(find.textContaining('Vinculado a 2 báscula(s)'), findsOneWidget);
   });
 
-  testWidgets('la vista trae su barra de filtros', (tester) async {
+  testWidgets('la lista vacía muestra el estado sin indicadores',
+      (tester) async {
+    await _pumpTab(tester, _FakeApiClient(indicadores: const []));
+
+    expect(find.textContaining('Sin indicadores configurados'), findsOneWidget);
+  });
+
+  testWidgets('el botón crear abre el formulario de alta', (tester) async {
+    await _pumpTab(tester, _FakeApiClient());
+
+    final botonCrear = find.widgetWithText(OutlinedButton, 'Crear Indicador');
+    expect(botonCrear, findsOneWidget);
+    await tester.tap(botonCrear);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Crear Indicador'), findsWidgets);
+    expect(find.text('Descripción *'), findsOneWidget);
+    expect(find.text('Marca'), findsOneWidget);
+  });
+
+  testWidgets('el campo de búsqueda filtra localmente por texto',
+      (tester) async {
+    final fake = _FakeApiClient(
+      indicadores: [
+        _indicadorJson(id: '1', marca: 'Transcell', modelo: 'TI500E'),
+        _indicadorJson(id: '2', marca: 'Cardinal', modelo: '225', descripcion: 'Cardinal 225'),
+      ],
+    );
+    await _pumpTab(tester, fake);
+
+    expect(find.textContaining('Transcell TI500E'), findsOneWidget);
+    expect(find.textContaining('Cardinal 225'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Cardinal');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Cardinal 225'), findsOneWidget);
+    expect(find.textContaining('Transcell TI500E'), findsNothing);
+  });
+
+  testWidgets('tocar una tarjeta abre el detalle del indicador',
+      (tester) async {
     await _pumpTab(tester, _FakeApiClient(indicadores: [_indicadorJson()]));
 
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Todos'), findsNWidgets(3));
-  });
+    await tester.tap(find.textContaining('Transcell TI500E'));
+    await tester.pumpAndSettle();
 
-  testWidgets('el texto de búsqueda viaja a la API como query parameter',
-      (tester) async {
-    final fake = _FakeApiClient(indicadores: [_indicadorJson()]);
-    await _pumpTab(tester, fake);
-
-    await tester.enterText(find.byType(TextField), 'Transcell');
-    await tester.pump(const Duration(milliseconds: 400));
-
-    final conTexto = fake.llamadas.lastWhere(
-      (q) => (q['q'] as String?)?.isNotEmpty ?? false,
-      orElse: () => const {},
-    );
-    expect(conTexto['q'], 'Transcell');
-  });
-
-  testWidgets('el filtro de canal viaja como protocolo', (tester) async {
-    final fake = _FakeApiClient(indicadores: [_indicadorJson()]);
-    await _pumpTab(tester, fake);
-
-    await tester.tap(find.text('TCP'));
-    await tester.pump(const Duration(milliseconds: 400));
-
-    final conFiltro = fake.llamadas.lastWhere(
-      (q) => q['protocolo'] == 'tcp',
-      orElse: () => const {},
-    );
-    expect(conFiltro['protocolo'], 'tcp');
+    expect(find.textContaining('Sin vincular a ninguna báscula'), findsOneWidget);
   });
 }

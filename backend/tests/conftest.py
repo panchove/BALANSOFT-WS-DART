@@ -95,12 +95,17 @@ async def empresa(db: AsyncSession) -> Empresa:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _cerrar_sesiones_balanza():
-    """Cierra las sesiones persistentes de balanza tras cada test.
+    """Cierra las sesiones persistentes de balanza y puentes tras cada test.
 
-    El registro de sesiones es global; sin esto, una conexión viva con el
-    servidor TCP de un test podría filtrarse al siguiente.
+    El registro de sesiones y puentes es global; sin esto, una conexión viva con el
+    servidor TCP o tarea en segundo plano de un test podría filtrarse al siguiente.
     """
     from app.core.scale_session import get_scale_session_manager
+    from app.services.vinculo_service import VINCULO_MGR
 
     yield
+    try:
+        await VINCULO_MGR.detener_todos()
+    except Exception:
+        pass
     await get_scale_session_manager().cerrar_todas()

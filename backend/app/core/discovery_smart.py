@@ -4,7 +4,6 @@ import glob
 import logging
 import os
 import socket
-from typing import Any
 
 log = logging.getLogger("balansoft_ws.discovery")
 

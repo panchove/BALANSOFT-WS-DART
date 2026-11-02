@@ -19,6 +19,11 @@ import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/accesos_repository.dart';
 import 'data/repositories/kardex_repository.dart';
 import 'data/repositories/license_repository.dart';
+import 'domain/repositories/i_auth_repository.dart';
+import 'domain/repositories/i_weighing_repository.dart';
+import 'domain/repositories/i_license_repository.dart';
+import 'domain/repositories/i_catalog_repository.dart';
+import 'domain/repositories/i_kardex_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/weighing_usecases.dart';
 import 'domain/usecases/catalog_usecases.dart';
@@ -51,24 +56,29 @@ Future<void> init() async {
         localStorage: sl(),
         secureStorage: sl(),
       ));
+  sl.registerLazySingleton<IAuthRepository>(() => sl<AuthRepository>());
   sl<ApiClient>().onUnauthorized(() => sl<AuthRepository>().refreshAccessToken());
   sl.registerLazySingleton<WeighingRepository>(() => WeighingRepository(
         apiClient: sl(),
         dbHelper: sl(),
         connectivity: connectivity,
       ));
+  sl.registerLazySingleton<IWeighingRepository>(() => sl<WeighingRepository>());
   sl.registerLazySingleton<LicenseRepository>(() => LicenseRepository(
         apiClient: sl(),
         localStorage: sl(),
         connectivity: connectivity,
       ));
+  sl.registerLazySingleton<ILicenseRepository>(() => sl<LicenseRepository>());
   sl.registerLazySingleton<CatalogRepository>(() => CatalogRepository(
         apiClient: sl(),
         dbHelper: sl(),
         connectivity: connectivity,
       ));
+  sl.registerLazySingleton<ICatalogRepository>(() => sl<CatalogRepository>());
   sl.registerLazySingleton<KardexRepository>(
       () => KardexRepository(apiClient: sl<ApiClient>()));
+  sl.registerLazySingleton<IKardexRepository>(() => sl<KardexRepository>());
   sl.registerLazySingleton<AccesosRepository>(() => AccesosRepository(
         apiClient: sl(),
         localStorage: sl(),
