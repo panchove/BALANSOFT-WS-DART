@@ -287,7 +287,7 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
       ? SwsColors.success
       : esAmarillo
           ? SwsColors.warning
-          : SwsColors.gray500;   // ← gris en vez de rojo
+          : SwsColors.gray500;
     final estadoTexto = esVerde
         ? context.tr('Estable')
         : esAmarillo
@@ -303,8 +303,6 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
 
     final fuenteActual = kDisplayFonts[_fontIndex.clamp(0, kDisplayFonts.length - 1)];
 
-    // El engranaje aparece si hay algo que configurar: fuente, velocidad serial
-    // de la báscula o frecuencia de refresco.
     final puedeConfigurar = widget.permitirCambiarFuente ||
         (widget.baudrate != null && widget.onBaudrateCambiado != null) ||
         widget.onIntervaloCambiado != null;
@@ -336,25 +334,33 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    // Altura fija para evitar saltos en la cabecera
                     children: [
-                      Text(
-                        context.tr(widget.label),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
+                      SizedBox(
+                        height: 20,
+                        child: Text(
+                          context.tr(widget.label),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        '${cliente.host}:${cliente.port} · $estadoTexto',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: conectado
-                              ? estadoColor
-                              : SwsColors.gray500,   // ← gris cuando está desconectado
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(height: 2),
+                      SizedBox(
+                        height: 16,
+                        child: Text(
+                          '${cliente.host}:${cliente.port} · $estadoTexto',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: conectado
+                                ? estadoColor
+                                : SwsColors.gray500,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -498,7 +504,11 @@ class _DisplayIndicador extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _colorDigitos();
-    final texto = peso.toStringAsFixed(2);
+    
+    // padLeft asegura que el texto ocupe siempre el mismo ancho, evitando 
+    // que se expanda y contraiga al cambiar entre 0.00 y 1043.00
+    final texto = peso.toStringAsFixed(2).padLeft(8);
+    
     final apagado = color == const Color(0xFF3A3A3A);
 
     List<Shadow>? glowShadows([double base = 1.0]) {
@@ -518,7 +528,9 @@ class _DisplayIndicador extends StatelessWidget {
     return Stack(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          // ALTURA FIJA: Evita que el widget cambie de tamaño
+          height: 110, 
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: const Color(0xFF0D0D0D),
             borderRadius: BorderRadius.circular(10),
@@ -578,11 +590,11 @@ class _DisplayIndicador extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Text(
-                unidad.toUpperCase(),
+                unidad,
                 style: TextStyle(
-                  fontFamily: fontFamily,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w400,
+                  fontFamily: 'Roboto',
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                   height: 1.0,
                   letterSpacing: 1,
                   color: apagado ? color : color.withValues(alpha: 0.9),
