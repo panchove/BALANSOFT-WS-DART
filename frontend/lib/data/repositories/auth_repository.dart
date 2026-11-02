@@ -328,6 +328,8 @@ class AuthRepository implements IAuthRepository {
       await _localStorage.saveUser(user);
     }
 
+    await AppConfig.setOnboardingCompletado(true);
+
     return true;
   }
 

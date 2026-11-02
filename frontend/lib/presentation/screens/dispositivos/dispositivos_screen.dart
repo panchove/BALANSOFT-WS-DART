@@ -635,7 +635,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
         final idBascula = v['id_bascula']?.toString() ?? 
                           v['bascula']?['id_balanza']?.toString() ?? 
                           v['bascula_id']?.toString() ?? '';
-        return idBascula == widget.balanza.id;
+        return idBascula.toLowerCase() == widget.balanza.id.toLowerCase();
       }).toList();
       
       debugPrint('VINCULOS FILTRADOS: $filtrados');
@@ -661,7 +661,7 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       widget.onGuardado();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vínculo activado correctamente. Reinicie el backend para aplicar los cambios.'), backgroundColor: SwsColors.success),
+        const SnackBar(content: Text('Vínculo activado correctamente.'), backgroundColor: SwsColors.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -807,9 +807,9 @@ class _BalanzaDetailSheetState extends State<_BalanzaDetailSheet> {
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Configuración guardada y vínculo activado. Reinicie el backend para aplicar los cambios.'),
-          duration: const Duration(seconds: 4),
+        const SnackBar(
+          content: Text('Configuración guardada y vínculo activado.'),
+          duration: Duration(seconds: 4),
           backgroundColor: SwsColors.success,
         ),
       );

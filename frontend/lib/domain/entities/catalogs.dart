@@ -430,6 +430,28 @@ class Scale {
         'id_indicador': idIndicador,
       };
 
+  /// Copia con la velocidad serial sustituida (ajuste rápido desde el
+  /// engranaje del display del pesaje, sin reescribir el resto de la config).
+  Scale copyWith({int? baudrate}) => Scale(
+        id: id,
+        descripcion: descripcion,
+        codigo: codigo,
+        marca: marca,
+        modelo: modelo,
+        capacidadMax: capacidadMax,
+        division: division,
+        activo: activo,
+        isSimulada: isSimulada,
+        puertoCom: puertoCom,
+        ipAddress: ipAddress,
+        puertoTcp: puertoTcp,
+        protocolo: protocolo,
+        formatoTrama: formatoTrama,
+        baudrate: baudrate ?? this.baudrate,
+        delimitador: delimitador,
+        idIndicador: idIndicador,
+      );
+
   String get etiqueta => codigo != null ? '$codigo - $descripcion' : descripcion;
 
   /// Ej.: `TCP 192.168.0.50:5555` o `SERIAL /dev/ttyUSB0`.

@@ -109,4 +109,49 @@ void main() {
     await sub.cancel();
     await server.close();
   });
+
+  group('frecuencia de refresco del display', () {
+    test('por defecto sondea cada 2 s', () {
+      final client = ScaleApiClient(
+        datasource: _FakeScaleDatasource((_) async => _peso(1)),
+      );
+      expect(client.intervalo, ScaleApiClient.intervaloPorDefecto);
+      expect(client.intervalo, const Duration(seconds: 2));
+      client.dispose();
+    });
+
+    test('setIntervalo aplica el valor y respeta el suelo mínimo', () {
+      final client = ScaleApiClient(
+        datasource: _FakeScaleDatasource((_) async => _peso(1)),
+      );
+
+      client.setIntervalo(const Duration(milliseconds: 250));
+      expect(client.intervalo, const Duration(milliseconds: 250));
+
+      client.setIntervalo(const Duration(milliseconds: 1));
+      expect(client.intervalo, ScaleApiClient.intervaloMinimo);
+      client.dispose();
+    });
+
+    test('bajar el intervalo acelera el sondeo efectivo del HAL', () async {
+      var lecturas = 0;
+      final client = ScaleApiClient(
+        datasource: _FakeScaleDatasource((_) async {
+          lecturas++;
+          return _peso(10);
+        }),
+      );
+      client.configurarApi(balanzaId: 'b1');
+      // 100 ms es el suelo del sondeo (`intervaloMinimo`).
+      client.setIntervalo(const Duration(milliseconds: 100));
+
+      await client.conectar();
+      final inicial = lecturas;
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+
+      // Con 100 ms en 450 ms debe haber sondeado varias veces más.
+      expect(lecturas, greaterThan(inicial + 1));
+      client.dispose();
+    });
+  });
 }

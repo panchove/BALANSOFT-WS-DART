@@ -35,6 +35,22 @@ const List<DisplayFont> kDisplayFonts = [
   DisplayFont('Monoespaciada (sistema)', null),
 ];
 
+/// Velocidades serie admitidas por el `CHECK ck_balanzas_baudrate` de la BD.
+/// Cualquier otro valor lo rechazaría Pydantic (422) y la base de datos.
+const List<int> kScaleBaudrates = [
+  1200,
+  2400,
+  4800,
+  9600,
+  19200,
+  38400,
+  57600,
+  115200,
+];
+
+/// Frecuencias de refresco del display cuando el peso llega por API (ms).
+const List<int> kMonitorRefreshMs = [250, 500, 1000, 2000];
+
 /// Widget que muestra el peso en tiempo real proveniente de la balanza (BSDD).
 /// Con `balanzaId` lee vía el HAL del backend (API); sin él cae a TCP directo.
 ///
@@ -53,6 +69,27 @@ class ScaleMonitorWidget extends StatefulWidget {
   /// Permite elegir la fuente del display desde el engranaje.
   final bool permitirCambiarFuente;
 
+  /// Velocidad serial (baudios) **actual** de la báscula que alimenta el
+  /// display. `null` → el engranaje no ofrece el ajuste (báscula TCP, que no
+  /// usa puerto serie, o formulario sin báscula seleccionada).
+  final int? baudrate;
+
+  /// Guarda la nueva velocidad y devuelve cuando terminó. `null` → el ajuste
+  /// no se muestra. La persistencia (PUT `/balanzas/{id}`) la hace el padre:
+  /// el widget solo es UI.
+  final Future<void> Function(int baudrate)? onBaudrateCambiado;
+
+  /// `false` para roles sin permiso de edición (la API exige ADMIN): el
+  /// selector se muestra deshabilitado y con el motivo, para que el operador
+  /// entienda por qué no puede tocarlo.
+  final bool puedeEditarBaudrate;
+
+  /// Frecuencia de refresco del display cuando el peso llega por API.
+  final Duration intervaloActualizacion;
+
+  /// Aviso al elegir otra frecuencia. `null` → no se ofrece el ajuste.
+  final ValueChanged<Duration>? onIntervaloCambiado;
+
   const ScaleMonitorWidget({
     super.key,
     required this.client,
@@ -63,6 +100,11 @@ class ScaleMonitorWidget extends StatefulWidget {
     this.balanzaId,
     this.balanzaDescripcion,
     this.permitirCambiarFuente = true,
+    this.baudrate,
+    this.onBaudrateCambiado,
+    this.puedeEditarBaudrate = false,
+    this.intervaloActualizacion = ScaleApiClient.intervaloPorDefecto,
+    this.onIntervaloCambiado,
   });
 
   @override
@@ -76,10 +118,14 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
   /// Índice de la fuente seleccionada en [kDisplayFonts].
   int _fontIndex = 0;
 
+  /// Frecuencia de refresco vigente (se aplica al cliente de API).
+  late Duration _intervalo = widget.intervaloActualizacion;
+
   @override
   void initState() {
     super.initState();
     _configurarCliente();
+    _aplicarIntervalo();
     widget.client.addListener(_onCambioPeso);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -91,6 +137,10 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
   @override
   void didUpdateWidget(ScaleMonitorWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.intervaloActualizacion != widget.intervaloActualizacion) {
+      _intervalo = widget.intervaloActualizacion;
+      _aplicarIntervalo();
+    }
     if (oldWidget.balanzaId != widget.balanzaId ||
         oldWidget.balanzaDescripcion != widget.balanzaDescripcion) {
       _configurarCliente();
@@ -110,6 +160,13 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
         descripcion: widget.balanzaDescripcion ?? '',
       );
     }
+  }
+
+  /// Traslada la frecuencia elegida al sondeo del HAL (solo API; el TCP
+  /// directo ya empuja cada trama que llega).
+  void _aplicarIntervalo() {
+    final cliente = widget.client;
+    if (cliente is ScaleApiClient) cliente.setIntervalo(_intervalo);
   }
 
   @override
@@ -157,52 +214,61 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
     );
   }
 
-  /// Abre un menú desplegable con las fuentes disponibles.
-  Future<void> _abrirMenuFuentes() async {
-    final seleccionado = await showMenu<int>(
+  /// Abre el diálogo de configuración del display: fuente, velocidad serial de
+  /// la báscula y frecuencia de refresco del monitor.
+  ///
+  /// El widget es solo UI: la velocidad la persiste el padre (PUT
+  /// `/balanzas/{id}`) y la frecuencia, la estación (preferencia local).
+  Future<void> _abrirConfiguracion() async {
+    final resultado = await showDialog<_ConfigDisplay>(
       context: context,
-      position: const RelativeRect.fromLTRB(0, 0, 0, 0),
-      items: [
-        const PopupMenuItem<int>(
-          enabled: false,
-          height: 32,
-          child: Text(
-            'Fuente del display',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-        ),
-        const PopupMenuDivider(),
-        for (var i = 0; i < kDisplayFonts.length; i++)
-          PopupMenuItem<int>(
-            value: i,
-            child: Row(
-              children: [
-                Icon(
-                  i == _fontIndex
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  size: 18,
-                  color: i == _fontIndex ? SwsColors.success : null,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    kDisplayFonts[i].label,
-                    style: TextStyle(
-                      fontFamily: kDisplayFonts[i].fontFamily,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
+      builder: (_) => _ConfigDisplayDialog(
+        fontIndex: _fontIndex,
+        permitirFuente: widget.permitirCambiarFuente,
+        baudrate: widget.baudrate,
+        puedeEditarBaudrate: widget.puedeEditarBaudrate,
+        intervaloMs: _intervalo.inMilliseconds,
+        permitirIntervalo: widget.onIntervaloCambiado != null,
+      ),
     );
+    if (resultado == null || !mounted) return;
 
-    if (seleccionado != null && mounted) {
-      setState(() => _fontIndex = seleccionado);
+    if (resultado.fontIndex != _fontIndex) {
+      setState(() => _fontIndex = resultado.fontIndex);
     }
+
+    final baudrate = resultado.baudrate;
+    final cambiarBaudrate = baudrate != null &&
+        baudrate != widget.baudrate &&
+        widget.onBaudrateCambiado != null;
+    if (cambiarBaudrate) {
+      try {
+        await widget.onBaudrateCambiado!(baudrate);
+        if (!mounted) return;
+        _avisar('display_baudrate_ok'.tr().replaceFirst('{}', '$baudrate'));
+      } catch (_) {
+        if (!mounted) return;
+        _avisar('display_baudrate_error'.tr(), error: true);
+      }
+    }
+
+    if (resultado.intervaloMs != _intervalo.inMilliseconds) {
+      final nuevo = Duration(milliseconds: resultado.intervaloMs);
+      setState(() => _intervalo = nuevo);
+      _aplicarIntervalo();
+      widget.onIntervaloCambiado?.call(nuevo);
+    }
+  }
+
+  void _avisar(String texto, {bool error = false}) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(texto),
+        backgroundColor: error ? SwsColors.danger : SwsColors.success,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -236,6 +302,12 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
             : Icons.wifi_off;
 
     final fuenteActual = kDisplayFonts[_fontIndex.clamp(0, kDisplayFonts.length - 1)];
+
+    // El engranaje aparece si hay algo que configurar: fuente, velocidad serial
+    // de la báscula o frecuencia de refresco.
+    final puedeConfigurar = widget.permitirCambiarFuente ||
+        (widget.baudrate != null && widget.onBaudrateCambiado != null) ||
+        widget.onIntervaloCambiado != null;
 
     return Container(
       width: double.infinity,
@@ -316,8 +388,8 @@ class _ScaleMonitorWidgetState extends State<ScaleMonitorWidget> {
               conectado: conectado,
               status: status,
               fontFamily: fuenteActual.fontFamily,
-              onAbrirFuentes:
-                  widget.permitirCambiarFuente ? _abrirMenuFuentes : null,
+              onAbrirConfiguracion:
+                  puedeConfigurar ? _abrirConfiguracion : null,
             ),
             const SizedBox(height: 8),
 
@@ -395,7 +467,7 @@ class _DisplayIndicador extends StatelessWidget {
   final String? fontFamily;
 
   /// Callback del engranaje. Null → no se muestra el botón.
-  final VoidCallback? onAbrirFuentes;
+  final VoidCallback? onAbrirConfiguracion;
 
   const _DisplayIndicador({
     required this.peso,
@@ -404,7 +476,7 @@ class _DisplayIndicador extends StatelessWidget {
     required this.conectado,
     required this.status,
     this.fontFamily,
-    this.onAbrirFuentes,
+    this.onAbrirConfiguracion,
   });
 
   Color _colorDigitos() {
@@ -521,18 +593,18 @@ class _DisplayIndicador extends StatelessWidget {
           ),
         ),
 
-        // ── Engranaje para cambiar la fuente (esquina superior derecha) ──
-        if (onAbrirFuentes != null)
+        // ── Engranaje de configuración (esquina superior derecha) ────────
+        if (onAbrirConfiguracion != null)
           Positioned(
             top: 2,
             right: 2,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: onAbrirFuentes,
+                onTap: onAbrirConfiguracion,
                 borderRadius: BorderRadius.circular(20),
                 child: Tooltip(
-                  message: 'Cambiar fuente del display',
+                  message: context.tr('display_config_title'),
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     child: const Icon(
@@ -647,4 +719,186 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TrianglePainter old) => old.color != color;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Diálogo de configuración del display (fuente · baudios · refresco)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Valores elegidos en el diálogo de configuración del display.
+class _ConfigDisplay {
+  final int fontIndex;
+  final int? baudrate;
+  final int intervaloMs;
+
+  const _ConfigDisplay({
+    required this.fontIndex,
+    this.baudrate,
+    required this.intervaloMs,
+  });
+}
+
+class _ConfigDisplayDialog extends StatefulWidget {
+  final int fontIndex;
+  final bool permitirFuente;
+  final int? baudrate;
+  final bool puedeEditarBaudrate;
+  final int intervaloMs;
+  final bool permitirIntervalo;
+
+  const _ConfigDisplayDialog({
+    required this.fontIndex,
+    required this.permitirFuente,
+    required this.baudrate,
+    required this.puedeEditarBaudrate,
+    required this.intervaloMs,
+    required this.permitirIntervalo,
+  });
+
+  @override
+  State<_ConfigDisplayDialog> createState() => _ConfigDisplayDialogState();
+}
+
+class _ConfigDisplayDialogState extends State<_ConfigDisplayDialog> {
+  late int _fontIndex = widget.fontIndex;
+  late int? _baudrate = widget.baudrate;
+  late int _intervaloMs = widget.intervaloMs;
+
+  /// Etiqueta legible de una frecuencia de refresco.
+  String _etiquetaIntervalo(int ms) {
+    if (ms % 1000 == 0) return '${ms ~/ 1000} s';
+    return '$ms ms';
+  }
+
+  Widget _titulo(BuildContext context, String clave) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text(
+          context.tr(clave),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+      );
+
+  Widget _ayuda(BuildContext context, String clave, {bool aviso = false}) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          context.tr(clave),
+          style: TextStyle(
+            fontSize: 11.5,
+            color: aviso
+                ? SwsColors.warning
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final tieneBaudrate = widget.baudrate != null;
+    final opcionesBaudrate = <int>{
+      ...kScaleBaudrates,
+      if (widget.baudrate != null) widget.baudrate!,
+    }.toList()
+      ..sort();
+    final opcionesRefresco = <int>{
+      ...kMonitorRefreshMs,
+      _intervaloMs,
+    }.toList()
+      ..sort();
+
+    return AlertDialog(
+      title: Text(context.tr('display_config_title')),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.permitirFuente) ...[
+                _titulo(context, 'display_config_font'),
+                DropdownButtonFormField<int>(
+                  key: const Key('display_font_dropdown'),
+                  initialValue: _fontIndex,
+                  isExpanded: true,
+                  items: [
+                    for (var i = 0; i < kDisplayFonts.length; i++)
+                      DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(
+                          kDisplayFonts[i].label,
+                          style: TextStyle(fontFamily: kDisplayFonts[i].fontFamily),
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _fontIndex = v ?? _fontIndex),
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (tieneBaudrate) ...[
+                _titulo(context, 'display_config_baudrate'),
+                DropdownButtonFormField<int>(
+                  key: const Key('display_baudrate_dropdown'),
+                  initialValue: _baudrate,
+                  isExpanded: true,
+                  items: [
+                    for (final b in opcionesBaudrate)
+                      DropdownMenuItem<int>(value: b, child: Text('$b')),
+                  ],
+                  onChanged: widget.puedeEditarBaudrate
+                      ? (v) => setState(() => _baudrate = v ?? _baudrate)
+                      : null,
+                ),
+                _ayuda(
+                  context,
+                  widget.puedeEditarBaudrate
+                      ? 'display_config_baudrate_help'
+                      : 'display_config_baudrate_admin_only',
+                  aviso: !widget.puedeEditarBaudrate,
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (widget.permitirIntervalo) ...[
+                _titulo(context, 'display_config_refresh'),
+                DropdownButtonFormField<int>(
+                  key: const Key('display_refresh_dropdown'),
+                  initialValue: _intervaloMs,
+                  isExpanded: true,
+                  items: [
+                    for (final ms in opcionesRefresco)
+                      DropdownMenuItem<int>(
+                        value: ms,
+                        child: Text(_etiquetaIntervalo(ms)),
+                      ),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _intervaloMs = v ?? _intervaloMs),
+                ),
+                _ayuda(context, 'display_config_refresh_help'),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('display_config_cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.tr('cancel')),
+        ),
+        FilledButton(
+          key: const Key('display_config_apply'),
+          onPressed: () => Navigator.of(context).pop(
+            _ConfigDisplay(
+              fontIndex: _fontIndex,
+              baudrate: tieneBaudrate ? _baudrate : null,
+              intervaloMs: _intervaloMs,
+            ),
+          ),
+          child: Text(context.tr('apply')),
+        ),
+      ],
+    );
+  }
 }

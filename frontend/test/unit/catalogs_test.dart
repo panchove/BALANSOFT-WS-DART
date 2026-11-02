@@ -111,6 +111,31 @@ void main() {
       });
       expect(sinIndicador.idIndicador, isNull);
     });
+
+    test('copyWith(baudrate) solo cambia la velocidad', () {
+      final s = Scale.fromJson({
+        'id_balanza': 'uuid-b6',
+        'descripcion': 'Báscula serial',
+        'puerto_com': '/dev/ttyUSB0',
+        'protocolo': 'serial',
+        'baudrate': 9600,
+        'delimitador': 'lf',
+        'id_indicador': 'uuid-i6',
+      });
+
+      final nueva = s.copyWith(baudrate: 19200);
+
+      expect(nueva.baudrate, 19200);
+      // El resto de la configuración se conserva (el PUT reemplaza el cuerpo).
+      expect(nueva.id, s.id);
+      expect(nueva.descripcion, s.descripcion);
+      expect(nueva.puertoCom, '/dev/ttyUSB0');
+      expect(nueva.protocolo, 'serial');
+      expect(nueva.delimitador, 'lf');
+      expect(nueva.idIndicador, 'uuid-i6');
+      // El original no se muta.
+      expect(s.baudrate, 9600);
+    });
   });
 
   group('PruebaConexion.fromJson', () {

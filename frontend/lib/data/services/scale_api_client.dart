@@ -21,10 +21,38 @@ class ScaleApiClient extends ScaleTcpClient {
   PesoEnVivo? _apiPeso;
   String _apiError = '';
 
-  static const Duration _intervalo = Duration(seconds: 2);
+  /// Frecuencia con la que se pide el peso al HAL cuando no se elige otra en
+  /// el engranaje del display (2 s: la más conservadora con el servidor).
+  static const Duration intervaloPorDefecto = Duration(seconds: 2);
+
+  /// Suelo del sondeo: por debajo, el display no gana fluidez y solo se
+  /// multiplican las peticiones al backend.
+  static const Duration intervaloMinimo = Duration(milliseconds: 100);
+
+  Duration _intervalo = intervaloPorDefecto;
 
   String? get balanzaId => _balanzaId;
   bool get usaApi => !_usandoTcp;
+
+  /// Frecuencia de refresco vigente del display.
+  Duration get intervalo => _intervalo;
+
+  /// Cambia la frecuencia de sondeo del HAL (`/weighing/scale/{id}/live`).
+  ///
+  /// El sondeo es del **cliente**: el backend ya mantiene la sesión de la
+  /// báscula viva y sirve el último peso cacheado, así que bajarlo no castiga
+  /// el puerto serie. Si el sondeo está activo se reinicia el temporizador
+  /// para que el cambio surta efecto sin reconectar la báscula.
+  void setIntervalo(Duration nuevo) {
+    final valor = nuevo < intervaloMinimo ? intervaloMinimo : nuevo;
+    if (valor == _intervalo) return;
+    _intervalo = valor;
+    if (_pollTimer != null) {
+      _pollTimer!.cancel();
+      _pollTimer = Timer.periodic(_intervalo, (_) => _leerEnVivo());
+    }
+    notifyListeners();
+  }
 
   /// Define la balanza a leer vía API (HAL). Sin id → se usa TCP directo.
   void configurarApi({String? balanzaId, String descripcion = ''}) {

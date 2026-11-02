@@ -22,6 +22,7 @@ class LocalStorage {
   static const _scalePortKey = 'scale_port';
   static const _accesosKey = 'cached_matriz_accesos';
   static const _printerPresetKey = 'printer_preset';
+  static const _monitorRefreshKey = 'monitor_refresh_ms';
 
   final SecureStorageService _secure;
 
@@ -74,6 +75,19 @@ class LocalStorage {
     final host = prefs.getString(_scaleHostKey) ?? '127.0.0.1';
     final port = prefs.getInt(_scalePortKey) ?? 5555;
     return (host: host, port: port);
+  }
+
+  /// Frecuencia de refresco del display de pesaje (ms), elegida en el
+  /// engranaje del monitor. Es una preferencia **de la estación**, no del
+  /// tenant: no viaja al backend ni se sincroniza.
+  Future<void> setMonitorRefreshMs(int ms) async {
+    final prefs = await _prefs;
+    await prefs.setInt(_monitorRefreshKey, ms);
+  }
+
+  Future<int> getMonitorRefreshMs() async {
+    final prefs = await _prefs;
+    return prefs.getInt(_monitorRefreshKey) ?? 2000;
   }
 
   Future<void> cacheMatrizAccesos(Map<String, Map<String, String>> matriz) async {

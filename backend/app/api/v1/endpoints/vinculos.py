@@ -33,15 +33,15 @@ async def crear_vinculo(
     if not bal or not ind:
         raise HTTPException(status_code=404, detail="Báscula o indicador no encontrado")
 
-    # Evitar duplicados
-    res_dup_b = await db.execute(
+    # Evitar duplicados activos y reutilizar registro existente para respetar uq_vinculo_bascula
+    res_existente = await db.execute(
         select(VinculoBalanzaIndicador).where(
             VinculoBalanzaIndicador.id_empresa == empresa.id_empresa,
             VinculoBalanzaIndicador.id_bascula == payload.id_bascula,
-            VinculoBalanzaIndicador.activo.is_(True),
         )
     )
-    if res_dup_b.scalar_one_or_none():
+    vinc = res_existente.scalar_one_or_none()
+    if vinc is not None and vinc.activo:
         raise HTTPException(status_code=400, detail="Esta báscula ya tiene un indicador vinculado")
 
     res_cnt = await db.execute(
@@ -54,13 +54,18 @@ async def crear_vinculo(
     if len(activos) >= 2:
         raise HTTPException(status_code=400, detail="Solo se permiten hasta 2 vínculos activos")
 
-    vinc = VinculoBalanzaIndicador(
-        id_empresa=empresa.id_empresa,
-        id_bascula=payload.id_bascula,
-        id_indicador=payload.id_indicador,
-        activo=True,
-    )
-    db.add(vinc)
+    if vinc is None:
+        vinc = VinculoBalanzaIndicador(
+            id_empresa=empresa.id_empresa,
+            id_bascula=payload.id_bascula,
+            id_indicador=payload.id_indicador,
+            activo=True,
+        )
+        db.add(vinc)
+    else:
+        vinc.id_indicador = payload.id_indicador
+        vinc.activo = True
+
     await db.commit()
     await db.refresh(vinc)
     try:

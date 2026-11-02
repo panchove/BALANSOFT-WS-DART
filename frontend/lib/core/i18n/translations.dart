@@ -868,6 +868,21 @@ class AppTranslations {
       'frame_json': 'JSON (simulador)',
       'frame_ascii': 'ASCII (indicador real)',
       'baudrate': 'Velocidad (baudios)',
+      'display_config_title': 'Configuración del display',
+      'display_config_font': 'Fuente del display',
+      'display_config_baudrate': 'Baudios de la báscula',
+      'display_config_baudrate_help':
+          'Velocidad del puerto serie de la báscula. Si el peso no llega o '
+          'llega con caracteres extraños, prueba otra velocidad.',
+      'display_config_baudrate_admin_only':
+          'Solo un administrador puede cambiar la velocidad de la báscula.',
+      'display_config_refresh': 'Actualización del monitor',
+      'display_config_refresh_help':
+          'Cada cuánto se pide el peso al servidor. Más rápido = display más '
+          'fluido; más lento = menos tráfico de red.',
+      'display_baudrate_ok': 'Velocidad de la báscula actualizada a {} baudios',
+      'display_baudrate_error':
+          'No se pudo guardar la velocidad. Revisa la conexión y el permiso de administrador.',
       'frame_delimiter': 'Delimitador de trama',
       'delimiter_lf': 'Salto de línea (LF)',
       'delimiter_cr': 'Retorno de carro (CR)',
@@ -1979,6 +1994,21 @@ class AppTranslations {
       'frame_json': 'JSON (simulator)',
       'frame_ascii': 'ASCII (real indicator)',
       'baudrate': 'Baud rate',
+      'display_config_title': 'Display settings',
+      'display_config_font': 'Display font',
+      'display_config_baudrate': 'Scale baud rate',
+      'display_config_baudrate_help':
+          'Serial port speed of the scale. If the weight does not arrive or '
+          'shows garbled characters, try another speed.',
+      'display_config_baudrate_admin_only':
+          'Only an administrator can change the scale speed.',
+      'display_config_refresh': 'Monitor refresh',
+      'display_config_refresh_help':
+          'How often the weight is requested from the server. Faster = smoother '
+          'display; slower = less network traffic.',
+      'display_baudrate_ok': 'Scale speed updated to {} baud',
+      'display_baudrate_error':
+          'Could not save the speed. Check the connection and the administrator permission.',
       'frame_delimiter': 'Frame delimiter',
       'delimiter_lf': 'Line feed (LF)',
       'delimiter_cr': 'Carriage return (CR)',
@@ -3084,6 +3114,21 @@ class AppTranslations {
       'frame_json': 'JSON (simulador)',
       'frame_ascii': 'ASCII (indicador real)',
       'baudrate': 'Velocidade (baud)',
+      'display_config_title': 'Configuração do display',
+      'display_config_font': 'Fonte do display',
+      'display_config_baudrate': 'Bauds da balança',
+      'display_config_baudrate_help':
+          'Velocidade da porta serial da balança. Se o peso não chega ou chega '
+          'com caracteres estranhos, tente outra velocidade.',
+      'display_config_baudrate_admin_only':
+          'Apenas um administrador pode alterar a velocidade da balança.',
+      'display_config_refresh': 'Atualização do monitor',
+      'display_config_refresh_help':
+          'Com que frequência o peso é solicitado ao servidor. Mais rápido = '
+          'display mais fluido; mais lento = menos tráfego de rede.',
+      'display_baudrate_ok': 'Velocidade da balança atualizada para {} bauds',
+      'display_baudrate_error':
+          'Não foi possível salvar a velocidade. Verifique a conexão e a permissão de administrador.',
       'frame_delimiter': 'Delimitador de trama',
       'delimiter_lf': 'Avanço de linha (LF)',
       'delimiter_cr': 'Retorno de carro (CR)',

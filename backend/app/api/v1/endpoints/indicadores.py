@@ -17,6 +17,7 @@ Config **local de la estación** (no se sincroniza), igual que
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,9 +34,11 @@ from app.core.indicador_hal import get_indicador_hal  # <-- IMPORTANTE AÑADIR E
 from app.models import Balanza, Empresa, Indicador, Usuario, VinculoBalanzaIndicador
 from app.schemas import IndicadorCreate, IndicadorOut
 from app.services.catalog_service import CatalogService
+from app.services.vinculo_service import VINCULO_MGR
 
 router = APIRouter(prefix="/api/v1", tags=["Indicadores"])
 _SERVICE = CatalogService()
+log = logging.getLogger("balansoft_ws.indicadores")
 
 
 async def _obtener_indicador(
@@ -265,14 +268,12 @@ async def _fijar_enlace(
     else:
         balanza.id_indicador = None
 
-    # --- NUEVO: Crear o actualizar vínculo en vinculos_balanza_indicador ---
-    # Buscar si ya existe un vínculo activo para esta báscula e indicador
+    # --- Gestión del vínculo en vinculos_balanza_indicador ---
+    # Buscar por (id_empresa, id_bascula) para respetar la restricción única uq_vinculo_bascula
     res_vinc = await db.execute(
         select(VinculoBalanzaIndicador).where(
             VinculoBalanzaIndicador.id_empresa == empresa.id_empresa,
             VinculoBalanzaIndicador.id_bascula == id_balanza,
-            VinculoBalanzaIndicador.id_indicador == id_indicador,
-            VinculoBalanzaIndicador.activo.is_(True),
         )
     )
     vinculo = res_vinc.scalar_one_or_none()
@@ -288,23 +289,41 @@ async def _fijar_enlace(
             )
             db.add(vinculo)
         else:
-            # Ya existe, asegurar que esté activo
+            if vinculo.id_indicador != id_indicador:
+                # Si cambió de indicador, detener el puente anterior
+                try:
+                    await VINCULO_MGR.detener(vinculo.id_vinculo)
+                except Exception as exc:
+                    log.debug("Error deteniendo puente previo para vínculo %s: %s", vinculo.id_vinculo, exc)
+                vinculo.id_indicador = id_indicador
             vinculo.activo = True
+
+        await db.commit()
+        await db.refresh(vinculo)
+
+        # Iniciar puente en caliente
+        try:
+            await VINCULO_MGR.iniciar(db, empresa.id_empresa, vinculo)
+        except Exception as exc:
+            log.warning("No se pudo iniciar puente para vínculo %s: %s", vinculo.id_vinculo, exc)
     else:
-        # Desenlazar: poner activo = False (o borrar, según política)
         if vinculo is not None:
             vinculo.activo = False
+            await db.commit()
+            # Detener puente en caliente
+            try:
+                await VINCULO_MGR.detener(vinculo.id_vinculo)
+            except Exception as exc:
+                log.debug("Error deteniendo puente para vínculo %s: %s", vinculo.id_vinculo, exc)
+        else:
+            await db.commit()
 
-    await db.commit()
-
-    # Log de depuración
-    import logging
-    logging.getLogger("balansoft_ws.vinculos").info(
+    log.info(
         "Vínculo %s: enlazar=%s, id_vinculo=%s, activo=%s",
-        "crear" if enlazar else "borrar",
+        "crear/activar" if enlazar else "desactivar",
         enlazar,
-        getattr(vinculo, 'id_vinculo', None),
-        getattr(vinculo, 'activo', None),
+        getattr(vinculo, "id_vinculo", None),
+        getattr(vinculo, "activo", None),
     )
 
     enlazadas = await _contar_enlazadas(db, empresa.id_empresa, id_indicador)

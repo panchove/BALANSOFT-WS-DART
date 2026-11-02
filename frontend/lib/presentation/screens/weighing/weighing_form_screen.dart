@@ -331,6 +331,13 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   Weighing? _origenCopia;
   CatalogData _catalogos = CatalogData.empty;
 
+  /// Permiso para cambiar la velocidad serial desde el engranaje del display
+  /// (`PUT /balanzas/{id}` exige ADMIN).
+  bool _puedeEditarBaudrate = false;
+
+  /// Frecuencia de refresco del display del pesaje (preferencia de estación).
+  Duration _monitorIntervalo = ScaleApiClient.intervaloPorDefecto;
+
   List<PhotoCaptured> _fotosCamion = [];
   List<PhotoCaptured> _fotosRemolque = [];
 
@@ -505,6 +512,12 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
   Future<void> _cargarPermisosYEstado() async {
     final user = await di.sl<LocalStorage>().getCachedUser();
 
+    // Frecuencia de refresco elegida para el display (preferencia de estación).
+    var monitorMs = ScaleApiClient.intervaloPorDefecto.inMilliseconds;
+    try {
+      monitorMs = await di.sl<LocalStorage>().getMonitorRefreshMs();
+    } catch (_) {}
+
     // 🆕 Leer el flag ANTES de calcular _esPesoManual
     bool permitido = true;
     try {
@@ -541,6 +554,8 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     setState(() {
       _pesoManualPermitido = permitido;   // 🆕
       _puedePesoManual = user?.rol == 'ADMIN' || user?.rol == 'SUPERVISOR';
+      _puedeEditarBaudrate = user?.rol == 'ADMIN';
+      _monitorIntervalo = Duration(milliseconds: monitorMs);
       _hayBascula = hayBascula;
       _haySemaforoActivo = haySemaforoActivo;
       if (!_pesoManualCambiadoPorUsuario) {
@@ -645,6 +660,36 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
     _balanzaSeleccionada = coincidencias.first;
     _balanzaTexto = _balanzaSeleccionada!.etiqueta;
     _confirmados[_idxBalanza] = true;
+  }
+
+  /// Persiste la nueva velocidad serial de la báscula seleccionada.
+  ///
+  /// Se envía el cuerpo **completo** de `BalanzaCreate` (incluido
+  /// `id_indicador`) porque el PUT reemplaza todos los campos: omitir alguno
+  /// borraría el vínculo con el indicador.
+  Future<void> _cambiarBaudrate(int baudrate) async {
+    final balanza = _balanzaSeleccionada;
+    if (balanza == null || balanza.baudrate == baudrate) return;
+    final actualizada = balanza.copyWith(baudrate: baudrate);
+    await di.sl<ApiClient>().updateItem(
+          ApiConstants.balanza(balanza.id),
+          actualizada.toJson(),
+        );
+    if (!mounted) return;
+    setState(() {
+      _balanzaSeleccionada = actualizada;
+      _balanzasDisponibles = [
+        for (final b in _balanzasDisponibles)
+          if (b.id == actualizada.id) actualizada else b,
+      ];
+    });
+  }
+
+  /// Guarda la frecuencia de refresco del display como preferencia local.
+  Future<void> _cambiarIntervaloMonitor(Duration intervalo) async {
+    await di.sl<LocalStorage>().setMonitorRefreshMs(intervalo.inMilliseconds);
+    if (!mounted) return;
+    setState(() => _monitorIntervalo = intervalo);
   }
 
   bool _onKey(KeyEvent event) {
@@ -2179,6 +2224,15 @@ class _WeighingFormBodyState extends State<_WeighingFormBody> {
         ScaleMonitorWidget(
           client: _scaleClient, label: _balanzaSeleccionada?.descripcion ?? 'Báscula',
           balanzaId: _balanzaSeleccionada?.id, balanzaDescripcion: _balanzaSeleccionada?.descripcion,
+          // La velocidad serial solo existe en básculas de puerto serie; en
+          // TCP no se ofrece el ajuste.
+          baudrate: _balanzaSeleccionada?.protocolo == 'serial'
+              ? _balanzaSeleccionada?.baudrate
+              : null,
+          onBaudrateCambiado: _cambiarBaudrate,
+          puedeEditarBaudrate: _puedeEditarBaudrate,
+          intervaloActualizacion: _monitorIntervalo,
+          onIntervaloCambiado: _cambiarIntervaloMonitor,
           initialWeight: enModoSalida ? (double.tryParse(_pesoSalidaVehiculoCtrl.text) ?? 0) : (double.tryParse(_pesoEntradaCtrl.text) ?? 0),
           onPesoLeido: (peso) {
             if (_esPesoManual) return;
