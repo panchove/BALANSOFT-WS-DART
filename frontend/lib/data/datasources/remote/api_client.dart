@@ -244,6 +244,17 @@ class ApiClient {
     return response;
   }
 
+  /// Estado de configuración inicial de la estación (público, sin token).
+  ///
+  /// Devuelve `{configurada, empresa, usuarios}`. Es la señal con la que la app
+  /// decide entre el asistente de configuración y el login: la preferencia
+  /// local `onboarding_completado` **no** sirve, porque sobrevive a la
+  /// desinstalación mientras la base de datos se recrea vacía.
+  Future<Map<String, dynamic>> setupEstado() async {
+    final response = await _dio.get('$_baseUrl${ApiConstants.setupEstado}');
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Response> logout() async {
     final response = await _dio.post('$_baseUrl/api/v1/auth/logout');
     return response;

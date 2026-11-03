@@ -41,15 +41,22 @@ import 'presentation/widgets/tipografia_scope.dart';
 final themeController = ThemeController();
 late final LocaleController localeController;
 
-/// Ruta de arranque: si ya existe empresa en la estación, va al login;
-/// si no, va a la pantalla de setup inicial (configuración de cuenta).
+/// Ruta de arranque de la app.
 ///
-/// Se resuelve de forma síncrona para `initialRoute`. Si la red está caída
-/// o el WServer aún no responde, se asume que hay empresa (se intentará
-/// login local); si el setup ya se completó, va al login.
+/// Es solo una **estimación optimista** para no parpadear entre pantallas: la
+/// decisión real la toma `_verificarPrimeraVez()` contra el backend
+/// (`GET /api/v1/setup/estado`). No se puede decidir aquí porque
+/// `initialRoute` es síncrono y porque la preferencia `onboarding_completado`
+/// sobrevive a la desinstalación mientras la base de datos se recrea vacía
+/// (incidencia de la estación Windows reinstalada, ver
+/// `core/utils/arranque_estacion.dart`).
+///
+/// Un OPERADOR es cliente delgado: no tiene BD ni asistente propios.
 String _rutaInicial() {
+  if (AppConfig.esOperador) return '/login';
+  // La decisión real la toma el gate _verificarPrimeraVez() contra el backend.
+  // Aquí solo dejamos una estimación por si la verificación no se ejecuta a tiempo.
   if (AppConfig.onboardingCompletado) return '/login';
-  // Si no se ha completado el onboarding, ir directo al setup inicial.
   return '/setup';
 }
 
@@ -209,6 +216,9 @@ class _BalansoftAppState extends State<BalansoftApp> with WindowListener {
   /// misma instancia que usa Ajustes → Tipografía, que es lo que permite que el
   /// cambio se aplique a toda la app sin reiniciar (REQ-FN-004).
   late final TypographyController _typography = di.sl<TypographyController>();
+
+  /// Flag para asegurar que el gate de arranque solo se ejecuta una vez.
+  bool _gateAplicado = false;
 
   @override
   void initState() {

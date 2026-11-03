@@ -13,6 +13,7 @@ class ApiConstants {
   // Setup inicial de estación (100% local, validación directa al LM).
   static const String setupValidarLicencia = '$apiPrefix/setup/validar-licencia';
   static const String setupCrearAdmin = '$apiPrefix/setup/crear-admin';
+  static const String setupEstado = '$apiPrefix/setup/estado';
   static const String licenseSnapshot = '$apiPrefix/auth/license';
   static const String refreshToken = '$apiPrefix/auth/refresh-token';
   static const String logout = '$apiPrefix/auth/logout';

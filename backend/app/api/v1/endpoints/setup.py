@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db
@@ -32,6 +32,7 @@ from app.schemas.setup import (
     SetupCreateAdminRequest,
     SetupCreateAdminResponse,
     SetupEmpresaOut,
+    SetupEstadoOut,
     SetupLicenseOut,
     SetupUserOut,
     SetupValidateRequest,
@@ -48,6 +49,37 @@ def _mask_license_key(key: str | None) -> str | None:
     if not key or len(key) <= 8:
         return "••••" if key else None
     return f"{key[:3]}...{key[-4:]}"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/setup/estado
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/estado",
+    response_model=SetupEstadoOut,
+    status_code=status.HTTP_200_OK,
+    summary="Estado de configuración inicial de la estación",
+    description=(
+        "Indica si la estación ya tiene empresa local. La app lo consulta en el "
+        "arranque para decidir entre el asistente de configuración y el login: "
+        "no puede decidirlo con una preferencia local, porque esa preferencia "
+        "sobrevive a la desinstalación mientras la base de datos se recrea "
+        "vacía. No requiere autenticación."
+    ),
+)
+async def estado_setup(db: AsyncSession = Depends(get_db)) -> SetupEstadoOut:
+    empresa = (await db.execute(select(Empresa).limit(1))).scalar_one_or_none()
+    total_usuarios = (
+        await db.execute(select(func.count()).select_from(Usuario))
+    ).scalar_one()
+    return SetupEstadoOut(
+        # Misma condición que la guarda de idempotencia de `crear-admin`: si
+        # hubiera empresa, mandar al asistente lo dejaría en un 409 sin salida.
+        configurada=empresa is not None,
+        empresa=empresa is not None,
+        usuarios=int(total_usuarios or 0),
+    )
 
 
 @router.post(

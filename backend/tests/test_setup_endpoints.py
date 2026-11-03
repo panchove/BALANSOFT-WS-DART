@@ -354,3 +354,81 @@ async def test_crear_admin_lm_caido(client, app, db):  # noqa: F811
         },
     )
     assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# Pruebas de GET /estado
+# ---------------------------------------------------------------------------
+# Ésta es la señal con la que la app decide entre el asistente de configuración
+# y el login. No puede depender de una preferencia local: en Windows esa
+# preferencia sobrevive a la desinstalación mientras la BD se recrea vacía, y la
+# estación quedaba clavada en el login sin usuarios (incidencia de la estación
+# reinstalada).
+
+@pytest.mark.asyncio
+async def test_estado_estacion_sin_configurar(client, app, db):  # noqa: F811
+    resp = await client.get("/api/v1/setup/estado")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json() == {"configurada": False, "empresa": False, "usuarios": 0}
+
+
+@pytest.mark.asyncio
+async def test_estado_estacion_configurada(client, app, db):  # noqa: F811
+    empresa = Empresa(
+        id_empresa=uuid4(),
+        nombre_fiscal="Empresa Instalada",
+        rif_nit="J-12345678-0",
+        email="instalada@ejemplo.com",
+        activa=True,
+    )
+    db.add(empresa)
+    await db.flush()
+    db.add(
+        Usuario(
+            id_empresa=empresa.id_empresa,
+            nombre="admin",
+            email="admin@ejemplo.com",
+            password_hash="$2b$12$" + "x" * 53,
+            rol="ADMIN",
+            activo=True,
+        )
+    )
+    await db.commit()
+
+    resp = await client.get("/api/v1/setup/estado")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json() == {"configurada": True, "empresa": True, "usuarios": 1}
+
+
+@pytest.mark.asyncio
+async def test_estado_no_requiere_autenticacion(client, app, db):  # noqa: F811
+    # Sin cabecera Authorization: el asistente corre antes de que exista sesión.
+    resp = await client.get("/api/v1/setup/estado", headers={})
+
+    assert resp.status_code == status.HTTP_200_OK
+    # Y no arrastra el 401 de los endpoints protegidos.
+    assert "detail" not in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_estado_despues_de_crear_admin(client, app, db, fake_crear_valido):  # noqa: F811
+    _override_license_client(fake_crear_valido)
+
+    antes = await client.get("/api/v1/setup/estado")
+    assert antes.json()["configurada"] is False
+
+    creado = await client.post(
+        "/api/v1/setup/crear-admin",
+        json={
+            "license_key": "BWS-A1B2-C3D4-E5F6-G7H8",
+            "password": "Password123!",
+            "nombre_comercial": "Mi Empresa",
+            "rif_nit": "J-12345678-0",
+        },
+    )
+    assert creado.status_code == status.HTTP_201_CREATED
+
+    despues = await client.get("/api/v1/setup/estado")
+    assert despues.json() == {"configurada": True, "empresa": True, "usuarios": 1}

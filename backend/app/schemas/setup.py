@@ -132,6 +132,31 @@ class SetupLicenseOut(BaseModel):
     message: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# GET /api/v1/setup/estado
+# ---------------------------------------------------------------------------
+
+class SetupEstadoOut(BaseModel):
+    """Estado de configuración inicial de la estación (público, sin auth).
+
+    Es la **fuente de verdad** de «¿hay que mostrar el asistente de setup?».
+    La app no puede decidirlo con una preferencia local: en Windows esas
+    preferencias sobreviven a la desinstalación mientras la base de datos se
+    recrea vacía, y la estación quedaba clavada en el login sin usuarios y
+    sin forma de llegar al asistente.
+    """
+
+    configurada: bool = Field(
+        ...,
+        description=(
+            "Si la estación ya tiene empresa local. Espeja la guarda de "
+            "idempotencia de `POST /crear-admin` (una segunda ejecución da 409)."
+        ),
+    )
+    empresa: bool = Field(..., description="Si existe la fila de empresa local")
+    usuarios: int = Field(..., description="Usuarios registrados en la estación")
+
+
 class SetupCreateAdminResponse(BaseModel):
     """Respuesta completa del endpoint crear-admin."""
 
