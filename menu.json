@@ -1,0 +1,558 @@
+{
+  "version": 1,
+  "_LEEME": "Menú lateral. Edita y reinicia la app.",
+  "menu": [
+    {
+      "tipo": "seccion",
+      "label": "INICIO",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Inicio",
+          "icono": "dashboard_outlined",
+          "icono_activo": "dashboard",
+          "clave": "inicio",
+          "atajo": "Ctrl+1",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "separador"
+    },
+    {
+      "tipo": "grupo",
+      "label": "CATÁLOGOS",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Clientes",
+          "icono": "handshake_outlined",
+          "icono_activo": "handshake",
+          "clave": "clientes",
+          "atajo": "Alt+C",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Proveedores",
+          "icono": "storefront_outlined",
+          "icono_activo": "storefront",
+          "clave": "proveedores",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Transportes",
+          "icono": "fire_truck_outlined",
+          "icono_activo": "fire_truck",
+          "clave": "transportes",
+          "atajo": "Ctrl+Shift+T",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Conductores",
+          "icono": "badge_outlined",
+          "icono_activo": "badge",
+          "clave": "conductores",
+          "atajo": "F8",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Camiones / Vehículos",
+          "icono": "directions_car_outlined",
+          "icono_activo": "directions_car",
+          "clave": "camiones",
+          "atajo": "Alt+F",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Categorías",
+          "icono": "category_outlined",
+          "icono_activo": "category",
+          "clave": "categorias",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Productos",
+          "icono": "inventory_2_outlined",
+          "icono_activo": "inventory_2",
+          "clave": "productos",
+          "atajo": "Alt+P",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Almacenes",
+          "icono": "warehouse_outlined",
+          "icono_activo": "warehouse",
+          "clave": "almacenes",
+          "atajo": "Alt+A",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Conceptos Kardex",
+          "icono": "rule_folder_outlined",
+          "icono_activo": "rule_folder",
+          "clave": "conceptos_inventario",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupo",
+      "label": "GESTIÓN",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Peso Automático",
+          "icono": "smart_toy_outlined",
+          "icono_activo": "smart_toy",
+          "accion": "go:pesaje_automatico",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Peso Manual",
+          "icono": "scale_outlined",
+          "icono_activo": "scale",
+          "accion": "go:pesaje_manual",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Inventario",
+          "icono": "tune",
+          "accion": "go:ajustes",
+          " Atajo": "Ctrl+A",
+          "roles": [
+            "ADMIN",
+            "OPERADOR"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupo",
+      "label": "CONSULTAR",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Entradas",
+          "icono": "arrow_downward_outlined",
+          "icono_activo": "arrow_downward",
+          "clave": "entradas",
+          "atajo": "Ctrl+2",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Salidas",
+          "icono": "arrow_upward_outlined",
+          "icono_activo": "arrow_upward",
+          "clave": "salidas",
+          "atajo": "Ctrl+3",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Ingresos",
+          "icono": "move_to_inbox_outlined",
+          "icono_activo": "move_to_inbox",
+          "clave": "ingresos",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Despachos",
+          "icono": "outbox_outlined",
+          "icono_activo": "outbox",
+          "clave": "despachos",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Auditoría del Sistema",
+          "icono": "fact_check_outlined",
+          "accion": "go:auditoria",
+          "roles": [
+            "ADMIN",
+            "AUDITOR"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupo",
+      "label": "REPORTES",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Reportes Generales",
+          "icono": "analytics_outlined",
+          "icono_activo": "analytics",
+          "clave": "reportes",
+          "atajo": "Ctrl+4",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Diarios",
+          "icono": "today_outlined",
+          "icono_activo": "today",
+          "clave": "reportes_diarios",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Mensuales",
+          "icono": "calendar_month_outlined",
+          "icono_activo": "calendar_month",
+          "clave": "reportes_mensuales",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Personalizado",
+          "icono": "date_range_outlined",
+          "icono_activo": "date_range",
+          "clave": "reportes_personalizado",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Kardex",
+          "icono": "table_rows_outlined",
+          "icono_activo": "table_rows",
+          "clave": "kardex",
+          "atajo": "Alt+K",
+          "roles": [
+            "ADMIN",
+            "AUDITOR",
+            "OPERADOR"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "grupo",
+      "label": "MANTENIMIENTO",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Empresa y Documentos",
+          "icono": "business_outlined",
+          "icono_activo": "business",
+          "clave": "documentos_empresa",
+          "roles": [
+            "ADMIN",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Usuarios del Sistema",
+          "icono": "admin_panel_settings_outlined",
+          "icono_activo": "admin_panel_settings",
+          "clave": "usuarios",
+          "atajo": "Alt+U",
+          "roles": [
+            "ADMIN",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Roles",
+          "icono": "badge_outlined",
+          "icono_activo": "badge",
+          "clave": "roles",
+          "roles": [
+            "ADMIN",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Seguridad y Accesos",
+          "icono": "lock_outline",
+          "icono_activo": "lock",
+          "clave": "seguridad",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Semáforos",
+          "icono": "traffic_outlined",
+          "icono_activo": "traffic",
+          "clave": "dispositivos_semaforos",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Barreras de tránsito",
+          "icono": "door_sliding",
+          "icono_activo": "door_sliding",
+          "clave": "dispositivos_barreras",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Cámaras",
+          "icono": "photo_camera_outlined",
+          "icono_activo": "photo_camera",
+          "clave": "dispositivos_camaras",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Impresoras",
+          "icono": "print_outlined",
+          "icono_activo": "print",
+          "clave": "dispositivos_impresoras",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Básculas",
+          "icono": "scale_outlined",
+          "icono_activo": "scale",
+          "clave": "dispositivos_basculas",
+          "atajo": "Alt+D",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Indicadores",
+          "icono": "straighten_outlined",
+          "icono_activo": "straighten",
+          "clave": "dispositivos_indicadores",
+          "roles": [
+            "ADMIN"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Diseño de Ticket",
+          "icono": "receipt_long_outlined",
+          "icono_activo": "receipt_long",
+          "clave": "diseno_ticket",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Configuración",
+          "icono": "settings_outlined",
+          "icono_activo": "settings",
+          "clave": "configuracion",
+          "atajo": "Ctrl+,",
+          "roles": [
+            "ADMIN"
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "separador"
+    },
+    {
+      "tipo": "grupo",
+      "label": "AYUDA Y SOPORTE",
+      "hijos": [
+        {
+          "tipo": "opcion",
+          "label": "Ayuda y Soporte",
+          "icono": "help_outline",
+          "icono_activo": "help",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "separador"
+        },
+        {
+          "tipo": "opcion",
+          "label": "Manuales",
+          "icono": "menu_book_outlined",
+          "icono_activo": "menu_book",
+          "accion": "go:ayuda_manuales",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Página Web",
+          "icono": "public_outlined",
+          "icono_activo": "public",
+          "accion": "go:ayuda_pagina",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Versión",
+          "icono": "info_outlined",
+          "icono_activo": "info",
+          "accion": "go:ayuda_version",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        },
+        {
+          "tipo": "opcion",
+          "label": "Tutorial",
+          "icono": "school_outlined",
+          "icono_activo": "school",
+          "accion": "go:ayuda_tutorial",
+          "roles": [
+            "ADMIN",
+            "OPERADOR",
+            "AUDITOR"
+          ]
+        }
+      ]
+    }
+  ]
+}
