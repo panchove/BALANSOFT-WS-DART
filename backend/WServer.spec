@@ -18,9 +18,10 @@ ROOT = Path(SPECPATH).resolve()
 datas = [
     (str(ROOT / "balansoft-ws-local.sql"), "."),
     (str(ROOT / "balansoft-ws-server.sql"), "."),
-    (str(ROOT / ".env"), "."),
     (str(ROOT / ".env.plantilla"), "."),
 ]
+if (ROOT / ".env").exists():
+    datas.append((str(ROOT / ".env"), "."))
 # Icono de la app: lo usa el aviso nativo del SO (app/services/notifier.py).
 # Sin él, una estación instalada caería al icono genérico del tema.
 if (ROOT / "assets" / "balansoft-ws.png").exists():
@@ -31,6 +32,9 @@ for mig in sorted((ROOT / "migrations").glob("*.sql")):
 # confundirlo con el canónico de PostgreSQL.
 if (ROOT / "sqlserver" / "balansoft-ws-local.sql").exists():
     datas.append((str(ROOT / "sqlserver" / "balansoft-ws-local.sql"), "sqlserver"))
+if (ROOT / "sqlserver" / "migrations").exists():
+    for mig in sorted((ROOT / "sqlserver" / "migrations").glob("*.sql")):
+        datas.append((str(mig), "sqlserver/migrations"))
 
 # --- Módulos con import dinámico que PyInstaller no detecta solo -----------
 hiddenimports = collect_submodules("app") + [
@@ -80,9 +84,14 @@ hiddenimports += [
     )
 ]
 
-# Drivers ODBC de SQL Server (extra `uv sync --extra sqlserver`): solo se
-# empaquetan si están instalados en el entorno de build; los builds de
-# PostgreSQL quedan exactamente igual que antes.
+# Drivers ODBC de SQL Server y dependencias del backend que PyInstaller
+# no detecta automáticamente en el entorno de uv / Windows.
+hiddenimports += [
+    "prometheus_client",
+    "cachetools",
+    "aiosqlite",
+    "aiofiles",
+]
 if importlib.util.find_spec("pyodbc") is not None:
     hiddenimports += ["pyodbc", "aioodbc"]
 
