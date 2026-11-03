@@ -512,7 +512,8 @@ class _HomeShellState extends State<HomeShell> {
         _abrirConexiones();
       case 'ayuda':
         _abrirAyuda();
-
+      case 'ayuda_tutorial':          // 👈 nuevo
+        _abrirAyudaTutorial();        // 👈 nuevo
       case 'vehiculo':
         _irA('camiones');
       case 'conductor':
@@ -789,6 +790,10 @@ class _HomeShellState extends State<HomeShell> {
 
   void _abrirAyuda() {
     _pushSiNoEsta('ayuda', () => const AyudaScreen());
+  }
+
+  Future<void> _abrirAyudaTutorial() async {
+    await mostrarGuiaRapida(context, marcarVisto: true);
   }
 
   void _abrirDiagnostico() {

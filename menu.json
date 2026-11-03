@@ -5,6 +5,7 @@
     {
       "tipo": "seccion",
       "label": "INICIO",
+      "icono": "dashboard_outlined",
       "hijos": [
         {
           "tipo": "opcion",
@@ -27,6 +28,7 @@
     {
       "tipo": "grupo",
       "label": "CATÁLOGOS",
+      "icono": "inventory_2_outlined",
       "hijos": [
         {
           "tipo": "opcion",
@@ -159,6 +161,7 @@
     {
       "tipo": "grupo",
       "label": "GESTIÓN",
+      "icono": "tune",
       "hijos": [
         {
           "tipo": "opcion",
@@ -166,6 +169,7 @@
           "icono": "smart_toy_outlined",
           "icono_activo": "smart_toy",
           "accion": "go:pesaje_automatico",
+          "atajo": "F1",
           "roles": [
             "ADMIN",
             "AUDITOR",
@@ -174,10 +178,11 @@
         },
         {
           "tipo": "opcion",
-          "label": "Peso Manual",
-          "icono": "scale_outlined",
+          "label": "Nuevo Peso / Manual",
+          "icono": "edit_note_outlined",
           "icono_activo": "scale",
           "accion": "go:pesaje_manual",
+          "atajo": "F2",
           "roles": [
             "ADMIN",
             "AUDITOR",
@@ -192,7 +197,7 @@
           "label": "Inventario",
           "icono": "tune",
           "accion": "go:ajustes",
-          " Atajo": "Ctrl+A",
+          "atajo": "Ctrl+A",
           "roles": [
             "ADMIN",
             "OPERADOR"
@@ -203,6 +208,7 @@
     {
       "tipo": "grupo",
       "label": "CONSULTAR",
+      "icono": "search_outlined",
       "hijos": [
         {
           "tipo": "opcion",
@@ -272,6 +278,7 @@
     {
       "tipo": "grupo",
       "label": "REPORTES",
+      "icono": "analytics_outlined",
       "hijos": [
         {
           "tipo": "opcion",
@@ -294,7 +301,7 @@
           "label": "Diarios",
           "icono": "today_outlined",
           "icono_activo": "today",
-          "clave": "reportes_diarios",
+          "clave": "reportes",
           "roles": [
             "ADMIN",
             "AUDITOR",
@@ -306,7 +313,7 @@
           "label": "Mensuales",
           "icono": "calendar_month_outlined",
           "icono_activo": "calendar_month",
-          "clave": "reportes_mensuales",
+          "clave": "reportes",
           "roles": [
             "ADMIN",
             "AUDITOR",
@@ -318,7 +325,7 @@
           "label": "Personalizado",
           "icono": "date_range_outlined",
           "icono_activo": "date_range",
-          "clave": "reportes_personalizado",
+          "clave": "reportes",
           "roles": [
             "ADMIN",
             "AUDITOR",
@@ -343,6 +350,7 @@
     {
       "tipo": "grupo",
       "label": "MANTENIMIENTO",
+      "icono": "settings_outlined",
       "hijos": [
         {
           "tipo": "opcion",
@@ -409,7 +417,7 @@
           "label": "Barreras de tránsito",
           "icono": "door_sliding",
           "icono_activo": "door_sliding",
-          "clave": "dispositivos_barreras",
+          "clave": "dispositivos",
           "roles": [
             "ADMIN"
           ]
@@ -489,12 +497,14 @@
     {
       "tipo": "grupo",
       "label": "AYUDA Y SOPORTE",
+      "icono": "help_outline",
       "hijos": [
         {
           "tipo": "opcion",
           "label": "Ayuda y Soporte",
           "icono": "help_outline",
           "icono_activo": "help",
+          "accion": "go:ayuda",
           "roles": [
             "ADMIN",
             "OPERADOR",
@@ -509,7 +519,7 @@
           "label": "Manuales",
           "icono": "menu_book_outlined",
           "icono_activo": "menu_book",
-          "accion": "go:ayuda_manuales",
+          "accion": "go:ayuda",
           "roles": [
             "ADMIN",
             "OPERADOR",
@@ -521,7 +531,7 @@
           "label": "Página Web",
           "icono": "public_outlined",
           "icono_activo": "public",
-          "accion": "go:ayuda_pagina",
+          "accion": "go:ayuda",
           "roles": [
             "ADMIN",
             "OPERADOR",
@@ -533,7 +543,7 @@
           "label": "Versión",
           "icono": "info_outlined",
           "icono_activo": "info",
-          "accion": "go:ayuda_version",
+          "accion": "go:ayuda",
           "roles": [
             "ADMIN",
             "OPERADOR",

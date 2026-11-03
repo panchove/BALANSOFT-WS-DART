@@ -50,15 +50,9 @@ class QuickActionsBar extends StatelessWidget {
         child: Row(
           children: [
             _QuickActionCard(
-              icon: Icons.scale_outlined,
-              label: lPesajeManual,
-              shortcut: 'F2',
-              onTap: () => _handleTap(context, lPesajeManual, onPesajeManual),
-            ),
-            _QuickActionCard(
               icon: Icons.edit_note,
               label: lPesajeAuto,
-              shortcut: 'Ctrl+N',
+              shortcut: 'Ctrl+N/F2',
               onTap: () => _handleTap(context, lPesajeAuto, onPesajeAuto),
             ),
             _QuickActionCard(
