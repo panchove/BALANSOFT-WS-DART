@@ -1,13 +1,4 @@
-"""Cliente de integración con el License Manager (SGLB) local.
-
-Flujo de validación (anti-fake-server):
-1. POST /token      -> obtiene Bearer token (Ed25519 firmado) para la licencia.
-2. ValidateRequest  -> envía hardware + product_code con el Bearer.
-3. POST /validate   -> respuesta firmada Ed25519; se verifica firma + server_time.
-
-La clave pública del LM se embebe aquí (settings.license_public_key) y la
-respuesta de /validate se verifica antes de confiar en el resultado.
-"""
+"""Cliente de integración con el License Manager (SGLB) local."""
 
 from __future__ import annotations
 
@@ -31,21 +22,13 @@ log = logging.getLogger(__name__)
 SIGNED_FIELDS = ["valid", "status", "expires_at", "tier", "plan_type",
                  "features", "server_time", "nonce", "validada_en"]
 
-# Ventana de frescura del `server_time` (mismo contrato que BALANSOFT-SG,
-# docs/USO-API.md §6): -5 min .. +24 h. El LM usa `validada_en` como ancla de
-# tiempo del servidor para decisiones de vigencia.
-_MAX_CLOCK_SKEW = timedelta(minutes=5)   # servidor demasiado adelantado
-_MAX_FUTURE_ALLOWED = timedelta(hours=24)  # ventana de frescura del server_time
+_MAX_CLOCK_SKEW = timedelta(minutes=5)
+_MAX_FUTURE_ALLOWED = timedelta(hours=24)
 
-# Formato de clave: `{B+prefijo}-XXXX-XXXX-XXXX-XXXX` (marca B + iniciales del
-# producto 2-10 letras, ej. BWS-…). Mismo regex que BALANSOFT-SG.
 LICENSE_KEY_RE = re.compile(
     r"^[A-Z0-9]{2,11}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 )
 
-# Anti-replay: nonces ya vistos en memoria (se reinician al arrancar el proceso).
-# Igual patrón que BALANSOFT-SG. Al correr con varios workers, la protección es
-# por proceso.
 _nonces_vistos: set[str] = set()
 
 
@@ -57,8 +40,6 @@ MAC_PATTERN = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
 
 def _sanitize_mac(value: str | None) -> str | None:
-    """Normaliza una MAC a 00:1A:2B:3C:4D:5E; None si no tiene ese formato
-    (evita rechazos 422 del LM por `mac_address` con max_length=17)."""
     if not value:
         return None
     mac = value.strip().upper()
@@ -73,11 +54,11 @@ def _sanitize_text(value: str | None, max_length: int) -> str | None:
 
 
 class LicenseError(Exception):
-    """Error de validación/activación de licencia."""
+    pass
 
 
 class LicenseSignatureError(LicenseError):
-    """La firma de /validate no coincide con la clave pública del LM."""
+    pass
 
 
 @dataclass
@@ -97,22 +78,18 @@ class LicenseInfo:
 
 
 def canonical_json(payload: dict[str, Any]) -> bytes:
-    """Serialización canónica de la firma (USO-API.md §6): claves ordenadas,
-    separadores compactos, sin espacios. Idéntica a BALANSOFT-SG / LM para que
-    la firma Ed25519 coincida."""
+    """Serialización canónica idéntica a la del servidor LM."""
+    def default(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return str(obj)
+
     return json.dumps(
-        payload, sort_keys=True, separators=(",", ":")
+        payload, sort_keys=True, separators=(",", ":"), default=default
     ).encode("utf-8")
 
 
-_canonical_json = canonical_json
-
-
 def validate_license_key_format(key: str) -> str:
-    """Normaliza y valida el formato de la clave (no la valida en el LM).
-
-    Portado desde BALANSOFT-SG: mayúsculas y patrón ``{B+PREFIJO}-XXXX-XXXX-XXXX-XXXX``.
-    """
     normalized = key.strip().upper()
     if not LICENSE_KEY_RE.match(normalized):
         raise LicenseError(
@@ -141,11 +118,6 @@ def _verify_signature(
 
 
 def check_signature_metadata(response: dict[str, Any]) -> None:
-    """Exige que la respuesta declare algoritmo y versión de firma esperados.
-
-    Portado desde BALANSOFT-SG: `signature_algorithm=ed25519`,
-    `signature_version=1`.
-    """
     if (
         response.get("signature_algorithm") != "ed25519"
         or response.get("signature_version") != 1
@@ -156,11 +128,6 @@ def check_signature_metadata(response: dict[str, Any]) -> None:
 
 
 def check_freshness(server_time: str, now: datetime | None = None) -> None:
-    """Rechaza respuestas demasiado viejas o del futuro (-5 min .. +24 h, §6).
-
-    Portado desde BALANSOFT-SG: la ventana es ASIMÉTRICA (el LM puede estar
-    hasta 5 min adelantado o 24 h atrasado respecto de `server_time`).
-    """
     if not server_time:
         raise LicenseSignatureError("server_time ausente en la respuesta")
     try:
@@ -179,7 +146,6 @@ def check_freshness(server_time: str, now: datetime | None = None) -> None:
 
 
 def check_nonce(nonce: str) -> None:
-    """Anti-replay: un `nonce` ya visto invalida la respuesta (en memoria)."""
     if not nonce:
         raise LicenseSignatureError("Respuesta de validación sin nonce")
     if nonce in _nonces_vistos:
@@ -195,11 +161,6 @@ def validar_respuesta_firmada(
     *,
     strict: bool = True,
 ) -> None:
-    """Valida una respuesta de /validate: metadatos + firma + frescura + anti-replay.
-
-    Portado desde BALANSOFT-SG (`licencia_ml.py`): cubre exactamente
-    `SIGNED_FIELDS` (los 9 campos, incluido `validada_en`).
-    """
     check_signature_metadata(response)
     if not public_key_pem:
         if strict:
@@ -209,7 +170,12 @@ def validar_respuesta_firmada(
         signature = response.get("signature")
         if not signature:
             raise LicenseSignatureError("Respuesta de validación sin firma")
+        
+        # Usamos SOLO los 9 campos que el servidor LM firma.
+        # Y los usamos tal cual vienen en el JSON (strings).
         signed_payload = {k: response.get(k) for k in SIGNED_FIELDS}
+        
+        # Verificamos con la función canónica que ya tienes (con default=default).
         if not _verify_signature(signed_payload, signature, public_key_pem):
             if strict:
                 log.error(
@@ -223,8 +189,6 @@ def validar_respuesta_firmada(
 
 
 class LicenseClient:
-    """Cliente síncrono del LM. Se usa dentro de dependencias async vía run_in_executor."""
-
     def __init__(self) -> None:
         self.base_url = settings.license_api_url.rstrip("/")
         self.public_key = settings.license_public_key or self._public_key_from_file()
@@ -234,15 +198,10 @@ class LicenseClient:
                 "no se permite degradar la verificación de firma Ed25519."
             )
         self.timeout = httpx.Timeout(10.0)
-        # Caché de validación "por turno": clave -> resultado válido fresco. La
-        # re-validación en vivo sigue ocurriendo en login/panel/config.
         self._cache: dict[str, LicenseCache] = {}
-        # Último fallo de red por clave: evita re-golpear un LM inaccesible en
-        # cada boleto mientras dura el TTL (offline-first en operación).
         self._last_fallback: dict[str, datetime] = {}
 
     def _public_key_from_file(self) -> str:
-        """Lee la clave pública del LM desde LICENSE_PUBLIC_KEY_PATH (recomendado)."""
         path = settings.license_public_key_path
         if not path:
             return ""
@@ -305,7 +264,6 @@ class LicenseClient:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as e:
-            # Sin conexión -> no podemos confiar en la validez
             raise LicenseError(f"Error de red al validar con el LM: {e}") from e
 
         if resp.status_code == 401:
@@ -377,20 +335,6 @@ class LicenseClient:
         os_version: str | None = None,
         product_code: str | None = None,
     ) -> LicenseInfo:
-        """Valida la licencia en el LM y, si aún no está activada, la activa.
-
-        El LM exige ``POST /activate`` antes del primer ``/validate``: mientras
-        la licencia está ``AVAILABLE``, ``/validate`` responde ``valid=false``
-        («Licencia no activada — debe activarse primero mediante /activate»).
-        Este método cierra esa brecha: si ``/validate`` señala que la licencia
-        está disponible o que el dispositivo de una CENTRAL aún no está
-        registrado, intenta activarla y vuelve a validar.
-
-        NO se auto-activa ante ``HARDWARE_MISMATCH`` (DEMO/MONOPUESTO ya
-        activada en otra máquina, o titular de otra cuenta) ni ante estados
-        SUSPENDIDA/VENCIDA/INACTIVA/EXPIRED: ahí la respuesta de ``/validate``
-        es el estado real y se devuelve tal cual, sin tocar el LM.
-        """
         info = self.validate(
             license_key,
             hardware_id,
@@ -416,8 +360,6 @@ class LicenseClient:
                 product_code=product_code,
             )
         except LicenseError as exc:
-            # Carrera (otro dispositivo activó en paralelo) o límite de
-            # dispositivos alcanzado: el re-validate devuelve lo que manda el LM.
             log.warning("Auto-activación fallida (%s); se re-valida estado real: %s",
                         license_key, exc)
         return self.validate(
@@ -438,16 +380,6 @@ class LicenseClient:
         ttl: timedelta | None = None,
         **kwargs: Any,
     ) -> LicenseInfo | None:
-        """Valida contra el LM reutilizando una validación reciente y válida.
-
-        Pensado para operación de pesaje: la estación no debe lanzar llamadas
-        HTTP al LM por cada boleto (el LM puede estar remoto/lento y el WServer
-        corre con un solo worker). Devuelve:
-        - La ``LicenseInfo`` cacheada si hay una válida reciente.
-        - El resultado fresco del LM si no hay caché (lo guarda si es válido).
-        - ``None`` si el LM no responde y no hay validación reciente: el
-          llamador decide degradar con el estado cacheado en BD (offline-first).
-        """
         ttl = ttl if ttl is not None else timedelta(seconds=settings.license_cache_ttl_seconds)
         key = license_key.upper()
         ahora = _now_naive()

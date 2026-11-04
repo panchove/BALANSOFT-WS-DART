@@ -184,8 +184,9 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
     """Login con validación de licencia de la empresa contra el LM."""
+    email_limpio = payload.email.strip().lower()
     result = await db.execute(
-        select(Usuario).where(Usuario.email == payload.email.lower())
+        select(Usuario).where(Usuario.email == email_limpio)
     )
     usuario = result.scalar_one_or_none()
     if usuario is None or not verify_password(payload.password, usuario.password_hash):

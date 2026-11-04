@@ -22,13 +22,40 @@ Write-Host "== WServer build ==" -ForegroundColor Cyan
 Write-Host ("Backend: " + (Get-Location))
 Write-Host ""
 
-# Rutas a los ejecutables del venv local (soporta .venv y venv)
+# Comprueba imports sin que PowerShell convierta el stderr del intérprete en
+# un error terminante ($ErrorActionPreference = "Stop" mas arriba).
+function Test-Imports([string]$exe, [string]$modulos) {
+    $previo = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $exe -c "import $modulos" *> $null
+    $ok = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $previo
+    return $ok
+}
+
+# Rutas a los ejecutables del venv local (soporta .venv y venv).
+# Para SQL Server el binario DEBE llevar pyodbc y aioodbc; por eso se elige el
+# primer entorno que los tenga, no simplemente el primero que exista. El .venv
+# de Python 3.12 se creo sin esos drivers y produjo un WServer que no podia
+# conectar a SQL Server.
 $pyExe = $null
-if (Test-Path (Join-Path $PWD ".venv\Scripts\python.exe")) {
-    $pyExe = Join-Path $PWD ".venv\Scripts\python.exe"
-} elseif (Test-Path (Join-Path $PWD "venv\Scripts\python.exe")) {
-    $pyExe = Join-Path $PWD "venv\Scripts\python.exe"
-} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+foreach ($candidato in @(".venv\Scripts\python.exe", "venv\Scripts\python.exe")) {
+    if (-not (Test-Path (Join-Path $PWD $candidato))) { continue }
+    $exe = Join-Path $PWD $candidato
+    if (Test-Imports $exe "pyodbc, aioodbc") {
+        $pyExe = $exe
+        break
+    }
+}
+if (-not $pyExe) {
+    foreach ($candidato in @(".venv\Scripts\python.exe", "venv\Scripts\python.exe")) {
+        if (Test-Path (Join-Path $PWD $candidato)) {
+            $pyExe = Join-Path $PWD $candidato
+            break
+        }
+    }
+}
+if (-not $pyExe -and (Get-Command python -ErrorAction SilentlyContinue)) {
     $pyExe = (Get-Command python).Source
 }
 
@@ -42,16 +69,20 @@ if (-not $pyExe -or -not (Test-Path $pyExe)) {
 $venvScripts = Split-Path -Parent $pyExe
 $pyiExe = Join-Path $venvScripts "pyinstaller.exe" 
 
-$hasPyInstaller = $false
-try {
-    & $pyExe -c "import PyInstaller" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { $hasPyInstaller = $true }
-} catch { $hasPyInstaller = $false }
+$hasPyInstaller = Test-Imports $pyExe "PyInstaller"
 
 if (-not $hasPyInstaller) {
     Write-Host "[1] Instalando pyinstaller y pillow (dev dep)..."
     & $pyExe -m pip install pyinstaller pillow
     if ($LASTEXITCODE -ne 0) { throw "Fallo al instalar pyinstaller/pillow" }
+}
+
+# Los drivers de SQL Server son obligatorios para que el binario pueda crear y
+# usar la base mssql+aioodbc. Si el entorno elegido no los tiene, se instalan.
+if (-not (Test-Imports $pyExe "pyodbc, aioodbc")) {
+    Write-Host "[1] Instalando pyodbc y aioodbc (SQL Server)..."
+    & $pyExe -m pip install pyodbc aioodbc
+    if ($LASTEXITCODE -ne 0) { throw "Fallo al instalar pyodbc/aioodbc" }
 }
 
 $pyiVer = (& $pyExe -c "import PyInstaller; print(PyInstaller.__version__)").Trim()
@@ -94,7 +125,7 @@ Write-Host "[3] ✅ Binario generado: $bin ($size)" -ForegroundColor Green
 
 # 3.5) Verificar que los drivers de SQL Server estén dentro (Sanity check)
 Write-Host "[3.5] Verificando que pyodbc está empaquetado..."
-$pyiViewer = Join-Path $PWD ".\venv\Scripts\pyi-archive_viewer.exe"
+$pyiViewer = Join-Path $venvScripts "pyi-archive_viewer.exe"
 if (Test-Path $pyiViewer) {
     $check = & $pyiViewer $bin | Select-String "pyodbc" | Select-Object -First 1
     if ($check) {

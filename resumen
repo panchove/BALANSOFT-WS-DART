@@ -1,0 +1,39 @@
+Excelente! Eso es muy importante. Si en Python aparte con pyserial detecta COM3 y lee el peso correctamente, entonces el problema no es el filtro /dev/ttyS (que era el que causaba problemas en Windows), sino algo específico del sistema BALANSOFT-WS.
+Diagnóstico: Puerto COM3 detectado en Python pero no en BALANSOFT-WS
+Dado que el puerto COM3 funciona en Python independiente, analicemos por qué el descubrimiento de BALANSOFT-WS no lo encuentra.
+Vamos a revisar el código del endpoint de descubrimiento:
+1. El endpoint /balanzas/descubrir tiene tres fuentes:
+1. TCP (127.0.0.1:5555): Simulador BSDD - aparece por defecto (incluir_simuladas=true)
+2. Serial real (COM1, COM2, etc.): Usa pyserial para listar puertos
+3. Serial simulada (/tmp/...): Solo Linux, nunca aplica en Windows
+2. El código serial en inventario.py:
+El código intenta listar puertos con pyserial, pero hay un filtro que podría estar fallando. Veamos exactamente qué hace:
+# Del código que revisé antes:
+for p in list_ports.comports():
+    if p.device in puertos_existentes:  # Si ya está registrada en BD, salta
+        continue
+    if p.device.startswith("/dev/ttyS"):  # FILTRO - en Windows esto nunca se cumple (son COM1, COM2...)
+        continue
+    # Aquí añade la báscula...
+3. Dado que el usuario probó en Python y COM3 funciona:
+El problema probablemente sea uno de estos:
+A. El parámetro incluir_simuladas: 
+- Por defecto es true en el endpoint
+- Incluye el simulador BSDD en 127.0.0.1:5555
+- Pero el usuario quiere la balanza real en COM3
+B. El código no está leyendo COM3 específicamente:
+- El código lista TODOS los puertos COM y los añade
+- Pero quizás hay un error en la lógica o el puerto COM3 no está siendo detectado en el momento del escaneo
+C. Configuración de baudrate o trama:
+- El descubrimiento hace read_weight() pero quizás no espera el tiempo suficiente
+- O el baudrate configurado en el sistema no coincide con la báscula
+Paso siguiente: Probar el endpoint directamente
+Lo más seguro es probar el endpoint directamente desde Windows. Podemos:
+1. Usar curl para probar el descubrimiento directamente
+2. O revisar los logs del backend cuando se intenta el descubrimiento
+¿Puede el usuario intentar probar el endpoint de descubrimiento directamente? O mejor aún, ¿puede ejecutar esta pequeña prueba en Python para ver qué devuelve el backend?
+O la alternativa más rápida: ¿el usuario está usando el parámetro incluir_simuladas=true o false?
+Por defecto el sistema lo trae en true, así que debería aparecer el simulador BSDD (127.0.0.1:5555) SI el WServer está corriendo y el simulador está levantado.
+Pero el usuario quiere la balanza real en COM3. El sistema debería listarla también...
+Vamos a verificar una cosa: ¿el WServer está levantado? El descubrimiento serial no requiere WServer, pero el TCP sí. Si el usuario quiere la balanza en COM3, el WServer no es estrictamente necesario para el discovery serial, pero sí para operar.
+¿Puede el usuario probar esto y decirme qué ve? O mejor, permítanme indicarle exactamente qué línea modificar para forzar la detección de COM3 si fuera necesario.

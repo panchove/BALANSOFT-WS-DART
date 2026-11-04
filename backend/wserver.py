@@ -25,6 +25,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# En Windows sin consola, stdout/stderr usan cp1252 y un emoji en un print
+# tumba el arranque (UnicodeEncodeError). UTF-8 con reemplazo es seguro.
+for _flujo in (sys.stdout, sys.stderr):
+    try:
+        _flujo.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 # Directorio raíz de los archivos embebidos en el binario (PyInstaller).
 if getattr(sys, "frozen", False):
     ROOT = Path(sys._MEIPASS)  # type: ignore[attr-defined]
@@ -52,7 +60,9 @@ def resolver_home() -> Path:
 
     1. ``WSERVER_HOME`` (variable de entorno).
     2. El directorio del binario si ya contiene un ``.env`` (instalación hecha).
-    3. ``~/.balansoft-ws/wserver`` (default multiplataforma).
+    3. El directorio de trabajo si contiene un ``.env`` (respaldo cuando
+       PyInstaller expone un ``sys.executable`` temporal).
+    4. ``~/.balansoft-ws/wserver`` (default multiplataforma).
     """
     env = os.environ.get("WSERVER_HOME")
     if env:
@@ -60,6 +70,12 @@ def resolver_home() -> Path:
     exe = _exe_dir()
     if (exe / ".env").exists():
         return exe
+    # En PyInstaller one-file ``sys.executable`` puede apuntar al directorio
+    # temporal; si el .env de la instalación no está ahí, el CWD (que la tarea
+    # programada y la app fijan al directorio de instalación) sí lo tiene.
+    cwd = Path.cwd()
+    if (cwd / ".env").exists():
+        return cwd.resolve()
     return (Path.home() / ".balansoft-ws" / "wserver").resolve()
 
 
@@ -789,7 +805,7 @@ def main() -> int:
           f"(env={settings.app_env})")
     ip = _ip_local()
     if _es_bind_red(host) and ip:
-        print(f"[WServer] ✅ Accesible desde la red local en "
+        print(f"[WServer] [OK] Accesible desde la red local en "
               f"http://{ip}:{port} (cliente/estación remota)")
 
     import uvicorn

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -19,16 +20,27 @@ _SECRET_KEY_INSEGURA = {
     "CAMBIAR_ESTA_CLAVE_CON_openssl_rand_hex_32",
 }
 
-# --- Resolver la ruta del archivo .env junto al ejecutable -------------------
-# Cuando se empaqueta con PyInstaller (one-file), sys.executable apunta al
-# binario y sys._MEIPASS al directorio temporal de extracción. Buscamos .env
-# junto al ejecutable primero, y si no está, caemos al directorio de trabajo.
-if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-    # PyInstaller one-file: los datos se extraen en _MEIPASS
-    _env_dir = Path(sys._MEIPASS)
-else:
-    _env_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path.cwd()
+# --- Resolver la ruta del archivo .env ---------------------------------------
+# En PyInstaller one-file, sys._MEIPASS es el directorio temporal de extracción
+# y sys.executable puede apuntar allí; ninguno de los dos contiene el .env de la
+# instalación. El WServer hace ``os.chdir(home)`` antes de importar este módulo,
+# así que el CWD es la fuente correcta. Se respeta WSERVER_HOME y, como
+# respaldo, el directorio del ejecutable si tiene un .env propio.
+def _resolver_env_dir() -> Path:
+    candidatos: list[Path] = []
+    home = os.environ.get("WSERVER_HOME")
+    if home:
+        candidatos.append(Path(home).expanduser().resolve())
+    candidatos.append(Path.cwd())
+    if getattr(sys, "frozen", False):
+        candidatos.append(Path(sys.executable).resolve().parent)
+    for candidato in candidatos:
+        if (candidato / ".env").exists():
+            return candidato
+    return candidatos[0]
 
+
+_env_dir = _resolver_env_dir()
 _ENV_FILE = str(_env_dir / ".env")
 
 log.debug("Archivo de entorno resuelto: %s", _ENV_FILE)

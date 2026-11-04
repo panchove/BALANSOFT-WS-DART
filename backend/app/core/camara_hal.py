@@ -35,6 +35,7 @@ import tempfile
 import threading
 from collections.abc import AsyncIterator
 from typing import Any
+import re
 
 import httpx
 
@@ -618,6 +619,7 @@ def _descubrir_locales_ffmpeg() -> list[dict[str, Any]]:
     """Enumera cámaras locales por ``ffmpeg -list_devices`` (Windows/macOS)."""
     if not shutil.which("ffmpeg"):
         return []
+
     if sys.platform == "darwin":
         entrada = ["-f", "avfoundation", "-list_devices", "true", "-i", ""]
     else:
@@ -635,27 +637,51 @@ def _descubrir_locales_ffmpeg() -> list[dict[str, Any]]:
 
     texto = proc.stderr.decode(errors="replace")
     encontradas: list[dict[str, Any]] = []
-    for linea in texto.splitlines():
-        marca = "(video)" if sys.platform == "darwin" else '"'
-        if marca not in linea:
-            continue
-        if sys.platform == "darwin":
+
+    if sys.platform == "darwin":
+        for linea in texto.splitlines():
+            if "(video)" not in linea:
+                continue
             nombre = linea.split("(video)")[-1].strip()
-        else:
-            nombre = linea.split('"')[1] if linea.count('"') >= 2 else ""
-        if not nombre:
-            continue
-        marca_nom, modelo_nom, fabricante_nom = deducir_marca_modelo(nombre)
-        encontradas.append(
-            {
+            if not nombre:
+                continue
+            marca_nom, modelo_nom, fabricante_nom = deducir_marca_modelo(nombre)
+            encontradas.append({
                 "origen": "local",
                 "dispositivo": nombre,
                 "descripcion": nombre,
                 "marca": marca_nom,
                 "modelo": modelo_nom,
                 "fabricante": fabricante_nom,
-                "por_donde": f"DirectShow ({nombre})" if sys.platform != "darwin" else f"AVFoundation ({nombre})",
+                "por_donde": f"AVFoundation ({nombre})",
                 "url_snapshot": "",
-            }
-        )
+            })
+        return encontradas
+
+    # Windows (DirectShow): captura SOLO las líneas con '... "Nombre" (video)'
+    patron = re.compile(r'"([^"]+)"\s*\(video\)')
+    for linea in texto.splitlines():
+        # Descartar líneas 'Alternative name' que también traen comillas
+        if "Alternative name" in linea:
+            continue
+        m = patron.search(linea)
+        if not m:
+            continue
+        nombre = m.group(1).strip()
+        if not nombre:
+            continue
+        try:
+            marca_nom, modelo_nom, fabricante_nom = deducir_marca_modelo(nombre)
+        except Exception:
+            marca_nom, modelo_nom, fabricante_nom = "", "", ""
+        encontradas.append({
+            "origen": "local",
+            "dispositivo": nombre,
+            "descripcion": nombre,
+            "marca": marca_nom,
+            "modelo": modelo_nom,
+            "fabricante": fabricante_nom,
+            "por_donde": f"DirectShow ({nombre})",
+            "url_snapshot": "",
+        })
     return encontradas

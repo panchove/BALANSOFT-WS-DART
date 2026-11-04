@@ -819,7 +819,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'notificaciones_id_e
     ALTER TABLE [dbo].[notificaciones] ADD CONSTRAINT [notificaciones_id_empresa_fkey] FOREIGN KEY (id_empresa) REFERENCES [dbo].[empresas] (id_empresa) ON DELETE CASCADE;
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'notificaciones_id_recordatorio_fkey' ) BEGIN
-    ALTER TABLE [dbo].[notificaciones] ADD CONSTRAINT [notificaciones_id_recordatorio_fkey] FOREIGN KEY (id_recordatorio) REFERENCES [dbo].[recordatorios] (id) ON DELETE SET NULL;
+    -- SQL Server no admite dos rutas de cascada hacia notificaciones
+    -- (empresas -> notificaciones y empresas -> recordatorios -> notificaciones).
+    -- La cascada directa por empresa se mantiene; esta se deja sin accion.
+    ALTER TABLE [dbo].[notificaciones] ADD CONSTRAINT [notificaciones_id_recordatorio_fkey] FOREIGN KEY (id_recordatorio) REFERENCES [dbo].[recordatorios] (id);
 END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'password_reset_tokens_id_usuario_fkey' ) BEGIN
     ALTER TABLE [dbo].[password_reset_tokens] ADD CONSTRAINT [password_reset_tokens_id_usuario_fkey] FOREIGN KEY (id_usuario) REFERENCES [dbo].[usuarios] (id_usuario) ON DELETE CASCADE;

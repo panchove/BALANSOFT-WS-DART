@@ -4,6 +4,7 @@ import '../../domain/repositories/i_license_repository.dart';
 import '../../core/security/device_info.dart';
 import '../datasources/remote/api_client.dart';
 import '../datasources/local/local_storage.dart';
+import 'package:dio/dio.dart';
 
 class LicenseRepository implements ILicenseRepository {
   final ApiClient _apiClient;
@@ -23,44 +24,95 @@ class LicenseRepository implements ILicenseRepository {
     return results.any((r) => r != ConnectivityResult.none);
   }
 
+  /// Traduce los errores técnicos del servidor (WServer o LM) a mensajes claros.
+  String _traducirError(dynamic e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data.containsKey('detail')) {
+        final detail = data['detail'];
+        if (detail is String) {
+          // Si el WServer responde con un error del License Manager
+          if (detail.contains('Firma Ed25519') || detail.contains('inválida')) {
+            return 'Error de seguridad: La firma de la licencia no es válida. Contacte a soporte.';
+          }
+          if (detail.contains('no está disponible') || detail.contains('no respondió')) {
+            return 'El servidor de licencias no responde. Verifique su conexión a internet.';
+          }
+          if (detail.contains('no existe en el License Manager')) {
+            return 'La licencia ingresada no existe. Verifique la clave.';
+          }
+          if (detail.contains('ya tiene una empresa configurada')) {
+            return 'Esta estación ya ha sido configurada previamente.';
+          }
+          return detail;
+        }
+        if (detail is Map && detail.containsKey('message')) {
+          return detail['message'].toString();
+        }
+      }
+      return e.message ?? 'Error de conexión con el servidor.';
+    }
+    return e.toString().replaceAll('Exception: ', '');
+  }
+
   @override
   Future<License> validateLicense(String licenseKey) async {
     if (!await _isConnected) {
       final cached = await getCachedLicense();
       if (cached != null) return cached;
-      throw Exception('Sin conexión y sin licencia cacheada');
+      throw Exception('Sin conexión a internet y no hay una licencia guardada en este equipo.');
     }
 
-    final hwInfo = await DeviceInfo.getHardwareInfo();
-    final response = await _apiClient.validateLicense({
-      'licencia_key': licenseKey,
-      'hardware_id': hwInfo.hardwareId,
-      'mac_address': hwInfo.macAddress,
-      'device_brand': hwInfo.brand,
-      'device_model': hwInfo.model,
-      'os_version': hwInfo.osVersion,
-    });
+    try {
+      final hwInfo = await DeviceInfo.getHardwareInfo();
+      
+      // Llamamos al WServer local. Él se encargará de hablar con el LM 
+      // (obtener token, activar si es necesario, y validar).
+      final response = await _apiClient.setupValidarLicencia({
+        'license_key': licenseKey,
+        'hardware_id': hwInfo.hardwareId,
+        'mac_address': hwInfo.macAddress,
+        'device_brand': hwInfo.brand,
+        'device_model': hwInfo.model,
+        'os_version': hwInfo.osVersion,
+      });
 
-    final license = License.fromJson(response.data);
-    await cacheLicense(license);
-    return license;
+      // WServer responde con un SetupValidateResponse
+      final data = response.data as Map<String, dynamic>;
+
+      if (data['valid'] == false) {
+         throw Exception(data['message'] ?? 'La licencia no es válida o no está activa.');
+      }
+
+      // Si la respuesta es válida, construimos la entidad License
+      final license = License.fromJson({
+        'license_key': licenseKey,
+        'valid': data['valid'],
+        'status': data['status'],
+        'tier': data['tier'],
+        'expires_at': data['expires_at'],
+        'client_email': data['client_email'],
+        'client_name': data['client_name'],
+        'client_id': data['client_id'],
+        // Agregamos campos por defecto para evitar nulls si la entidad los requiere
+        'plan_type': 'basic',
+        'features': {}, 
+      });
+
+      await cacheLicense(license);
+      return license;
+
+    } catch (e) {
+      throw Exception(_traducirError(e));
+    }
   }
 
   @override
   Future<License> activateLicense(String licenseKey) async {
-    final hwInfo = await DeviceInfo.getHardwareInfo();
-    final response = await _apiClient.validateLicense({
-      'licencia_key': licenseKey,
-      'hardware_id': hwInfo.hardwareId,
-      'mac_address': hwInfo.macAddress,
-      'device_brand': hwInfo.brand,
-      'device_model': hwInfo.model,
-      'os_version': hwInfo.osVersion,
-    });
-
-    final license = License.fromJson(response.data);
-    await cacheLicense(license);
-    return license;
+    // En esta arquitectura, la activación la hace el WServer internamente.
+    // El método validateLicense ya llama al endpoint correcto.
+    // Simplemente redirigimos para mantener la interfaz limpia.
+    return validateLicense(licenseKey);
   }
 
   @override

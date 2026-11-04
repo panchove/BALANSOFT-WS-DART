@@ -28,7 +28,7 @@ async def _get_identidad(
     db: AsyncSession, *, create_if_missing: bool = False
 ) -> IdentidadLocal | None:
     result = await db.execute(
-        select(IdentidadLocal).where(IdentidadLocal.id.is_(_IDENTIDAD_ROW))
+        select(IdentidadLocal).where(IdentidadLocal.id == _IDENTIDAD_ROW)
     )
     identidad = result.scalar_one_or_none()
     if identidad is None and create_if_missing:
